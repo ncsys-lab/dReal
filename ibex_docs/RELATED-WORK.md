@@ -207,12 +207,17 @@ Beyond HC4 / ACID / 3BCID / polytope-hull, the adoptable last-~5-yr techniques:
   construction. No NRA-SMT benchmark (gap).
 
 - **Arithmetic-propagation branching (clauseSMT / Improving-NLSAT line)** — the literature's
-  "CDCL-guided splitting" for NRA lives in the model-constructing NLSAT/MCSAT world, an
-  *alternative architecture* to ICP, not a contractor for it. Adopting it wholesale = a second
-  theory solver. The *transferable* piece is the branching heuristic (pick the split that most
-  shrinks feasible arithmetic ranges), which would extend `brancher_smear.cc`, not the contractor
-  loop. Soundness/completeness-neutral (branch choice only). Its reported wins are on a CAD solver,
-  not ICP — do not expect them to transfer directly.
+  "CDCL-guided splitting" for NRA (clauseSMT, Wang arXiv:2406.02122, ASE'25) lives in the
+  model-constructing NLSAT/MCSAT world, an *alternative architecture* to ICP, not a contractor for
+  it: its feasible-set look-ahead needs a point partial-assignment making a literal *univariate* +
+  real-root isolation, neither of which exists in the ICP box loop (`grep 'Sturm|CAD|root-isolat'`
+  over `src/dreal` = ∅). Adopting it wholesale = a second theory solver; the SAT-finding *intent* it
+  serves is already ICP-native as `--seed-samples`. So the "MCSAT-bound" filing is right *for
+  clauseSMT* — but it conflates that architecture with the *branching heuristic*, which **does**
+  transfer and is under-served: the genuinely architecture-native VSIDS-analogs come from the CP
+  branch-and-prune lineage (ABS / CHS / dom-wdeg), ranked in
+  **[Conflict/impact-aware branching](#conflictimpact-aware-branching-the-vsids-analog-dreal-is-missing)**
+  below. Soundness/completeness-neutral (branch choice only).
 
 - **GANRA-style GPU candidate generation** — a GPU-parallel analogue of dReal's existing
   `--seed-samples` (multi-start local search + verify). Not a contractor; the realistic fit is
@@ -227,6 +232,91 @@ Beyond HC4 / ACID / 3BCID / polytope-hull, the adoptable last-~5-yr techniques:
   transcendental/ODE core, so it would cover at most a sub-fragment while adding whole coefficient
   machinery (exponential blow-up in variable count). Out of scope for dReal's target formulas; the
   honest finding is low relevance.
+
+### Conflict/impact-aware branching (the VSIDS-analog dReal is missing)
+
+`--smear` (IBEX `SmearFunction`, Neveu 2012 — <https://ibex-team.github.io/ibex-lib/>; reimplemented
+`brancher_smear.cc`) is dReal's only constraint-aware brancher, and it is **static and
+conflict-blind** — a per-box interval-Jacobian sensitivity `Σ|J[i][k]|·diam`
+(`brancher_smear.cc:187-218`) recomputed from local geometry each node, with zero memory of what the
+search keeps failing on, and it **structurally skips ODE constraints** (`brancher_smear.cc:115`
+`if (f.include_ode()) continue`; the `IbexConverter` throws on ODE atoms) — which is exactly why
+`smearsum` *collapses* the ODE families corpus-wide (saradc 20→1 solved, ~2× worse; `../CLAUDE.md`).
+The missing lever is a **dynamic, history-aware** brancher — SAT's VSIDS (Moskewicz et al., Chaff,
+DAC'01) lifted to the ICP split-variable. Two facts make this native, not MCSAT (correcting the
+survey's "arithmetic-propagation branching" filing above): the CP-lineage activity/conflict
+heuristics were built for the tree-search-with-propagation shape the ICP DFS *already has*, and one
+of the two signals they need is **already computed per-prune and thrown away at branch time**. All
+are **COMPLETENESS / perf-only** — variable choice can never move a verdict (`brancher.cc:57` bisects
+at the midpoint regardless), so zero soundness risk.
+
+| Idea | Rule | Signal it needs | In dReal today | Verdict / effort |
+|---|---|---|---|---|
+| **ABS** — Activity-Based Search (Michel & Van Hentenryck, CPAIOR'12, LNCS 7298:228-243; an explicit VSIDS lift) | per-var activity `A(x)`, bump on every prune that shrinks `x`'s domain, decay each node; branch `argmax A/diam` | "which dims shrank this prune" + a decay clock | **signal PRESENT** — `ContractorStatus.output_` (per-`Prune` reduced-dims bitset, `contractor_status.h:94`), set by *every* contractor **including the ODE contractor** (`contractor_odes.cc`). Missing: the `A(x)` vector + decay + interface widening | **top pick** — the one native-signal brancher; **S/M** |
+| **Conflict-weighted smear** — CHS / dom-wdeg weights × the smear Jacobian (Habet & Terrioux, J. Heuristics 27:435-471, 2021; Boussemart et al., ECAI'04:146-150) | weight constraints by (decayed) wipeout-participation; per-var score `Σ w(c)·|J[i][k]|·diam` | per-**wipeout** culprit-constraint set + a conflict clock | **signal NOT free** (see below) — needs new per-box instrumentation | higher ceiling, more work; **M/L** |
+| **iSAT-style conflict learning + non-chronological backjump** (Fränzle, Herde, Teige, Ratschan, Schubert, JSAT'07) | learn nogoods over interval-bound literals on emptied boxes (1UIP), backjump over irrelevant decisions | a per-bound implication graph across splits | **absent** — dReal learns theory lemmas only at the Boolean level and backtracks chronologically over the box stack | biggest ceiling, **architecture project** |
+| dom/wdeg (Boussemart ECAI'04) · IBS (Refalo CP'04, LNCS 3258:557-571) · LSmear (Araya & Neveu, J. Global Optim. 71(3):483-500, 2018) | integer wipeout-degree · realized-search-space-impact · LP-dual constraint weights | culprit set · volume-shrink history · a solved LP per node | culprit-set gap (dom/wdeg); no theory restart (IBS); no objective → LP duals degenerate to a random-objective reweight (LSmear, `ibex_LSmear.cpp:28-31`) | **marginal** each |
+
+**Why clauseSMT itself does not transfer (confirmed).** Its headline "best-on-SAT" number comes from
+feasible-set look-ahead + value selection — Def 2.2 requires all-but-one var of a literal pinned to
+reals → univariate → real-root isolation; dReal carries an interval box over all vars at once and
+bisects the midpoint, so there is no point trail and no root isolation (`grep = ∅`). VSIDS is only
+clauseSMT's *tier-3 fallback*, so crediting its numbers to a dReal branching change is a
+misattribution. The SAT-finding intent is already covered ICP-natively by `--seed-samples`.
+
+**ABS — top pick, because its signal is genuinely already-computed.** `output_` is a per-`Prune`
+bitset of which dims narrowed, populated by every contractor **including the ODE contractor**
+(`contractor_odes.cc`) — the one branching signal that is truly "computed and discarded at branch
+time." The differentiator vs `--smear`: smear is blind to ODE constraints and collapses on them,
+whereas ABS's reward reads `output_`, which ODE prunes *do* set — so ABS is constraint-aware exactly
+where smear is not. **The one real risk (HYPOTHESIS, un-isolated):** interval HC4 typically narrows
+*many* active dims per prune (unlike finite-domain CP, where propagation sharply cuts a few domains),
+so "domain reduced" may fire near-uniformly → low `A(x)` variance → the ranking degenerates toward
+`1/diam` = *smallest*-diam-first, the opposite of dReal's proven largest-first default. Isolate this
+on the corpus before trusting it.
+
+**The conflict-signal correction (deflates the tempting "it's already there" pitch).** The claim that
+the per-wipeout culprit set is already computed and discarded at branch time is **false**.
+`AddUsedConstraint` fires on *every* effective prune (`if (changed)`, `contractor_ibex_fwdbwd.cc:144`),
+the `ContractorStatus` is created *once per theory call* (`theory_solver.cc:361`) and
+`used_constraints_` is **never cleared**, so at any box-empty it holds the cumulative union of every
+constraint that narrowed *any* box in the whole DFS ≈ "all active constraints" — not the wipeout
+culprit. The witness-filtered `GenerateExplanation` runs *once per theory-UNSAT*
+(`theory_solver.cc:370`), not per box-empty (`icp_seq.cc:137` is a bare `continue`), and even it is a
+broad variable-connected closure. So any conflict-weighted brancher (CHS / dom-wdeg) needs **new**
+per-box snapshot/diff instrumentation — real work, not a read. Its payoff if built: it can weight the
+ODE constraints smear cannot score (they *do* land in the used set, `contractor_odes.cc`).
+
+**iSAT — the biggest ceiling, but a project not a brancher swap.** iSAT *is* DPLL+ICP with midpoint
+bisection — dReal's exact shape — and its headline win is conflict-driven *learning*: treat each
+interval-bound assertion as a trail literal, maintain an implication graph, run 1UIP on an emptied
+box, backjump non-chronologically. Strongest measured evidence of anything here, on the matching
+architecture (learning ON vs OFF, same solver: bouncing-ball BMC k=10 >348e6 conflicts → 68;
+orders-of-magnitude runtime), concentrated on complex-Boolean / BMC instances — i.e. dReal's
+saradc/github/tacas. But dReal maintains no cross-split bound-implication graph and backtracks
+chronologically over the box stack, so this is an **architecture extension** to `icp_seq.cc`, scoped
+as a project, not a one-file change.
+
+**Feasibility (ABS).** Plug-in point: `SmearBrancher` is constructed once per `CheckSat`
+(`icp_seq.cc:106`); `Config::Brancher` is a stateless `const std::function` (`config.h:61`, default
+`BranchLargestFirst`) receiving only `(box, active_set)` — widen it to carry an `A(x)` vector, add a
+decay step, and accumulate `A[i]` for `i ∈ cs.output()` after each `Prune`. Within one `CheckSat` no
+persistence is needed; cross-theory-call persistence goes via `Context`/`Config`; `--jobs>1` needs
+per-worker thread-locals (mirror the existing per-worker `SmearBrancher`, `icp_parallel.cc:230`).
+**Effort S/M** (within-call prototype), **M** (cross-call + parallel). **A/B:** `--branch abs` vs
+largest-first vs `--smear smearsum`, on odeexpr (where smear helps) **and** saradc/github/tacas
+(where smear collapses — the ABS thesis); PAR2 + solved count, **expect zero verdict flips**
+(COMPLETENESS/perf-only).
+
+**Gaps.** (1) No published *ICP*-branching number exists for any of these — all evidence is CP/XCSP3
+(ABS/CHS/dom-wdeg/IBS) or BMC (iSAT), **unmeasured on the dReal corpus**. (2) Empirical prior:
+constraint-aware branching is *not* a global win here — smear collapses the ODE families ~2× — so any
+brancher must clear that bar, and branching cannot crack the ∃∀/ODE-UNSAT enclosure wall regardless
+(`../CLAUDE.md`). (3) Exact CHS constants (`r = 1/(Conflicts − Conflict(c) + 1)`, `α = 0.4`) are
+UNVERIFIED against the primary source (font-encoded PDF) — confirm before implementing. (4) The SAT
+core's own VSIDS is *not* reachable: CaDiCaL 3.0.1 exposes no activity getter and connects only as a
+`Learner` (`sat_solver.cc`), so a "read the SAT activity" shortcut is blocked — the theory-side
+`output_` activity above is the reachable form.
 
 ---
 
