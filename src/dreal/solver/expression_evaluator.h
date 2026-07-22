@@ -15,7 +15,10 @@
 */
 #pragma once
 
+#include <mutex>
 #include <ostream>
+#include <utility>
+#include <vector>
 
 #include "ibex.h"
 
@@ -29,6 +32,10 @@ class ExpressionEvaluator {
  public:
   explicit ExpressionEvaluator(Expression e);
 
+  /// Copies share the expression but start with a fresh (empty) index cache —
+  /// the cache is pure memoization keyed to the boxes each instance sees.
+  ExpressionEvaluator(const ExpressionEvaluator& other);
+
   /// Evaluates the expression with @p box. The Visit functions use ibex/gaol,
   /// so the caller must hold an UpwardRounding token (FE_UPWARD established).
   Box::Interval operator()(const Box& box, const UpwardRounding& ur) const;
@@ -37,7 +44,7 @@ class ExpressionEvaluator {
 
  private:
   Box::Interval Visit(const Expression& e, const Box& box) const;
-  static Box::Interval VisitVariable(const Expression& e, const Box& box);
+  Box::Interval VisitVariable(const Expression& e, const Box& box) const;
   static Box::Interval VisitConstant(const Expression& e, const Box& box);
   static Box::Interval VisitRealConstant(const Expression& e, const Box& box);
   Box::Interval VisitAddition(const Expression& e, const Box& box) const;
@@ -76,7 +83,24 @@ class ExpressionEvaluator {
   friend std::ostream& operator<<(
       std::ostream& os, const ExpressionEvaluator& expression_evaluator);
 
+  // Builds idx_cache_ from @p box's variable->index mapping. Throws if a
+  // variable of e_ is absent from @p box.
+  void BuildIndexCache(const Box& box) const;
+
   const Expression e_;
+
+  // Flat-index cache killing the per-visit unordered_map lookup of
+  // Box::operator[](Variable): (Variable::Id -> Box index) pairs sorted by id,
+  // built via call_once from the FIRST box this instance evaluates (thread-safe;
+  // immutable afterwards — evaluators are shared across IcpParallel workers).
+  // Box::Add is append-only and copy-on-write clones preserve order, so an
+  // index is stable across every box derived from the first one. VisitVariable
+  // additionally validates each cached index against the box at hand before
+  // using it (one vector deref + id compare); a box with a genuinely different
+  // layout (e.g. a forall/CEGIS counterexample box hitting a shared evaluator)
+  // falls back to honest per-visit resolution — a wrong-slot read is impossible.
+  mutable std::once_flag idx_cache_once_;
+  mutable std::vector<std::pair<Variable::Id, int>> idx_cache_;
 };
 
 std::ostream& operator<<(std::ostream& os,
