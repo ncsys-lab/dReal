@@ -15,6 +15,7 @@
 */
 #include "dreal/solver/sat_solver.h"
 
+#include <iostream>
 #include <ostream>
 #include <utility>
 #include <dreal/symbolic/symbolic_formula_cell.h>
@@ -61,11 +62,6 @@ SatSolver::SatSolver(const Config& config) : cadical(new CaDiCaL::Solver) {
   cadical->options();
 
   if (DREAL_LOG_INFO_ENABLED || DREAL_EXPERIMENTAL_SAT_AUDIT_ENABLED) cadical->connect_learner(this);
-
-  all_incl_lb_predicates.max_load_factor(0.25);
-  all_excl_lb_predicates.max_load_factor(0.25);
-  all_incl_ub_predicates.max_load_factor(0.25);
-  all_excl_ub_predicates.max_load_factor(0.25);
 }
 
 SatSolver::~SatSolver() { delete cadical; }
@@ -100,6 +96,24 @@ void SatSolver::AddClause(const Formula& f) {
   }
   cadical->add(0);
   sat_log_literal0();
+}
+
+void SatSolver::AddLearnedClauseDirect(
+    const std::vector<Formula>& conflicting_conjunction, const Box& unfitted_box
+) {
+  sat_log_label_clause("SatSolver::AddLearnedClauseDirect");
+  for (const Formula& f : conflicting_conjunction) {
+    AddLiteral(!predicate_abstractor_.Convert(f));
+  }
+  cadical->add(0);
+  sat_log_literal0();
+
+  if (DREAL_EXPERIMENTAL_THEORY_AUDIT_ENABLED) {
+    std::vector<Formula> a;
+    a.reserve(conflicting_conjunction.size());
+    for (const Formula& f : conflicting_conjunction) a.emplace_back(!predicate_abstractor_.Convert(f));
+    theory_audit_literals("AddLearnedClauseDirect", predicate_abstractor_, a, unfitted_box);
+  }
 }
 
 namespace {
@@ -274,6 +288,55 @@ void SatSolver::MakeSatVar(const Variable& var) {
 
 Formula SatSolver::theory_literal(const Variable& var) const {
   return predicate_abstractor_[var];
+}
+
+// CaDiCaL::Learner callbacks (connected in the constructor): observe clauses
+// CaDiCaL itself learns, for logging/audit only.
+bool SatSolver::learning(const int size) {
+  buffer_i = 0;
+  expected_clause_size = size;
+  if (size <= LOG_INFO_SIZE) return true;
+  if (DREAL_EXPERIMENTAL_SAT_AUDIT_ENABLED && size < MAX_BUFFER_SIZE) return true;
+  return false;
+}
+
+void SatSolver::learn(const int new_lit) {
+  if (new_lit != 0) {
+    DREAL_ASSERT(buffer_i < expected_clause_size);
+    buffer[buffer_i] = new_lit;
+    buffer_i++;
+    return;
+  } // else {
+
+  DREAL_ASSERT(buffer_i == expected_clause_size);
+
+  sat_log_label_clause("SatSolver::learn");
+  std::set<Formula> neg_conjunction;
+  for (int i = 0; i < expected_clause_size; i++) {
+    const int lit = buffer[i];
+    sat_log_literal(lit);
+    const bool lit_is_neg = lit < 0;
+
+    const auto sym_var_it = to_sym_var_.find(lit_is_neg ? -lit : +lit);
+    DREAL_ASSERT(sym_var_it != to_sym_var_.end());
+    const auto theory_lit_it = predicate_abstractor_.var_to_formula_map().find(sym_var_it->second);
+    const Formula theory_lit =
+        theory_lit_it == predicate_abstractor_.var_to_formula_map().end()
+            ? Formula{sym_var_it->second}
+            : theory_lit_it->second;
+    neg_conjunction.emplace(
+        !(lit_is_neg ? !theory_lit : theory_lit)
+    );
+  }
+  sat_log_literal0();
+  if (DREAL_EXPERIMENTAL_SAT_AUDIT_ENABLED) {
+    const Formula sat_clause = !make_conjunction(neg_conjunction);
+    sat_log_label_clause("i.e. " + sat_clause.to_string());
+  }
+  if (expected_clause_size <= LOG_INFO_SIZE) {
+    const Formula sat_clause = !make_conjunction(neg_conjunction);
+    std::cerr << "SAT Solver Learned: " << sat_clause << '\n';
+  }
 }
 
 }  // namespace dreal

@@ -69,7 +69,7 @@ Before the solver sees a formula it goes through four passes (in `context_impl.c
 
 ## SAT Layer
 
-**File:** `src/dreal/solver/sat_solver.cc` and `sat_solver_interval_logic.cc` / `sat_solver_model_logic.cc`
+**File:** `src/dreal/solver/sat_solver.cc` (core + CaDiCaL `Learner` callbacks) and `sat_solver_drpm.cc` (DRPM lemma pattern matching + CAV26 symmetry filter) / `sat_solver_model_logic.cc`
 
 CaDiCaL is used as the Boolean CDCL solver. Two modes exist:
 
