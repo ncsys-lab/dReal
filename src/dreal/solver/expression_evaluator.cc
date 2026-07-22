@@ -32,6 +32,27 @@ using std::pair;
 
 ExpressionEvaluator::ExpressionEvaluator(Expression e) : e_{std::move(e)} {}
 
+ExpressionEvaluator::ExpressionEvaluator(const ExpressionEvaluator& other)
+    : e_{other.e_} {}  // fresh idx_cache_ — rebuilt from the first box seen.
+
+void ExpressionEvaluator::BuildIndexCache(const Box& box) const {
+  // Built into a local first: if a variable is missing we throw with the cache
+  // untouched, and the call_once retries cleanly on the next evaluation.
+  std::vector<std::pair<Variable::Id, int>> cache;
+  cache.reserve(variables().size());
+  for (const Variable& var : variables()) {
+    if (!box.has_variable(var)) {
+      throw DREAL_RUNTIME_ERROR(
+          "ExpressionEvaluator: variable '{}' of expression '{}' is not in "
+          "the evaluated box.",
+          fmt::streamed(var), fmt::streamed(e_));
+    }
+    cache.emplace_back(var.get_id(), box.index(var));
+  }
+  std::sort(cache.begin(), cache.end());
+  idx_cache_ = std::move(cache);
+}
+
 Box::Interval ExpressionEvaluator::operator()(const Box& box,
                                               const UpwardRounding& /*ur*/) const {
   // Visit functions use ibex/gaol; the UpwardRounding token is the caller's
@@ -47,9 +68,35 @@ Box::Interval ExpressionEvaluator::Visit(const Expression& e,
 }
 
 Box::Interval ExpressionEvaluator::VisitVariable(const Expression& e,
-                                                 const Box& box) {
+                                                 const Box& box) const {
   const Variable& var{get_variable(e)};
-  return box[var];
+  std::call_once(idx_cache_once_, &ExpressionEvaluator::BuildIndexCache, this,
+                 std::cref(box));
+  // Fast path: cached flat index, validated against this box's layout (the
+  // validation makes a wrong-slot read impossible even if the box is not from
+  // the family the cache was built on).
+  const auto it = std::lower_bound(
+      idx_cache_.begin(), idx_cache_.end(), var.get_id(),
+      [](const std::pair<Variable::Id, int>& p, const Variable::Id id) {
+        return p.first < id;
+      });
+  if (it != idx_cache_.end() && it->first == var.get_id()) {
+    const int idx{it->second};
+    const std::vector<Variable>& box_vars{box.variables()};
+    if (idx < static_cast<int>(box_vars.size()) &&
+        box_vars[idx].get_id() == var.get_id()) {
+      return box[idx];
+    }
+  }
+  // Slow path: this box's variable layout differs from the cached one (e.g. a
+  // forall/CEGIS counterexample box) — resolve through the box's own mapping.
+  if (!box.has_variable(var)) {
+    throw DREAL_RUNTIME_ERROR(
+        "ExpressionEvaluator: variable '{}' of expression '{}' is not in "
+        "the evaluated box.",
+        fmt::streamed(var), fmt::streamed(e_));
+  }
+  return box[box.index(var)];
 }
 
 Box::Interval ExpressionEvaluator::VisitConstant(const Expression& e,
