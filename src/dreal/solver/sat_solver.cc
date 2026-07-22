@@ -217,24 +217,6 @@ optional<std::pair<SatSolver::Model, bool>> SatSolver::CheckSat(const bool reque
   }
 }
 
-void SatSolver::Pop() {
-  DREAL_LOG_DEBUG("SatSolver::Pop()");
-  tseitin_variables_.pop();
-  to_sym_var_.pop();
-  to_sat_var_.pop();
-  // picosat_pop(sat_);
-  throw DREAL_RUNTIME_ERROR("NOT YET IMPLEMENTED SatSolver::Pop()");
-}
-
-void SatSolver::Push() {
-  DREAL_LOG_DEBUG("SatSolver::Push()");
-  // picosat_push(sat_);
-  throw DREAL_RUNTIME_ERROR("NOT YET IMPLEMENTED SatSolver::Push()");
-  to_sat_var_.push();
-  to_sym_var_.push();
-  tseitin_variables_.push();
-}
-
 void SatSolver::AddLiteral(const Formula& f) {
   DREAL_ASSERT(is_variable(f) ||
                (is_negation(f) && is_variable(get_operand(f))));

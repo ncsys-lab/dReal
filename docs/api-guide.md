@@ -214,7 +214,8 @@ Within a single call, `Config::number_of_jobs > 1` uses parallel ICP safely via 
 
 ## Context API (Advanced)
 
-For incremental solving (push/pop/assert), use `Context` directly:
+For monotonic incremental solving (assert → check → assert → check, no retraction), use
+`Context` directly:
 
 ```cpp
 #include "dreal/solver/context.h"
@@ -222,12 +223,14 @@ For incremental solving (push/pop/assert), use `Context` directly:
 Context ctx{config};
 ctx.DeclareVariable(x, 0.0, 10.0);  // x ∈ [0, 10]
 ctx.Assert(x * x <= 4.0);
-ctx.Push();
-ctx.Assert(x >= 1.5);
-auto result = ctx.CheckSat();        // delta-SAT with x ∈ [1.5, 2.0]
-ctx.Pop();
+auto result = ctx.CheckSat();        // delta-SAT with x ∈ [0, 2.0]
 ctx.Assert(x >= 1.9);
 auto result2 = ctx.CheckSat();       // delta-SAT with x ∈ [1.9, 2.0]
 ```
 
-This is the same interface used by the SMT2 parser for `(push)` / `(pop)` / `(assert)` / `(check-sat)` commands.
+This is the same interface used by the SMT2 parser for `(assert)` / `(check-sat)` commands.
+
+**`Push`/`Pop` are formally unsupported and always throw** — the CaDiCaL SAT core cannot
+retract clauses, and learned theory lemmas are box-relative. Retraction is an encoder-side
+concern: build a fresh `Context` (or emit a fresh script) per query. Rationale and notes for
+any future re-attempt: `docs/decisions.md` §"SMT-LIB push/pop: formally unsupported".

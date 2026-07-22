@@ -29,7 +29,7 @@
 namespace dreal {
 
 /// Context class that holds a set of constraints and provide
-/// Assert/Push/Pop/CheckSat functionalities.
+/// Assert/CheckSat functionalities.
 ///
 /// @note The implementation details are in context_impl.h file.
 class Context {
@@ -86,10 +86,12 @@ class Context {
   /// Asserts a formula maximizing a cost function @p f.
   void Maximize(const Expression& f);
 
-  /// Pops @p n stacks.
+  /// Formally unsupported: always throws. SMT-LIB2 push/pop is outside
+  /// dReal4's supported fragment — see docs/decisions.md
+  /// §"SMT-LIB push/pop: formally unsupported".
   void Pop(int n);
 
-  /// Pushes @p n stacks.
+  /// Formally unsupported: always throws. See Pop(int).
   void Push(int n);
 
   /// Sets an info @p key with a value @p val.

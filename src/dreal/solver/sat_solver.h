@@ -93,11 +93,6 @@ class SatSolver : public CaDiCaL::Learner {
     bool request_fully_constrained = DREAL_EXPERIMENTAL_SAT_MODEL_FULL_CONSTRAINTS
   );
 
-  // TODO(soonho): Push/Pop cnfizer and predicate_abstractor?
-  void Pop();
-
-  void Push();
-
   [[nodiscard]] Formula theory_literal(const Variable& var) const;
 
 private:

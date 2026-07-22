@@ -94,20 +94,6 @@ std::ostream& GetUnsatCoreCommand::Display(std::ostream& os) const {
   return os << "(get-unsat-core)";
 }
 
-// ----------
-// PopCommand
-// ----------
-std::ostream& PopCommand::Display(std::ostream& os) const {
-  return os << "(pop " << level_ << ")";
-}
-
-// -----------
-// PushCommand
-// -----------
-std::ostream& PushCommand::Display(std::ostream& os) const {
-  return os << "(push " << level_ << ")";
-}
-
 // ------------
 // ResetCommand
 // ------------
