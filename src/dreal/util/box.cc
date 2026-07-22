@@ -114,9 +114,14 @@ void Box::Add(const Variable& v, const double lb, const double ub) {
   DREAL_ASSERT(v.get_type() != Variable::Type::BINARY ||
                (0.0 <= lb && ub <= 1.0));
 
-  // Integer variable => lb, ub ∈ Z (double-exact range; dreal/dreal4#284).
+  // Integer variable => lb, ub within the double-exact range +/-2^53
+  // (dreal/dreal4#284). Integrality is NOT asserted here: mid-search re-adds
+  // (e.g. the forall counterexample path) legitimately carry contracted
+  // fractional bounds, which contractor_integer later tightens. Integrality
+  // of *declared* domains is enforced at the parser (convert_int64_to_double
+  // rejects out-of-range literals loudly).
   DREAL_ASSERT(v.get_type() != Variable::Type::INTEGER ||
-               (is_representable_integer(lb) && is_representable_integer(ub)));
+               (-kMaxExactInt <= lb && ub <= kMaxExactInt));
 
   values_[(*var_to_idx_)[v]] = Interval(lb, ub);
 }
