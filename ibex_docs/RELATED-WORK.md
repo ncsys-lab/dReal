@@ -34,12 +34,17 @@ prototyping sequence. "Verified?" = did the dossier read the actual source / API
 |---|---|---|---|---|---|---|
 | 1 | **`CtcNewton`** (interval Newton / Krawczyk / Hansen-Sengupta) | Quadratic contraction near a root on locally-square subsystems + *certified existence* — a completeness win on equality-heavy atoms HC4 handles only linearly | **S** | None (contraction under correct rounding; guarded to square subsystems) | Yes — `CtcNewton.{cpp,h}` **already compiles in the built fork** | 1 |
 | 2 | **Affine linearizer** `LinearizerAffine2` (+ **hybrid** with X-Taylor) | Second linear relaxation for `CtcPolytopeHull` that captures first-order variable *correlations* (dependency problem) an X-Taylor corner misses; the 2024 result says the two are complementary, not either/or | **M** | Low but real: reconcile the affine plugin's internal rounding (fAF2 error-free transforms) with dReal's phase-scoped rounding contract — **audit before trusting** | Yes — plugin source read this session | 2 |
-| 3 | **OBBT** (optimization-based bound tightening) | Strictly stronger use of the LP `CtcPolytopeHull` already builds: 2n LPs (min/max each var over the joint relaxation) instead of one hull projection | **M** | Soundness-critical: each LP bound needs Neumaier-Shcherbina safe directed-rounding post-verify (dReal's `UpwardRoundingScope` already models this) | Method sourced; **no dReal-corpus number (gap)** | 3 |
-| 4 | **`CtcMohc`** (monotonicity-based hull consistency) | Optimal hull-consistent contraction on monotone vars — attacks the multi-occurrence dependency problem with **no LP**; lighter complement to polytope | **M** | None (hull consistency removes only infeasible points) | Source located on `origin/mohc-optim` (**not in built fork**); no NRA-SMT number (gap) | 4 |
-| 5 | **DynIbex** (validated Runge-Kutta ODE plugin) | IBEX-native rigorous ODE backend; affine-RK counters the *wrapping effect* on linear/contracting flows where QR-Taylor struggles; cheap-per-step fast-path / cross-check beside CAPD | **M–L** | Completeness lever; re-audit feed precision + rounding scope for a second integrator | Present in this fork's history (`soonho-upstream/ibex-2.6.5-with-dynibex`); relative accuracy **unmeasured** | 5 |
-| 6 | **Arithmetic-propagation branching** (clauseSMT / NLSAT-line idea) | Split-variable choice aware of how clauses constrain arithmetic ranges — extends `--smear`; search-cost only | **S–M** | N/A (branch choice never moves a verdict) | Idea sourced; it is a CAD/MCSAT solver, **not** an ICP contractor (only the heuristic transfers) | 6 |
+| 3 | **ABS activity-based branching** (`--branch abs`; Michel & Van Hentenryck CPAIOR'12 — the VSIDS lift; [details below](#conflictimpact-aware-branching-the-vsids-analog-dreal-is-missing)) | Dynamic, history-aware split-variable choice; its bump signal (`ContractorStatus.output_`) is already computed per-prune by *every* contractor **including ODE** — constraint-aware exactly where `--smear` is structurally blind | **S–M** | None (branch choice never moves a verdict) | Yes — deep-dive this session; signal verified (`contractor_status.h:94`). **No published ICP number; degeneracy risk un-isolated (hypothesis)** | 3 |
+| 4 | **OBBT** (optimization-based bound tightening) | Strictly stronger use of the LP `CtcPolytopeHull` already builds: 2n LPs (min/max each var over the joint relaxation) instead of one hull projection | **M** | Soundness-critical: each LP bound needs Neumaier-Shcherbina safe directed-rounding post-verify (dReal's `UpwardRoundingScope` already models this) | Method sourced; **no dReal-corpus number (gap)** | 4 |
+| 5 | **`CtcMohc`** (monotonicity-based hull consistency) | Optimal hull-consistent contraction on monotone vars — attacks the multi-occurrence dependency problem with **no LP**; lighter complement to polytope | **M** | None (hull consistency removes only infeasible points) | Source located on `origin/mohc-optim` (**not in built fork**); no NRA-SMT number (gap) | 5 |
+| 6 | **DynIbex** (validated Runge-Kutta ODE plugin) | IBEX-native rigorous ODE backend; affine-RK counters the *wrapping effect* on linear/contracting flows where QR-Taylor struggles; cheap-per-step fast-path / cross-check beside CAPD | **M–L** | Completeness lever; re-audit feed precision + rounding scope for a second integrator | Present in this fork's history (`soonho-upstream/ibex-2.6.5-with-dynibex`); relative accuracy **unmeasured** | 6 |
 | 7 | **GANRA-style GPU candidate generator** | Thousands of parallel gradient-descent SAT candidates feeding `--seed-samples`' verify step | **L** | Completeness-only (each point re-verified by `EvaluateBox`, as `--seed-samples` already does) | Abstract only; CUDA dep + code availability unconfirmed | 7 |
 | 8 | **Alt. ODE integrators** (Flow*, Ariadne) | Taylor-model / function-calculus enclosures potentially tighter than CAPD doubletons on the stiff `odeexpr` cases the worklogs flag intractable | **L** | Completeness lever; whole-flowpipe APIs → large glue + feed/rounding re-audit | C++/embeddable verified; **no in-SMT-loop measurement** | 8 |
+
+*(Rank 3 supersedes the survey's original "arithmetic-propagation branching (clauseSMT)" row: the
+deep-dive confirmed clauseSMT itself is MCSAT-bound and does not transfer, and identified ABS as the
+architecture-native form — see the branching section below for the full ranking incl. what got
+demoted.)*
 
 **Already bound — do not re-propose as new** (flagged so the next reader doesn't rediscover them):
 the "Taylor-model contractor" for NRA atoms *is* `LinearizerXTaylor`/`--polytope`
@@ -358,7 +363,18 @@ core's own VSIDS is *not* reachable: CaDiCaL 3.0.1 exposes no activity getter an
   flips**. Since AA is net-negative on cheap constraints, expect a family-specific default, not a
   global one (mirrors the `--smear` per-project finding in `../CLAUDE.md`).
 
-### 3. OBBT on the existing `CtcPolytopeHull` LP (Effort **M**)
+### 3. ABS — `--branch abs` activity brancher (Effort **S–M**)
+
+The canonical feasibility analysis (plug-in point, effort split, A/B plan, the degeneracy
+hypothesis that gates it) lives inline at
+**[Conflict/impact-aware branching → "Feasibility (ABS)"](#conflictimpact-aware-branching-the-vsids-analog-dreal-is-missing)**
+— not duplicated here. One-line shape: widen `Config::Brancher` (`config.h:61`) to carry a
+per-variable activity vector fed from `ContractorStatus.output_` after each `Prune`; branch
+`argmax A/diam`; zero soundness surface; the first thing the prototype must isolate is the
+low-activity-variance degeneracy hypothesis, on odeexpr **and** the ODE families where the ABS
+thesis (covers what smear skips) actually bites.
+
+### 4. OBBT on the existing `CtcPolytopeHull` LP (Effort **M**)
 
 - **Plug-in point:** a new contractor beside `contractor_ibex_polytope.cc` reusing its
   `ibex::System` + SoPlex; the 2n-LP min/max loop over the same relaxation.
