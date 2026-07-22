@@ -607,12 +607,74 @@ void Context::Impl::Minimize(const vector<Expression>& functions) {
     x_vars += f.GetVariables();
   }
 
+  // Port of soonhokong/dreal4 e7ab1ff8a (dreal/dreal4#320): drop "definition"
+  // equalities from the universal side-constraint closure instead of
+  // quantifying their defined variable. A constraint `v == e` (either
+  // orientation) defines v when v (a) appears nowhere in e, (b) is not an
+  // objective variable, (c) occurs free in no other asserted formula, and
+  // (d) carries no box bound. Such a v is otherwise unconstrained, so the
+  // equality never restricts the remaining variables (the feasible-set
+  // projection is unchanged) — but quantifying it (the pre-fix behavior)
+  // added an *unbounded* universal dim that stalls the CE-guided forall
+  // contractor: #320's query went 0.02 s → >30 min.
+  //
+  // Divergence from the upstream commit, which substitutes e for v and
+  // eliminates even without (c)/(d): those two conditions are exactly what
+  // makes the elimination semantics-preserving. Without (d) the eliminated
+  // v's box bounds silently leave ϕᵢ(y); without (c) sibling constraints on v
+  // can no longer intersect x_vars and fall out of the closure, and
+  // upstream's double-definition path drops the second definition outright.
+  // Each of those enlarges the universal feasible set and can flip a
+  // delta-sat optimization query to unsat — false unsat at the
+  // Minimize-encoding level (minimize_equality_elimination_test.cc pins the
+  // (d) case). When (a)–(d) hold, v occurs nowhere outside its definition, so
+  // upstream's substitution map has nothing to rewrite and "substitute" and
+  // "drop" coincide; when they fail we fall back to quantification — the
+  // pre-fix path, slow but correct. Known caveat, shared with upstream: if e
+  // is partial (poles), dropping `v == e` admits universal points at the
+  // poles that the quantified encoding excluded.
+  unordered_set<Formula> dropped_definitions;
+  const auto defines_otherwise_unused_variable =
+      [this, &x_vars](const Formula& eq, const Expression& var_side,
+                      const Expression& expr_side) {
+        if (!is_variable(var_side)) {
+          return false;
+        }
+        const Variable& v{get_variable(var_side)};
+        if (expr_side.GetVariables().include(v) || x_vars.include(v)) {
+          return false;
+        }
+        const Box::Interval& bound_on_v{box()[v]};
+        if (isfinite(bound_on_v.lb()) || isfinite(bound_on_v.ub())) {
+          return false;
+        }
+        for (const Formula& other : stack_) {
+          if (!other.EqualTo(eq) && other.GetFreeVariables().include(v)) {
+            return false;
+          }
+        }
+        return true;
+      };
+  for (const Formula& constraint : stack_) {
+    if (is_equal_to(constraint)) {
+      const Expression& lhs{get_lhs_expression(constraint)};
+      const Expression& rhs{get_rhs_expression(constraint)};
+      if (defines_otherwise_unused_variable(constraint, lhs, rhs) ||
+          defines_otherwise_unused_variable(constraint, rhs, lhs)) {
+        dropped_definitions.insert(constraint);
+      }
+    }
+  }
+
   // Collects side-constraints related to the cost functions.
   unordered_set<Formula> constraints;
   bool keep_going = true;
   while (keep_going) {
     keep_going = false;
     for (const Formula& constraint : stack_) {
+      if (dropped_definitions.count(constraint) > 0) {
+        continue;
+      }
       if (constraints.find(constraint) == constraints.end() &&
           HaveIntersection(x_vars, constraint.GetFreeVariables())) {
         x_vars += constraint.GetFreeVariables();
