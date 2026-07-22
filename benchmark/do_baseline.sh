@@ -26,7 +26,7 @@ JOBS_FILE="/tmp/dreal_baseline_jobs_${SHA}_${TS}.tsv"
 
 mkdir -p "$OUT_DIR"
 
-python3 "$SCRIPT_DIR/select_baseline.py" --input /tmp/good_benchmarks.csv > "$JOBS_FILE"
+python3 "$SCRIPT_DIR/select_baseline.py" --input "$SCRIPT_DIR/baseline.csv" > "$JOBS_FILE"
 bash "$SCRIPT_DIR/run_batch.sh" "$OUT_DIR" "$JOBS_FILE"
 python3 "$SCRIPT_DIR/parse_results.py" "$OUT_DIR" >&2
 

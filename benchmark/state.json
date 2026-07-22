@@ -6,9 +6,9 @@
   ],
   "baseline_source": "benchmark/baseline_local.csv",
   "baseline_column": "wall_time_s",
-  "baseline_sha": "a15d29919",
-  "last_run": "2026-07-14T00:14:45.239703+00:00",
-  "last_run_dir": "/Users/kunalsheth/Documents/new_dreal/dreal4-cmake/benchmark/results/run_bd35e85ee_20260713_170444",
+  "baseline_sha": "831548e2c",
+  "last_run": "2026-07-22T19:45:28.444828+00:00",
+  "last_run_dir": "/Users/kunalsheth/Documents/new_dreal/dreal4-cmake/benchmark/results/baseline_831548e2c_20260722_120305",
   "runs": [
     {
       "timestamp": "2026-06-23T14:27:58.136995+00:00",
@@ -113,6 +113,17 @@
       "timestamp": "2026-07-14T00:14:45.239703+00:00",
       "results_dir": "/Users/kunalsheth/Documents/new_dreal/dreal4-cmake/benchmark/results/run_bd35e85ee_20260713_170444",
       "n_ran": 8,
+      "n_regressions": 0,
+      "n_exceptional": 0,
+      "n_resolved": 0,
+      "n_correctness_improvements": 0,
+      "n_undetermined_flips": 0,
+      "correctness_flips": []
+    },
+    {
+      "timestamp": "2026-07-22T19:45:28.444828+00:00",
+      "results_dir": "/Users/kunalsheth/Documents/new_dreal/dreal4-cmake/benchmark/results/baseline_831548e2c_20260722_120305",
+      "n_ran": 181,
       "n_regressions": 0,
       "n_exceptional": 0,
       "n_resolved": 0,
