@@ -26,7 +26,8 @@ The solver implements a variant of DPLL(T) where the SAT layer handles propositi
                          │
  ┌───────────────────────▼──────────────────────────┐
  │  Context  (src/dreal/solver/context.h)            │
- │  Manages Assert / Push / Pop / CheckSat           │
+ │  Manages Assert / CheckSat (push/pop rejected —   │
+ │  formally unsupported, docs/decisions.md)         │
  └───────────────────────┬──────────────────────────┘
                          │
  ┌───────────────────────▼──────────────────────────┐

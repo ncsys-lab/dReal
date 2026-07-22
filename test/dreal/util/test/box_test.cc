@@ -79,6 +79,47 @@ TEST_F(BoxTest, AddHasVariable) {
   EXPECT_TRUE(b1.has_variable(z_));
 }
 
+// A name lookup of a variable NOT in the box must fail loudly and must not
+// mutate anything. Pre-fix, all four name/index accessors did
+// `(*var_to_idx_)[var]` — `unordered_map::operator[]` default-inserts, so a
+// miss silently returned dimension 0's interval AND poisoned the map shared
+// (default copy ctor, bisect children) by every box copied from the same
+// ancestor.
+TEST_F(BoxTest, NameLookupMissThrowsAndDoesNotPoison) {
+  Box b1{{x_}};
+  const Box b2{b1};  // shares the name->index map with b1
+  const Box& cb{b1};
+  EXPECT_THROW(cb[z_], std::runtime_error);
+  EXPECT_FALSE(b1.has_variable(z_));
+  EXPECT_FALSE(b2.has_variable(z_));  // the shared-map propagation witness
+}
+
+// Pre-fix, a poisoned entry was permanent: a later legitimate Add(z_) hit
+// `emplace`'s no-op on the existing key, so "z_" aliased dimension 0 forever —
+// writes through the name clobbered another variable's interval.
+TEST_F(BoxTest, MissThenAddDoesNotAliasDimensionZero) {
+  Box b{{x_}};
+  b[x_] = Box::Interval{1, 2};
+  try {
+    const Box& cb{b};
+    (void)cb[z_];  // the miss (pre-fix: silently poisons z_ -> 0)
+  } catch (const std::runtime_error&) {
+  }
+  b.Add(z_);
+  b[z_] = Box::Interval{5, 6};  // pre-fix: lands on dimension 0 (= x_)
+  EXPECT_EQ(b[x_].lb(), 1.0);
+  EXPECT_EQ(b[x_].ub(), 2.0);
+}
+
+TEST_F(BoxTest, IndexAndVariableMissThrow) {
+  Box b{{x_}};
+  const Box& cb{b};
+  EXPECT_THROW(cb.index(z_), std::runtime_error);
+  EXPECT_THROW(cb.variable(1), std::runtime_error);  // valid: 0..size()-1
+  EXPECT_THROW(cb.variable(-1), std::runtime_error);
+  EXPECT_FALSE(b.has_variable(z_));
+}
+
 TEST_F(BoxTest, Empty) {
   Box b1{{x_}};
   EXPECT_FALSE(b1.empty());

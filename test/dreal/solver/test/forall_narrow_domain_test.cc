@@ -78,5 +78,26 @@ TEST_F(ForallNarrowDomainTest, WideDomainControlIsRefuted) {
       << "wide-domain control: ∀t∈[0,1] a≥t needs a≥1, impossible for a≤0.";
 }
 
+// An outer query whose box contains a variable that does NOT occur in the
+// forall atom. ForallFormulaEvaluator's nested CE context declares only the
+// atom's own variables (free + quantified), so it must copy exactly those —
+// not every outer-box variable. Pre-fix it iterated box.variables(): each
+// unrelated variable's interval was silently WRITTEN onto dimension 0 of the
+// nested CE box (Box::operator[] default-inserted into the shared name->index
+// map), corrupting the CE search domain; with the hardened Box accessors the
+// same path surfaced as a throw ("Box: variable extra is not in the box.")
+// from inside CheckSatisfiability — which is this test's red state.
+TEST_F(ForallNarrowDomainTest, OuterBoxVariableAbsentFromForallAtom) {
+  const Variable extra{"extra", Variable::Type::CONTINUOUS};
+  const Formula domain{(t_ >= 0.0) && (t_ <= 1.0)};
+  const Formula f{(0.0 <= extra) && (extra <= 1.0) && (extra >= 0.5) &&
+                  (-1.0 <= a_) && (a_ <= 10.0) &&
+                  forall({t_}, imply(domain, a_ >= t_))};
+  const auto result = CheckSatisfiability(f, 0.001);
+  ASSERT_TRUE(result) << "robustly SAT: a = 2, extra = 0.7 is a model.";
+  EXPECT_GE((*result)[a_].ub(), 1.0 - 0.001) << "∀t∈[0,1] a≥t needs a ≥ ~1";
+  EXPECT_GE((*result)[extra].ub(), 0.5 - 0.001);
+}
+
 }  // namespace
 }  // namespace dreal

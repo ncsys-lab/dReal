@@ -227,6 +227,18 @@ build dir is never exercised.
 
 ## Key Design Notes
 
+**SMT-LIB push/pop is formally unsupported.** `(push N)`/`(pop N)` and `Context::Push/Pop`
+throw a documented rejection before any state mutation (CaDiCaL can't retract clauses;
+learned theory lemmas are box-relative). Incrementality is encoder-side: one self-contained
+script/Context per query; monotonic multi-check-sat still works. Rationale + re-attempt
+notes: `docs/decisions.md` §"SMT-LIB push/pop: formally unsupported".
+
+**Box name-lookups fail loudly.** `Box::operator[](Variable)`, `index()`, and `variable(int)`
+throw on a miss — they used to silently default-insert into the index map shared by every
+copied box (bisect children included) and read/WRITE dimension 0. That silent path hid a real
+corruption on the ∃∀ path (`ForallFormulaEvaluator` copied foreign outer-box variables into
+its nested CE context). Full record: `simulink-to-dreal_bug_reports.md` BUG-012.
+
 **dReal3 backward compatibility is intentional.** The DR parser (`src/dreal/dr/`) handles the
 older dReal3 ODE syntax. Don't break this.
 

@@ -62,27 +62,25 @@ void Context::Minimize(const vector<Expression>& functions) {
 
 void Context::Maximize(const Expression& f) { impl_->Minimize({-f}); }
 
-void Context::Pop(int n) {
-  DREAL_LOG_DEBUG("Context::Pop({})", n);
-  if (n <= 0) {
-    throw DREAL_RUNTIME_ERROR(
-        "Context::Pop(n) called with n = {} which is not positive.", n);
-  }
-  while (n-- > 0) {
-    impl_->Pop();
-  }
+namespace {
+// SMT-LIB2 push/pop is formally outside dReal4's supported fragment: the
+// CaDiCaL SAT core cannot retract clauses, and learned theory lemmas are
+// box-relative, so every sound retraction design either drops learned lemmas
+// on pop or adds soundness-critical machinery. Incrementality is an
+// encoder-side concern. Rationale + notes for any future re-attempt:
+// docs/decisions.md §"SMT-LIB push/pop: formally unsupported".
+[[noreturn]] void ThrowPushPopUnsupported() {
+  throw DREAL_RUNTIME_ERROR(
+      "push/pop is not supported: the CaDiCaL SAT core cannot retract "
+      "clauses, and learned theory lemmas are box-relative (see "
+      "docs/decisions.md \"SMT-LIB push/pop: formally unsupported\"). "
+      "Re-emit a fresh script per query.");
 }
+}  // namespace
 
-void Context::Push(int n) {
-  DREAL_LOG_DEBUG("Context::Push({})", n);
-  if (n <= 0) {
-    throw DREAL_RUNTIME_ERROR(
-        "Context::Push(n) called with n = {} which is not positive.", n);
-  }
-  while (n-- > 0) {
-    impl_->Push();
-  }
-}
+void Context::Pop(int) { ThrowPushPopUnsupported(); }
+
+void Context::Push(int) { ThrowPushPopUnsupported(); }
 
 void Context::SetInfo(const string& key, const double val) {
   impl_->SetInfo(key, val);

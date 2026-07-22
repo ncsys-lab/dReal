@@ -371,3 +371,54 @@ here: **depth-parity** toggle — tried, perf-neutral-to-worse, not adopted (bra
 **informed first-side** (steer toward a sampled candidate) — this is precisely what seed-and-verify
 already does for NRA, and blind alternation is the residual robust default for the ODE/forall
 families it cannot reach. Code + intuition: `src/dreal/solver/icp_seq.cc` (`explore_left_first`).
+
+---
+
+## SMT-LIB push/pop: formally unsupported
+
+**Decision (2026-07-22):** `(push N)` / `(pop N)` — and `Context::Push/Pop` — are formally
+outside the supported fragment. Both throw one documented rejection *before any state
+mutation* (`ThrowPushPopUnsupported`, `src/dreal/solver/context.cc`); the parser still parses
+the commands so the error carries source context. Incrementality is an **encoder-side
+concern**: emit one self-contained script per query. Monotonic incremental use within one
+process (assert → check-sat → assert → check-sat, no retraction) remains supported —
+CaDiCaL is incremental; only retraction is out. `(reset)` / `(reset-assertions)` remain
+unparsed. The dead plumbing was deleted (`SatSolver::Push/Pop` — throwing stubs since the
+CaDiCaL swap `299785e2f` — `Context::Impl::Push/Pop`, the unused `PushCommand`/`PopCommand`
+cells). Historical fixtures `test/dreal/test/smt2/push_pop_01..05.smt2` stay in-tree as
+pre-CaDiCaL artifacts. Tests: `test/dreal/smt2/test/push_pop_unsupported_test.cc`.
+
+**Why:** CaDiCaL (3.0.x — verified against the installed header) cannot retract clauses: no
+push/pop, only per-solve `assume()`, one-shot `constrain()`, `freeze`/`melt`. PicoSAT (the
+pre-2025 core) had native `picosat_push/pop`. Deeper: learned theory lemmas are
+**box-relative** — `AddLearnedClauseDirect` adds `¬l₁ ∨ … ∨ ¬lₙ` with *no box premises
+encoded* (`unfitted_box` is audit-only), and `FilterAssertion` folds bound atoms into the
+box rather than the literal space — so a pop that widens the box invalidates lemmas learned
+under the narrower box. Naive retention is SOUNDNESS (asserts φ T-unsatisfiable on a
+T-satisfiable φ — false unsat). Every sound design either drops learned lemmas on pop
+(unacceptable for saradc-class incremental workloads) or adds soundness-critical machinery;
+with no concrete incremental consumer, the clean rejection is the minimal-risk choice.
+
+**For a future re-attempt** (investigated 2026-07-21/22; ranked):
+1. *Rebuild-on-pop*: the scoped stacks still exist (`Impl::stack_`/`boxes_` ScopedVectors;
+   SatSolver's ScopedUnorderedMaps). Pop = pop scopes, destroy+reconstruct `SatSolver`
+   (`optional::emplace` — nothing survives by accident), replay `AddFormula` over the
+   surviving `stack_` (formulas are stored post-ITE/post-normalization — replay is a pure
+   loop). Drops SAT-learned clauses on pop: COMPLETENESS/speed, never SOUNDNESS. The rebuild
+   must be **unconditional** — a scope can narrow the box via `FilterAssertion` while adding
+   nothing to `stack_`.
+2. *+ certified lemma replay*: log each learned clause's literals + the check-time box
+   restricted to its free variables; on rebuild re-add iff every lemma variable is in the
+   current box and current interval ⊆ premise interval (inclusion monotonicity — machine-
+   checkable per lemma). Total retention whenever bounds stay at level 0 (encoder-controllable).
+3. *Activation literals*: theory lemmas would need act-tagging anyway (box-relative), giving
+   coarser retention than the certificate on exactly the expensive clauses, and the
+   assume/flip/model-extraction surface joins the soundness argument.
+
+Hazards a re-attempt must handle: `ExtractModel`'s size-equality fast path
+(`context_impl.cc`, `model_variables_.size() == box.size()`) leaks aux variables once
+declarations can be retracted; the SMT2 driver's `scope_`/`function_definition_map_`/
+`ode_definition_map_` are not tied to assertion levels (popped names would stay resolvable);
+Box name-lookups throw on a miss (see `simulink-to-dreal_bug_reports.md` BUG-012 —
+pre-hardening they silently default-inserted into the shared index map, which a pop-era
+pattern trie could weaponize into learned clauses over phantom variables).

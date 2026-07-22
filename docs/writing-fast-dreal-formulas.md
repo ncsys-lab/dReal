@@ -211,6 +211,11 @@ generator or fail without an obvious message:
   strictness for correctness.
 - **Bounds** attach to a variable inline, `(declare-fun x () Real [lb, ub])` (the comma is mandatory),
   or as ordinary assertions.
+- **No incremental interface.** `(push)`/`(pop)` are formally unsupported and rejected with a hard
+  error (`(reset)`/`(reset-assertions)` don't even parse) — emit one self-contained script per query.
+  Multiple `(check-sat)` in one script are fine as long as assertions only accumulate. Solver caches
+  don't persist across invocations, so structure a family as independent files rather than one
+  retracting script. Rationale: `docs/decisions.md` §"SMT-LIB push/pop: formally unsupported".
 
 ---
 

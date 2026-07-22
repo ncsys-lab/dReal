@@ -50,14 +50,6 @@ Command set_option_command(const string& key, const string& val) {
   return Command{make_shared<SetOptionCommand>(key, val)};
 }
 
-Command push_command(int level) {
-  return Command{make_shared<PushCommand>(level)};
-}
-
-Command pop_command(int level) {
-  return Command{make_shared<PopCommand>(level)};
-}
-
 Command reset_command() { return Command{make_shared<ResetCommand>()}; }
 
 }  // namespace dreal

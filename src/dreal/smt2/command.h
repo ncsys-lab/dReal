@@ -43,8 +43,6 @@ std::ostream& operator<<(std::ostream& os, const Command& c);
 Command assert_command(const Formula& f);
 Command check_sat_command();
 Command exit_command();
-Command pop_command(int level);
-Command push_command(int level);
 Command reset_command();
 Command set_info_command(const std::string& key, const std::string& val);
 Command set_logic_command(Logic logic);

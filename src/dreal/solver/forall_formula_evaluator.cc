@@ -98,7 +98,13 @@ ForallFormulaEvaluator::ForallFormulaEvaluator(Formula f, const double epsilon,
 FormulaEvaluationResult ForallFormulaEvaluator::operator()(
     const Box& box, const UpwardRounding& ur) const {
   Context& context{GetContext()};
-  for (const Variable& v : box.variables()) {
+  // Copy exactly the variables the nested CE context declared: this atom's
+  // free (existential) variables. The outer box can hold variables foreign to
+  // this atom — copying those wrote through Box::operator[]'s old
+  // default-insert onto dimension 0 of the nested CE box, silently corrupting
+  // the CE search domain (see forall_narrow_domain_test.cc
+  // OuterBoxVariableAbsentFromForallAtom).
+  for (const Variable& v : formula().GetFreeVariables()) {
     context.SetInterval(v, box[v].lb(), box[v].ub());
   }
   optional<Box> counterexample = context.CheckSat();
@@ -106,7 +112,7 @@ FormulaEvaluationResult ForallFormulaEvaluator::operator()(
   if (counterexample) {
     DREAL_LOG_DEBUG("ForallFormulaEvaluator::operator()  --  CE found: ",
                     *counterexample);
-    for (const Variable& exist_var : box.variables()) {
+    for (const Variable& exist_var : formula().GetFreeVariables()) {
       (*counterexample)[exist_var] = box[exist_var];
     }
     double max_diam = 0.0;

@@ -45,8 +45,6 @@ class Context::Impl {
   void DeclareVariable(const Variable& v, bool is_model_variable);
   void SetDomain(const Variable& v, const Expression& lb, const Expression& ub);
   void Minimize(const std::vector<Expression>& functions);
-  void Pop();
-  void Push();
   void SetInfo(const std::string& key, double val);
   void SetInfo(const std::string& key, const std::string& val);
   void SetInterval(const Variable& v, double lb, double ub);

@@ -149,28 +149,6 @@ class GetUnsatCoreCommand : public CommandCell {
   std::ostream& Display(std::ostream& os) const override;
 };
 
-/// "pop" command.
-class PopCommand : public CommandCell {
- public:
-  explicit PopCommand(int level) : level_(level) {}
-  int get_level() const { return level_; }
-  std::ostream& Display(std::ostream& os) const override;
-
- private:
-  const int level_{};
-};
-
-/// "push" command.
-class PushCommand : public CommandCell {
- public:
-  explicit PushCommand(int level) : level_(level) {}
-  int get_level() const { return level_; }
-  std::ostream& Display(std::ostream& os) const override;
-
- private:
-  const int level_{};
-};
-
 /// "reset" command.
 class ResetCommand : public CommandCell {
  public:

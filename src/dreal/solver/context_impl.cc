@@ -738,21 +738,6 @@ void Context::Impl::Minimize(const vector<Expression>& functions) {
   return Assert(psi);
 }
 
-void Context::Impl::Pop() {
-  DREAL_LOG_DEBUG("ContextImpl::Pop()");
-  stack_.pop();
-  boxes_.pop();
-  sat_solver_.Pop();
-}
-
-void Context::Impl::Push() {
-  DREAL_LOG_DEBUG("ContextImpl::Push()");
-  sat_solver_.Push();
-  boxes_.push();
-  boxes_.push_back(boxes_.last());
-  stack_.push();
-}
-
 void Context::Impl::SetInfo(const string& key, const double val) {
   DREAL_LOG_DEBUG("ContextImpl::SetInfo({} ↦ {})", key, val);
   info_[key] = fmt::format("{}", val);

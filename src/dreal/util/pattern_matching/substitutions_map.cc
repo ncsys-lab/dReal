@@ -30,7 +30,15 @@ namespace dreal
         const Variable& a, const Variable& aP
     ) {
         if (a.get_type() != aP.get_type()) return TYPE_MISS;
-        if (box[a] != box[aP]) return BOX_MISS; // todo: subset / superset ?
+        // Membership first: Box::operator[] throws on a variable not in the box
+        // (it used to default-insert into the shared name->index map — silent
+        // poison). Mixed membership cannot certify a domain fit -> BOX_MISS.
+        // Both absent (e.g. the PM tests drive find_matches with an empty Box):
+        // no domains to compare — matching stays structural.
+        const bool a_in{box.has_variable(a)};
+        const bool aP_in{box.has_variable(aP)};
+        if (a_in != aP_in) return BOX_MISS;
+        if (a_in && box[a] != box[aP]) return BOX_MISS; // todo: subset / superset ?
 
         for (const auto& [mA, mAP] : mapping) {
             const bool eqA = mA.equal_to(a);
