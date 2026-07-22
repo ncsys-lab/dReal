@@ -160,6 +160,13 @@ void Worker(const Contractor& contractor, const Config& config,
           "satisfying "
           "delta-condition but it's not bisectable.:\n{}",
           current_box);
+      // Upstream dreal/dreal4#68, parallel twin of the IcpSeq exit: this
+      // delta-sat is degenerate — the box still violates the delta-condition
+      // but cannot be bisected further. COMPLETENESS hazard (may assert
+      // phi^delta T-satisfiable on a T-unsatisfiable phi — missed
+      // refutation); warn loudly on stderr, verdict unchanged. Racing
+      // workers may each warn once; duplicates are benign.
+      WarnDegenerateDeltaSat("non-bisectable box below delta", current_box);
       *found_delta_sat = id;
       return;
     }

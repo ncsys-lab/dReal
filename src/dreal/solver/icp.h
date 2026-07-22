@@ -15,6 +15,7 @@
 */
 #pragma once
 
+#include <string>
 #include <vector>
 
 #include "dreal/contractor/contractor.h"
@@ -96,5 +97,22 @@ class Icp {
 optional<DynamicBitset> EvaluateBox(
     const std::vector<FormulaEvaluator>& formula_evaluators, const Box& box,
     double precision, ContractorStatus* cs, const UpwardRounding& ur);
+
+/// Loud stderr warning that a delta-sat verdict is degenerate — reachable from
+/// both Icp variants and the final-verdict surface (context_impl.cc). The two
+/// callers' reasons:
+///   "non-bisectable box below delta"      — upstream dreal/dreal4#68: the box
+///       still violates the delta-condition but its endpoints are adjacent
+///       floats, so ICP cannot bisect further and returns delta-sat (both the
+///       IcpSeq and IcpParallel::Worker exits).
+///   "witness box has unbounded endpoints" — upstream dreal/dreal4#265: an
+///       unbounded variable interval admits a +-inf witness endpoint; the
+///       mitigation is giving every real finite bounds (checked once where the
+///       final model box is extracted).
+/// Both are COMPLETENESS hazards (the verdict may assert phi^delta
+/// T-satisfiable on a T-unsatisfiable phi — a missed refutation); neither is a
+/// SOUNDNESS bug, and this warning changes no verdict, exit code, or stdout
+/// byte (stdout is consumed by downstream substring checks).
+void WarnDegenerateDeltaSat(const std::string& reason, const Box& box);
 
 }  // namespace dreal
