@@ -2,7 +2,9 @@
 
 #include <algorithm>  // for cpplint only
 #include <atomic>
+#include <cmath>
 #include <cstddef>
+#include <limits>
 #include <map>
 #include <ostream>
 #include <string>
@@ -16,6 +18,33 @@
 namespace dreal {
 namespace drake {
 namespace symbolic {
+
+// dreal/dreal4#264 — support for EXACT constant folding of additions. A raw
+// double add during constant folding silently rounds once the true sum leaves
+// the +/-2^53 exactly-representable range (9000000000000000 + 9000000000000001
+// ties-to-even to 18000000000000000), collapsing formulas that distinguish the
+// two sides: a false-unsat SOUNDNESS hole. The cure is to fold c1 + c2 to
+// fl(c1+c2) plus an exact residual term instead of rounding.
+//
+// Knuth TwoSum: given s = fl(v1 + v2) computed under round-to-nearest (the
+// caller's obligation), returns the exactly-representable rounding error `err`
+// with v1 + v2 == s + err exactly. err == 0 iff the addition was exact.
+inline double two_sum_err(const double v1, const double v2, const double s) {
+  const double bv{s - v1};
+  const double av{s - bv};
+  return (v1 - av) + (v2 - bv);
+}
+
+// The TwoSum residual as an addition TERM. ExpressionRealConstant intervals
+// are exactly one ulp wide by invariant, so the exactly-representable err is
+// carried as [err, nextafter(err)] with the lb as representative: the interval
+// contains the true residual, and the folded sum fl(v1+v2) + [err, err^+] both
+// encloses and (at its lb reading) equals the exact sum v1 + v2.
+inline Expression exact_residual_term(const double err) {
+  return real_constant(
+      err, std::nextafter(err, std::numeric_limits<double>::infinity()),
+      /*use_lb_as_representative=*/true);
+}
 
 /** Represents an abstract class which is the base of concrete
  * symbolic-expression classes.

@@ -17,6 +17,7 @@
 #include "dreal/symbolic/hash.h"
 #include "dreal/symbolic/symbolic_environment.h"
 #include "dreal/symbolic/symbolic_expression.h"
+#include "dreal/util/rounding.h"
 #include "dreal/symbolic/symbolic_expression_visitor.h"
 #include "dreal/symbolic/symbolic_variable.h"
 #include "dreal/symbolic/symbolic_variables.h"
@@ -746,7 +747,23 @@ Expression ExpressionAddFactory::GetExpression() {
 }
 
 ExpressionAddFactory& ExpressionAddFactory::AddConstant(const double constant) {
-  constant_ += constant;
+  // dreal/dreal4#264: never fold constants inexactly — same mechanism as
+  // operator+= (see symbolic_expression_cell.h helpers). TwoSum requires
+  // round-to-nearest, and factory callers are NOT all under a nearest scope
+  // (forall-CE instantiation runs inside the FE_UPWARD ICP phase), so
+  // establish it here; the guard is check-before-set, a no-op at parse time.
+  const NearestRoundingScope g;
+  const double s{constant_ + constant};
+  if (std::isfinite(s)) {
+    const double err{two_sum_err(constant_, constant, s)};
+    if (err != 0.0) {
+      AddTerm(1.0, exact_residual_term(err));
+    }
+  }
+  // On overflow to +/-inf this keeps the pre-#264 rounding behavior: a
+  // factory constant cannot carry #321's sound interval. Requires
+  // DBL_MAX-magnitude literals to reach.
+  constant_ = s;
   return *this;
 }
 
