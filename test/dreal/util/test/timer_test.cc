@@ -20,12 +20,17 @@
 namespace dreal {
 namespace {
 
+volatile int dummy_sink{0};
+
 void DoSomeWork(const int n) {
   int dummy{0};
   for (int i = 0; i < n; ++i) {
     dummy += i;
+    // Volatile store *inside* the loop: upstream's store-after-loop variant
+    // (febcd8896) is folded to a closed-form Gauss sum by Apple clang 21 at
+    // -O3 (verified in assembly), making the work span 0 ticks.
+    dummy_sink = dummy;
   }
-  (void)dummy;
 }
 
 GTEST_TEST(Timer, Test1) {
@@ -37,7 +42,7 @@ GTEST_TEST(Timer, Test1) {
 
   // Start the timer.
   timer.start();
-  DoSomeWork(1000);
+  DoSomeWork(100000);
   EXPECT_TRUE(timer.is_running());
   const auto duration1{timer.elapsed()};
   EXPECT_GT(duration1, Timer::clock::duration{0});
@@ -46,21 +51,21 @@ GTEST_TEST(Timer, Test1) {
   timer.pause();
   EXPECT_FALSE(timer.is_running());
   const auto duration2{timer.elapsed()};
-  DoSomeWork(1000);
+  DoSomeWork(100000);
   const auto duration3{timer.elapsed()};
   // Timer has been paused between duration2 and duration3.
   EXPECT_EQ(duration2, duration3);
 
   // Pause the timer.
   timer.resume();
-  DoSomeWork(1000);
+  DoSomeWork(100000);
   const auto duration4{timer.elapsed()};
   EXPECT_LT(duration3, duration4);
   EXPECT_TRUE(timer.is_running());
 
   // Start the timer, this should reset it.
   timer.start();
-  DoSomeWork(10);
+  DoSomeWork(1000);
   const auto duration5{timer.elapsed()};
   EXPECT_LE(duration5, duration1);
   EXPECT_TRUE(timer.is_running());
