@@ -402,6 +402,21 @@ TEST(DrealBugsRegression, RefineWitness_PinsDontCareBoolean) {
   EXPECT_NE(out.find("b : True"), std::string::npos) << "got: " << out;
 }
 
+// dreal/dreal4#258 — arctan2 with an UNBOUNDED second argument returned a
+// false `unsat`. SOUNDNESS (asserts φ T-unsatisfiable on a T-satisfiable φ —
+// false unsat): the query is trivially satisfiable (y=0 gives z=π/2, indeed
+// every y admits a z). Bounding y (e.g. y∈[3.9,4.1]) always gave the correct
+// delta-sat, so the trigger is the unbounded second argument reaching the
+// atan2 backward contractor.
+TEST(DrealBugsRegression, Issue258_Atan2UnboundedSecondArg_DeltaSat) {
+  const std::string out{RunSmt2String(
+      "(declare-fun y () Real)\n"
+      "(declare-fun z () Real)\n"
+      "(assert (= z (arctan2 3 y)))\n"
+      "(check-sat)\n")};
+  EXPECT_NE(out.find("delta-sat"), std::string::npos) << "got: " << out;
+}
+
 // BUG-009 — the seed-and-verify pre-pass (NRA-only, on by default) substitutes
 // derived (equality-defined) variables into every constraint before handing
 // them to COBYLA; here `(<= (sin x) y)` with derived `y == (sin x)` collapses
