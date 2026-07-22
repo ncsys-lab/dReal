@@ -124,26 +124,54 @@ Box::Interval& Box::operator[](const int i) {
   DREAL_ASSERT(i < size());
   return values_[i];
 }
+// Name/index lookups must fail loudly on a miss. `(*var_to_idx_)[var]` would
+// default-insert var->0 into the index map SHARED by every box copied from the
+// same ancestor (copy ctor and bisect children share the map; only Add
+// copies-on-write) and silently return dimension 0's interval — a latent
+// wrong-contraction (SOUNDNESS-class) landmine. See
+// simulink-to-dreal_bug_reports.md BUG-012.
+namespace {
+int checked_index(const std::unordered_map<Variable, int, hash_value<Variable>>&
+                      var_to_idx,
+                  const Variable& var) {
+  const auto it = var_to_idx.find(var);
+  if (it == var_to_idx.end()) {
+    throw DREAL_RUNTIME_ERROR("Box: variable {} is not in the box.",
+                              var.get_name());
+  }
+  return it->second;
+}
+}  // namespace
+
 Box::Interval& Box::operator[](const Variable& var) {
-  return values_[(*var_to_idx_)[var]];
+  return values_[checked_index(*var_to_idx_, var)];
 }
 const Box::Interval& Box::operator[](const int i) const {
   DREAL_ASSERT(i < size());
   return values_[i];
 }
 const Box::Interval& Box::operator[](const Variable& var) const {
-  return values_[(*var_to_idx_)[var]];
+  return values_[checked_index(*var_to_idx_, var)];
 }
 
 const vector<Variable>& Box::variables() const { return *variables_; }
 
-const Variable& Box::variable(const int i) const { return (*idx_to_var_)[i]; }
+const Variable& Box::variable(const int i) const {
+  const auto it = idx_to_var_->find(i);
+  if (it == idx_to_var_->end()) {
+    throw DREAL_RUNTIME_ERROR("Box: index {} is out of range (size = {}).", i,
+                              size());
+  }
+  return it->second;
+}
 
 bool Box::has_variable(const Variable& var) const {
   return var_to_idx_->count(var) > 0;
 }
 
-int Box::index(const Variable& var) const { return (*var_to_idx_)[var]; }
+int Box::index(const Variable& var) const {
+  return checked_index(*var_to_idx_, var);
+}
 
 const Box::IntervalVector& Box::interval_vector() const { return values_; }
 Box::IntervalVector& Box::mutable_interval_vector() { return values_; }

@@ -202,6 +202,23 @@ namespace dreal
             EXPECT_EQ(results[0].second->size(), 1);
         }
 
+        TEST_F(PatternMatchingTest, AttemptSubstitutionOutOfBoxVariable) {
+            // Mixed membership (one variable in the box, the other not) must be a
+            // BOX_MISS. Pre-fix, `box[z1]` default-inserted z1->0 into the shared
+            // name->index map — silent poison — and the domain check compared
+            // dimension 0 against itself, passing vacuously.
+            Box box{{x1}};
+            substitutions_map subs{box, 2};
+            EXPECT_EQ(subs.attempt_substitution(z1, x1), substitutions_map::BOX_MISS);
+            EXPECT_FALSE(box.has_variable(z1));  // the poison witness
+
+            // Both-absent: no domains to compare — matching stays structural. This
+            // pins the PM test suite's empty-Box usage (domain filtering vacuous),
+            // e.g. ForallBoundVarNoLeak above.
+            substitutions_map no_domains{Box{}, 2};
+            EXPECT_EQ(no_domains.attempt_substitution(z1, x1), substitutions_map::SUCCESS);
+        }
+
         TEST_F(PatternMatchingTest, IntegralExpressions) {
             auto pattern = integral(t0, t1, {x1, x2}, {y1, y2}, flow2);
 

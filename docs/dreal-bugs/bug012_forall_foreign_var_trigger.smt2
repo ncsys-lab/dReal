@@ -1,0 +1,7 @@
+(set-logic QF_NRA)
+(declare-fun a () Real [-1.0, 10.0])
+(declare-fun extra () Real [0.0, 1.0])
+(assert (>= extra 0.5))
+(assert (forall ((t Real [0.0, 1.0])) (>= a t)))
+(check-sat)
+(exit)
