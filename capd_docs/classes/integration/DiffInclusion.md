@@ -29,7 +29,7 @@ void DiffInclusionCW::operator()(SetType& set, SetType& result);
 The RHS `MultiMap<FMapT,GMapT>` holds `f` (selection) + `g` (perturbation) with
 `operator()(X) = f(X) + g(X)`, modeling `f(x,e)=f(x)+g(x,ε)`, ε an interval set, g(x,e0)=0
 (verified `MultiMap.h`). State carried in `InclRect2Set` (`C0DoubletonSet` subclass; ctors take
-center x and shape r0/C/r). Tolerance/step-control surface mirrors the `IOdeSolver` dReal
+center x and the doubleton shape C, r0 — `InclRect2Set.h:47-50`). Tolerance/step-control surface mirrors the `IOdeSolver` dReal
 already configures.
 
 ## dReal status

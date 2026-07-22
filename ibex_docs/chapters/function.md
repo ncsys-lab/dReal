@@ -6,9 +6,10 @@ and the numerical operations on it.
 
 > **dReal status:** central. `generic_contractor_generator.cc` builds an
 > `ibex::Function` (via `ExprNode`/`ExprSymbol`/`ExprConstant`) per theory atom;
-> `contractor_ibex_fwdbwd.cc` calls `Function::backward` to contract. **Six of the
-> twelve fork patches touch this path** (gradient laziness, the backward callback
-> contract, the exception→return-status refactor). See
+> `contractor_ibex_fwdbwd.cc` calls `Function::backward` to contract. **Several
+> fork patches touch this path** (gradient laziness, the backward callback
+> contract, the exception→return-status refactor) — the live catalog is
+> [`../ibex-fork/MIGRATION.md`](../../../ibex-fork/MIGRATION.md). See
 > [`../dreal-ibex-usage.md`](../dreal-ibex-usage.md).
 
 ## Arguments vs variables

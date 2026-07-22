@@ -1,20 +1,19 @@
 # Chapter: Contractors (the audit goldmine)
 
-> ⚠ **Stale LP/polytope status** (pre-`fa3b74bd7`) — corrected 2026-07-02: IBEX now builds
-> `-DLP_LIB=soplex`, so `--polytope`/`--acid`/`--3bcid`/`--forall-polytope` are **live** opt-in
-> (default off); the "opt-in, dormant, built `LP_LIB=none`" cells are wrong. See
-> [`README.md`](../README.md) top banner.
-
 Source: [`contractor.rst.txt`](../../../ibex-docs/_sources/contractor.rst.txt) ·
 upstream HTML `contractor.html`. **This is the richest chapter for dReal** — it
 defines the contractor catalog and the composition operators ("contractor
 programming", Chabert & Jaulin 2009).
 
-> **dReal status at a glance:** dReal uses `CtcFwdBwd` (HC4Revise) and
-> `CtcPolytopeHull`; it hand-rolls the composition/fixpoint layer itself and does
-> **not** use IBEX's `Ctc3BCid`/`CtcAcid`/`CtcNewton`/`CtcInverse`. Those unused
-> atomic contractors are the audit's primary leverage. See
-> [`../AUDIT.md`](../AUDIT.md), [`../dreal-ibex-usage.md`](../dreal-ibex-usage.md).
+> **dReal status at a glance:** dReal uses `CtcFwdBwd` (HC4Revise) always, plus —
+> opt-in, default off — three IBEX add-ons now **shipped**: `CtcAcid`/`Ctc3BCid`
+> shaving (`--acid`/`--3bcid`, `contractor_ibex_acid.{cc,h}`), `CtcPolytopeHull`
+> (`--polytope`, LP path **live** since IBEX builds `-DLP_LIB=soplex` — vendored
+> SoPlex 4.0.2), and `ibex::CtcForAll` as a ∃∀ pre-pruner (`--forall-pre-prune`,
+> `contractor_ibex_forall.{cc,h}`). It hand-rolls the composition/fixpoint layer
+> itself and does **not** use `CtcNewton`/`CtcInverse` (the remaining Tier-D
+> leverage). See [`../AUDIT.md`](../AUDIT.md),
+> [`../dreal-ibex-usage.md`](../dreal-ibex-usage.md).
 
 ## The `Ctc` interface
 
@@ -37,9 +36,9 @@ and **no lost solutions**. The `input`/`output` bitsets (unset by default) let
 | **`CtcFwdBwd`** (HC4Revise) | forward-backward on one constraint `f(x)∈[y]`; linear-time, optimal when each var occurs once | **used** (via `Function::backward`) | [hdr](../../../ibex-fork/src/contractor/ibex_CtcFwdBwd.h) · [node](../classes/contractors/CtcFwdBwd.md) |
 | **`CtcHC4`** | `CtcPropag` over the per-constraint fwd-bwd contractors of a `System` | no (dReal's own loop) | [hdr](../../../ibex-fork/src/contractor/ibex_CtcHC4.h) |
 | **`CtcNewton`** | interval-Newton (Hansen-Sengupta); contracts near a solution of a square system; gated to narrow boxes (`ceil`) | **no** → audit D | [hdr](../../../ibex-fork/src/contractor/ibex_CtcNewton.h) · [node](../classes/contractors/CtcNewton.md) |
-| **`Ctc3BCid`** | 3B shaving + CID constructive disjunction; strong, fixed params | **no** → audit A | [hdr](../../../ibex-fork/src/contractor/ibex_Ctc3BCid.h) · [node](../classes/contractors/Ctc3BCid.md) |
-| **`CtcAcid`** | adaptive 3BCID — auto-tunes how many vars to shave | **no** → **audit A (headline)** | [hdr](../../../ibex-fork/src/contractor/ibex_CtcAcid.h) · [node](../classes/contractors/CtcAcid.md) |
-| **`CtcPolytopeHull`** | contract to the hull of an LP relaxation (2n Simplex calls) | **opt-in, dormant** — `--polytope` (default off) + built `LP_LIB=none` | [hdr](../../../ibex-fork/src/contractor/ibex_CtcPolytopeHull.h) · [node](../classes/contractors/CtcPolytopeHull.md) |
+| **`Ctc3BCid`** | 3B shaving + CID constructive disjunction; strong, fixed params | **used** — `--3bcid` (`contractor_ibex_acid`) | [hdr](../../../ibex-fork/src/contractor/ibex_Ctc3BCid.h) · [node](../classes/contractors/Ctc3BCid.md) |
+| **`CtcAcid`** | adaptive 3BCID — auto-tunes how many vars to shave | **used** — `--acid` (`contractor_ibex_acid`) | [hdr](../../../ibex-fork/src/contractor/ibex_CtcAcid.h) · [node](../classes/contractors/CtcAcid.md) |
+| **`CtcPolytopeHull`** | contract to the hull of an LP relaxation (2n Simplex calls) | **used** — `--polytope` (default off); LP live (`LP_LIB=soplex`) | [hdr](../../../ibex-fork/src/contractor/ibex_CtcPolytopeHull.h) · [node](../classes/contractors/CtcPolytopeHull.md) |
 | **`CtcInverse`** | `f⁻¹(C)`: contract `[x]` w.r.t. a contractor on `f([x])` | no → audit D | [hdr](../../../ibex-fork/src/contractor/ibex_CtcInverse.h) |
 | `CtcNotIn` | contract for `f(x) ∉ [y]` | no | [hdr](../../../ibex-fork/src/contractor/ibex_CtcNotIn.h) |
 | `CtcInteger` | integrality contractor | dReal has its own `contractor_integer` | [hdr](../../../ibex-fork/src/contractor/ibex_CtcInteger.h) |
@@ -65,7 +64,12 @@ and **no lost solutions**. The `input`/`output` bitsets (unset by default) let
 - *input/output bitsets* — without them `CtcPropag` degrades to a plain fixpoint
   (every contractor re-fired). dReal's own worklist makes the analogous choice.
 
-## Shaving / 3B / CID (audit A — docs are empty here, headers are ground truth)
+## Shaving / 3B / CID (SHIPPED — `--acid`/`--3bcid`; docs empty here, headers are ground truth)
+
+Wrapped in `contractor_ibex_acid.{cc,h}` as `CtcAcid(system, CtcHC4(system))`
+(`--acid`) or `Ctc3BCid(CtcHC4(system))` (`--3bcid`); the two are mutually
+exclusive. dReal surfaces two of the IBEX knobs below as flags: **`--s3b`** (shave
+depth) and **`--acid-ct-ratio`**.
 
 The `.rst` leaves **Shaving** and **Acid & 3BCid** as `*(to be completed)*`. The
 algorithm and every tuning parameter come from the headers:
@@ -107,8 +111,17 @@ Details + the corner/slope menu:
 Generic handling of `∃y∈[y] c(x,y)` / `∀y∈[y] c(x,y)`: split `[y]` to precision
 ε, contract each sub-box, project onto x, then **union** (Exist) or **intersect**
 (ForAll). Complexity is exponential in `dim(y)` (`O((rad(y)/ε)^{n_y})`) — adaptive
-ε strongly recommended. dReal has its **own** CEGIS-style ∃∀ machinery
-(`contractor_forall.h`, `counterexample_refiner.cc`) tied to DPLL(T), so this is a
-**design-comparison** reference, not a drop-in (see
-[`../chapters/separator.md`](separator.md) for the set-inversion cousin and
-[`../AUDIT.md`](../AUDIT.md) capability-extensions).
+ε strongly recommended.
+
+`CtcForAll` is **shipped** as the `--forall-pre-prune` pre-pruner
+(`contractor_ibex_forall.{cc,h}`): pure interval proj-intersection contraction
+that runs *alongside* — never instead of — dReal's own δ-complete CEGIS ∃∀
+machinery (`contractor_forall.h`, `counterexample_refiner.cc`, DPLL(T)-tied),
+shrinking the existential box so CEGIS converges in fewer counterexample rounds.
+It is COMPLETENESS-only and sound: it deletes an existential point only when the
+body fails at a *real* universal point `mid(y)∈y_init⊆` binder, so it can never
+drop a true ∃∀ solution (false `unsat` impossible — SOUNDNESS safe). `CtcExist`
+remains unused. Perf record + the encoding-fragile speedup:
+[`../../exists_forall_perf.md`](../../exists_forall_perf.md); IBEX-lever audit:
+[`../AUDIT-QUANTIFIERS.md`](../AUDIT-QUANTIFIERS.md) Q1. See
+[`../chapters/separator.md`](separator.md) for the set-inversion cousin.

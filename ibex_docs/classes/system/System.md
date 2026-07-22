@@ -1,18 +1,22 @@
 # `System` (+ `NumConstraint`) — a constraint set with one shared arg list
 
-> ⚠ **Stale "(dormant) polytope path" aside** (pre-`fa3b74bd7`) — corrected 2026-07-02: the polytope
-> path is **live** via `--polytope` (`LP_LIB=soplex` now, `CMakeLists.txt:204`), and `CtcAcid` is
-> live via `--acid`. See [`README.md`](../../README.md) top banner.
+> ✅ **Both consumers SHIPPED** (was "(dormant) polytope path" pre-`fa3b74bd7`; corrected 2026-07-02):
+> the polytope path is live via `--polytope` (`LP_LIB=soplex`, `CMakeLists.txt`), and `CtcAcid`/
+> `Ctc3BCid` are live via `--acid`/`--3bcid`. See [`README.md`](../../README.md) top banner.
 
 Header: [`ibex_System.h`](../../../../ibex-fork/src/system/ibex_System.h)
 (`system/`). A set of [`NumConstraint`](#numconstraint)s sharing one argument
 list, optionally a goal + initial box. Many IBEX algorithms *require* a `System`
 (not a loose constraint array) — including [`CtcAcid`](../contractors/CtcAcid.md)
-(variable ordering) and [`LinearizerXTaylor`](../linear/LinearizerXTaylor.md).
+(shave-variable ordering by the smearsumrel criterion) and
+[`LinearizerXTaylor`](../linear/LinearizerXTaylor.md) (the Jacobian).
 
-> **dReal status:** built via [`SystemFactory`](SystemFactory.md) only for the
-> (dormant) polytope path. **Re-usable as the `System` `CtcAcid` needs** — the
-> main reason this class matters to audit A.
+> **dReal status:** built via [`SystemFactory`](SystemFactory.md) at **three**
+> live sites, each assembling its own `System` over the box variables: the
+> polytope path (`contractor_ibex_polytope.cc`, `--polytope`), the ACID/3BCID
+> shaver (`contractor_ibex_acid.cc`, `--acid`/`--3bcid`), and the smear brancher
+> (`brancher_smear.cc`, `--smear`, which reads `System::f_ctrs.jacobian`). All
+> shipped — no longer an audit-A opportunity.
 
 ## Fields (verbatim from the [system chapter](../../chapters/system.md))
 

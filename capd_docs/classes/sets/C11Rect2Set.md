@@ -10,8 +10,10 @@ Jacobian) is *moved*: "derivative of the flow moved via QR decomposition (3rd me
 method)"). So same shape as `C1Rect2Set`, different C1-part propagation.
 
 ## Key API
-- Inherits the `C1DoubletonSet` surface: `move(DynSysType&, C1DoubletonSet& result)`,
-  `operator VectorType()` (position), `operator MatrixType()` (Jacobian).
+- Own override `move(DynSysType&, C11Rect2Set& result)` plus the inherited `C1DoubletonSet`
+  move surface (`using BaseSet::move`) (`C11Rect2Set.h:53-54`); `operator VectorType()`
+  (position) and `operator MatrixType()` (Jacobian) inherited from `C1DoubletonSet`
+  (`C1DoubletonSet.h:86-87`).
 - Exposes the full reorganization control suite (`reorganizeIfNeeded`,
   `reorganizeC1IfNeeded`, `onoffReorganization`, …) at both C0 and C1 levels.
 

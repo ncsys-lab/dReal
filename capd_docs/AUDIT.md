@@ -10,6 +10,12 @@ text), **header** (signature confirmed in the real header), **spec** (speculativ
 so every *tightness* lever below is a completeness/speed lever; none risks a false
 `unsat`. The two genuinely soundness-adjacent items are called out as such.
 
+> **See also — alternative/complementary ODE backends:** levers that would *replace or
+> augment* the CAPD Lohner path itself (DynIbex validated-RK, Flow* / Ariadne Taylor-model
+> integrators) are surveyed, with feasibility sketches, in
+> [`../ibex_docs/RELATED-WORK.md`](../ibex_docs/RELATED-WORK.md). This audit is about using
+> the *current* CAPD backend better; that file is about swapping/adding one.
+
 Priority key: **A** = high-value structural; **B** = cheap tuning (do first,
 benchmark-gated); **C** = guards; **D** = conditional/speculative; **E** = negative
 results (recorded so nobody re-chases them).
@@ -148,7 +154,8 @@ These are flag/default changes, each independently testable with `/benchmark`.
    not correct results", `example_intervals.html`) — **but dReal already mitigates
    this**: it builds CAPD with **`-frounding-math`** (verified:
    `capd_ep/src/capd_external/CMakeLists.txt` → `-O2 -frounding-math`; dReal's own
-   `CMakeLists.txt:99`), which is exactly the flag CAPD says makes NATIVE rigorous
+   `CMakeLists.txt` `target_compile_options(dreal4_cmake PUBLIC -frounding-math)`),
+   which is exactly the flag CAPD says makes NATIVE rigorous
    ("without `-frounding-math` compiler can optimize code so that it is not
    rigorous", `user_programs.dox`). So this is **not a live soundness hole.** The
    `isWorking()` guard is still worth a startup call as cheap insurance that would
@@ -225,13 +232,14 @@ the surface confirmed already-tight.
 
 ### A′ (sharpens A) — C1 monodromy could *replace* the second integration, not just add tightness
 
-**The cost framing of A changes once you read the call graph.** `theory_solver.cc:223–248`
-queues **two** contractors per ODE constraint — a FWD (`dir=FWD`) and a BWD
-(`dir=BWD`) — each performing a **full, independent CAPD integration** when pruned
-(`contractor_odes.cc:357–358` → `run_capd_fwd`/`run_capd_bwd`). The BWD contractor's
+**The cost framing of A changes once you read the call graph.** `theory_solver.cc`
+(the `ode_direction` queue) queues **two** contractors per ODE constraint — a FWD
+(`ode_direction::FWD`) and, when `--ode-backward` is set (default true), a BWD
+(`ode_direction::BWD`) — each performing a **full, independent CAPD integration** when
+pruned (`contractor_odes.cc` → `run_capd_fwd`/`run_capd_bwd`). The BWD contractor's
 **sole job is X₀ narrowing**: the per-slice invariant check is FWD-only
-(`contractor_odes.cc:405`, `check_inv = … && m_dir == FWD`), so BWD only intersects
-backward-image slices with the X₀ gate. That is *exactly* what the forward pass's
+(`contractor_odes.cc`, `check_inv = m_need_to_check_inv && m_dir == ode_direction::FWD`),
+so BWD only intersects backward-image slices with the X₀ gate. That is *exactly* what the forward pass's
 monodromy `V(t)=∂φ_t/∂x₀` (`ITimeMap::operator()(time,set,derivative)`,
 `poincare/TimeMap.h:112`) delivers via an interval-Newton/mean-value step.
 **Implication:** A is not necessarily "+O(dim²) cost for tightness" — on constraints

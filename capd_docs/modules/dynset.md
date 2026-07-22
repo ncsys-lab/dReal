@@ -15,7 +15,6 @@ A set is named `[Class]Method[2][Details]Set` (per `dynset_module.html`):
 - `C0TripletonSet<MatrixT, Policies>` — `x + C*r0 + intersection(B*r, Q*q)` — splits the error term across two frames and intersects. CAPD's own `DefaultC0Set`.
 - `C0HOSet<BaseSetT>` — Hermite–Obreshkov higher-order wrapper; intersects a Taylor and an HO enclosure. **dReal's `C0HORect2Set` = `C0HOSet<C0Rect2Set>`**.
 - `C0HODoubletonSet`, `C0HOTripletonSet` — HO variants directly over doubleton/tripleton.
-- `ReorganizedSet<SetT, Reorg>` — adapter calling `reorganizeIfNeeded(set)` after every move.
 - C1+: `C1DoubletonSet`, `C1AffineSet`, `C2DoubletonSet`, `CnDoubletonSet`, `CnRect2Set` — also carry the flow's Jacobian/higher derivatives (variational). **None used by dReal.**
 
 ## Policies — the wrapping-fight machinery (`QRPolicy.h`, `reorganization/`)
@@ -24,6 +23,8 @@ A set's `Policies` template parameter bundles a **QR orthogonalization policy** 
 - Reorganization: `FactorReorganization` ("reorganizes when size(r) > factor·size(r0)"), `CanonicalReorganization` (reset C,B to identity, fold all into r0), `CoordWiseReorganization`, `SwapReorganization`, `NoReorganization`.
 
 dReal's `C0Rect2Policies = FactorReorganization<FullQRWithPivoting<>>` (confirmed in `dynset/typedefs.h:24`).
+
+Reorganization is the set's own `Policies` **base**, not a wrapper: each C0 set inherits `public Policies` and reorganizes through it at the end of `move()` (the doubleton via `this->Policies::reorganizeIfNeeded(result)`, `C0DoubletonSet.hpp:135`; the tripleton via the base's `isReorganizationNeeded`/`reorganize`, `C0TripletonSet.hpp:111`). The extracted Doxygen is CAPD 6.0.0 and still shows a separate `ReorganizedSet<SetT,Reorg>` wrapper template — that class is **gone** in the pinned 6.1.0 headers (folded into the set), so don't reach for it.
 
 ## dReal status
 dReal wires **three C0 sets**, selectable via `--ode-c0-set`: `C0Rect2Set` (default), `C0HORect2Set`, `C0TripletonSet` (`dreal-capd-usage.md`). All three share `C0Rect2Policies` — i.e. the QR/reorganization policy is **fixed**, not exposed. No C1/C2/Cn set is used.

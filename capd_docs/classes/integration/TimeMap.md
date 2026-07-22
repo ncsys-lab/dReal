@@ -2,9 +2,9 @@
 
 ## What it is
 Transports a set (or point) by a flow over a time interval, wrapping a solver and hiding the
-step loop. `ITimeMap` = `TimeMap<IOdeSolver>` (the `poincare` namespace — it shares the
-section-crossing infrastructure of `PoincareMap`, but `TimeMap` integrates to a **time**, not a
-section). Template parameter `SolverT`. (`TimeMap.h` page.)
+step loop. `ITimeMap` = `TimeMap<IOdeSolver>` (it lives in the `poincare` namespace — CAPD
+groups TimeMaps and PoincareMaps there — but integrates to a **time**, not a section; it does
+no section crossing). Template parameter `SolverT`. (`TimeMap.h` page.)
 
 ## Key API (confirmed in `TimeMap.h` page)
 Construction: `TimeMap(Solver& solver)`. Accessors: `getSolver`, `getDynamicalSystem`,

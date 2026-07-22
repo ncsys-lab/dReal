@@ -33,8 +33,12 @@ The throw-on-non-validation is dReal's catch-all → skip-narrowing path (sound)
 dReal seeds each set from a plain `IVector` (interval box). The **affine** `(x, C, r0)`
 constructor would let dReal carry the box's correlation structure into CAPD instead of
 re-wrapping it as an axis-aligned interval each ICP call — a wrapping-effect (completeness)
-improvement, no soundness change. The `C0TripletonSet`/HO variants are the doc's
-"most efficient in typical cases" recommendation; worth confirming dReal's default matches.
+improvement, no soundness change. The doc calls **all four** recommended set classes (Rect2 +
+Tripleton, each × HO) "most efficient in typical cases" with performance "depending on
+dynamical properties of the system" — it does *not* rank them, so Rect2 is a sanctioned pick.
+The one ranked fact: CAPD's library `DefaultC0Set` is the *tripleton* (`dynset/typedefs.h:50`)
+while dReal defaults to the cheaper Rect2 doubleton — a speed/tightness call, see
+`dynsets-and-wrapping.md`.
 
 ## Source
 [odes_rigorous.html](../../../CAPD/docs/html/odes_rigorous.html)

@@ -4,8 +4,11 @@
 Rigorous solver that integrates variational equations up to arbitrary degree `n`: the flow
 value plus all partial derivatives w.r.t. initial conditions through order `n` (full Taylor
 jet of the flow in `x₀`). `ICnOdeSolver` = `CnOdeSolver<IMap>`. Template:
-`CnOdeSolver<MapT, StepControlT, EnclosurePolicyT, CurveT = CnCurve<…>>`; the base
-`BasicCnOdeSolver`'s default `StepControlType` is **`IEncFoundStepControl`** (header-confirmed).
+`CnOdeSolver<MapT, StepControlT = IEncFoundStepControl, EnclosurePolicyT = FirstOrderEnclosure, CurveT = CnCurve<…>>`
+(`CnOdeSolver.h:37-39`). The rigorous `CnOdeSolver` defaults to **`IEncFoundStepControl`**, unlike
+`IOdeSolver`/`IC2OdeSolver`'s `ILastTermsStepControl`; its enclosure policy default is
+`FirstOrderEnclosure`, not the `HighOrderEnclosure` C0/C2 use. (The nonrigorous base
+`BasicCnOdeSolver` defaults to `DLastTermsStepControl` — `BasicCnOdeSolver.h:32`.)
 
 ## Key API (confirmed in `CnOdeSolver` page)
 - `operator()(SetType& set)` / `(set, result)` — runtime-checked to integrate C0/C1/C2 sets.

@@ -7,14 +7,14 @@ polytope and runs **2n LP solves** (min & max each variable) to contract to the
 relaxation's hull. Header warning: *"can only be used if ibex is installed with a
 LP solver (`-DLP_LIB`)."*
 
-> **dReal status (corrected 2026-07-02):** **live opt-in.** `--polytope` is **off by
-> default** but functional when set — since commit `fa3b74bd7` dReal builds IBEX with
-> **`-DLP_LIB=soplex`** (`CMakeLists.txt:204`, `libsoplex.a` linked), so the 2n LP solves
-> run. Constructed at `generic_contractor_generator.cc:61-122` (`dreal_main.cc:169,472`).
-> Perf is unmeasured on the main NRA path; `--forall-polytope` (the ∃∀ variant) measured
-> *mixed* (`exists_forall_perf.md:195-197`). *(Earlier text here said "dormant / `LP_LIB=none`
-> / non-functional if forced" — that was pre-`fa3b74bd7` and is wrong now; see
-> [`README.md`](../../README.md) top banner.)*
+> **dReal status:** **shipped opt-in.** `--polytope` is off by default but functional
+> when set — dReal builds IBEX with **`-DLP_LIB=soplex`** (`CMakeLists.txt`, the
+> `-DLP_LIB=soplex` line; `libsoplex.a` linked), so the `2n` LP solves run.
+> `ContractorIbexPolytope` builds it per constraint via
+> `generic_contractor_generator.cc` (dispatching to `make_contractor_ibex_polytope`)
+> and per whole-assertion-set in `theory_solver.cc`; works under `--jobs>1` via the
+> per-worker `ContractorIbexPolytopeMt` cell. Perf is unmeasured on the main NRA path;
+> `--forall-polytope` (the ∃∀ variant) measured *mixed* (`exists_forall_perf.md`).
 
 ## Constructors (verbatim)
 
@@ -24,7 +24,7 @@ CtcPolytopeHull(Linearizer& lr, int max_iter=LPSolver::default_max_iter,
 CtcPolytopeHull(const Matrix& A, const Vector& b, int max_iter=..., int time_out=..., double eps=...);
 ```
 
-dReal uses the first form with a `LinearizerXTaylor` (`contractor_ibex_polytope.cc:108`):
+dReal uses the first form with a `LinearizerXTaylor` (`contractor_ibex_polytope.cc`):
 `LinearizerXTaylor(system, RELAX, RANDOM_OPP, HANSEN)`.
 
 | Param | Default (per header) | Meaning |
@@ -38,13 +38,14 @@ dReal uses the first form with a `LinearizerXTaylor` (`contractor_ibex_polytope.
 (e.g. only the objective in an extended system). Variable/bound order is chosen by
 an Achterberg heuristic.
 
-## Audit angle
+## Open questions (build decision already made)
 
-Two coupled questions, both tier D:
-1. **Build:** is the LP relaxation worth re-adding an LP solver dependency
-   (Soplex/CLP) that the team deliberately dropped (`LP_LIB=none`)?
-2. **Tuning (if revived):** the X-Taylor knobs (corner policy, slope formula) are
-   currently fixed at library defaults — see
+The LP-backend build decision is settled — `LP_LIB=soplex` is linked. What remains:
+1. **Payoff:** `--polytope` is unmeasured on the main NRA path — `/benchmark` before
+   any default flip; a global default is unlikely (LP cost per box). Verdict flips
+   would be an integration bug (this is a COMPLETENESS lever).
+2. **Tuning:** the X-Taylor knobs (corner policy, slope formula) are fixed at the
+   dReal-chosen `RELAX, RANDOM_OPP, HANSEN` — see
    [`../linear/LinearizerXTaylor.md`](../linear/LinearizerXTaylor.md).
 
 Related: [contractor chapter](../../chapters/contractor.md),

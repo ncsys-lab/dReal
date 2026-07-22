@@ -8,8 +8,13 @@ A **higher-order** wrapper, `C0HOSet<BaseSetT>`, that re-uses the geometric repr
 - `move(Solver&)` / `move(Solver&, C0HOSet& result)` — one step; internally fills `predictor`/`corrector` base-set copies and intersects.
 - `evalAt(f)` — value of functor `f` as the **intersection of predictor and corrector** evaluations (the HO tightening, exposed for functionals).
 - `affineTransformation(M, x)`, `operator VectorType()` — enclosure in canonical coordinates.
-- `computeC0HORemainder(p, q)`, `degree()` — HO order controls.
-- **Order cap:** Taylor order ≤ 64 for `C0HOSet` (≤ 32 for `C0HODoubletonSet`), limited by binomial-coefficient integer capacity; minimum order 3.
+- HO order = the solver's Taylor order, split internally into predictor order `p = order − q`
+  and corrector order `q = order/2` (`C0HOSet.h:122-124`); `computeC0HORemainder(p,q)`
+  (`HOData.h:50`) then solves the implicit corrector. There is no separate order knob — no
+  `degree()`.
+- **Order cap:** Taylor order ≤ 64 for `C0HOSet` (≤ 32 for the separate `C0HODoubletonSet`
+  class, `C0HODoubletonSet.h:37`), limited by binomial-coefficient integer capacity; minimum
+  order 3. dReal's default `--ode-taylor-order 12` sits far from this cap.
 
 ## dReal status
 **Used.** `--ode-c0-set horect2` selects `C0HORect2Set = C0HOSet<C0Rect2Set>` (`dynset/typedefs.h:47`; `dreal-capd-usage.md`). The other instantiation, `C0HOTripletonSet = C0HOSet<C0TripletonSet>` (`typedefs.h:48`), exists in CAPD but is **not wired** by dReal — a potential "tightest available" combination (tripleton frames + HO time bound).

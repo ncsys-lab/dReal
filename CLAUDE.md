@@ -62,7 +62,7 @@ git-version target, IBEX/CAPD source-build): `docs/build.md`.
 `./FULL_BUILD.sh` (first build — creates `gcc_build/`) and `./BUILD.sh` (incremental) build
 target `dreal4` with `-j8`; binary at `gcc_build/dreal4`. Override IBEX source via
 `-DIBEX_GIT_REPOSITORY=file:///path/to/ibex-fork` for local-dev against an unpushed checkout
-(`CMakeLists.txt` pins the fork sha `d9930909`).
+(`CMakeLists.txt` pins the fork sha `e054af7b`).
 
 **Docker** (Linux hermetic verification): after `docker build -f Dockerfile.dreal_ubuntu -t
 dreal-linux-verify .`, run `cat query.smt2 | docker run --rm -i dreal-linux-verify ./dreal4 --in
@@ -174,9 +174,9 @@ See `docs/architecture.md` (full pipeline, ICP loop, Box, explanations), `docs/c
 **Vendored third-party** (`src/third_party/`): Drake symbolic, libcds, threadpool,
 dynamic_bitset, PicoSAT (legacy, unused). Do not modify without cause.
 
-**Auto-downloaded:** IBEX (`ncsys-lab/ibex-lib@dreal-perf-patches`, sha `d9930909`), CAPD
+**Auto-downloaded:** IBEX (`ncsys-lab/ibex-lib@dreal-perf-patches`, sha `e054af7b`), CAPD
 (`b353e170`, `CAPD_INTERVAL_TYPE=NATIVE`), fmt, spdlog, nlopt, GTest. See `DEPENDENCIES.md` for
-build wiring; `../ibex-fork/MIGRATION.md` for the 12 ibex-fork patch catalog.
+build wiring; `../ibex-fork/MIGRATION.md` for the ibex-fork patch catalog.
 
 ---
 
@@ -187,7 +187,7 @@ build wiring; `../ibex-fork/MIGRATION.md` for the 12 ibex-fork patch catalog.
 | `main` | stable CMake base; CaDiCaL, IBEX 2.8.9, core perf fixes |
 | `fmcad25-experiments` | first PM research; NN heuristic; SAR-ADC application |
 | `tacas26-odes` | ODE AST nodes (`Integral`, `ForallT`); CAPD contractor; dReal3 `.dr` compat |
-| `upgrade-ibex` **(current)** | post-Codac; IBEX fork (12 patches); per-slice ODE tube |
+| `upgrade-ibex` **(current)** | post-Codac; IBEX fork (2.9.1; see `../ibex-fork/MIGRATION.md`); per-slice ODE tube |
 | `cav26` | DeBruijn PM; `substitution_tree`; symmetry filtering |
 
 ---

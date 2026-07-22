@@ -19,7 +19,7 @@ Source docs: `../../CAPD/docs/html/` (2392 Doxygen pages; mapped by
 | **[classes/sets/COMPARISON.md](classes/sets/COMPARISON.md)** | **The set-representation catalog** — every CAPD dynamical-set type (the wrapping-effect / tightness lever) in one comparison table with strengths/weaknesses + ordered "what to try" recommendations. dReal exposes it as `--ode-c0-set`. |
 | [classes/sets/QRPolicies.md](classes/sets/QRPolicies.md) | **The frame-maintenance menu** — the QR-orthogonalization × reorganization policies (the *other* half of what makes Rect2/Pped2/Intv2 differ), an independent knob dReal hard-wires. |
 | [dreal-capd-usage.md](dreal-capd-usage.md) | The baseline: exactly what dReal binds against today (the audit's reference point). |
-| [index/all-classes.md](index/all-classes.md) | Auto-harvested one-line stub for all 577 CAPD classes (name + brief + link) — the catch-all for anything without a rich node. |
+| [index/all-classes.md](index/all-classes.md) | Auto-harvested one-line stub for all 577 CAPD classes (name + real Doxygen description-cell brief + link; earlier junk placeholder briefs replaced) — the catch-all for anything without a rich node. Regenerate with `scripts/harvest_class_briefs.py --capd`. |
 
 ## The tree
 
@@ -76,13 +76,15 @@ backend to adopt.
 
 ## How this was built / how to extend it
 
-The crawl never reads raw HTML (pages reach 500 KB). A de-tagger
-(`/tmp/capd_detag.py` — strip tags/scripts, unescape, collapse) renders any page
-to ~10–20× smaller text first. To add or refresh a node: extract the page, read
-the text, copy method signatures **from the page or the header** (never inferred
-from a class name — the one fidelity rule here, since a fabricated CAPD feature
-would send a future session chasing an API that doesn't exist), and link back to
-the source html.
+The crawl never reads raw HTML (pages reach 500 KB). The checked-in de-tagger
+`scripts/refresh_capd_doxygen.py` (stdlib `html.parser`; `--name <ClassName>`
+resolves the mangled Doxygen filename for you) renders any page to ~10–20× smaller
+text first, and `scripts/harvest_class_briefs.py --capd` rebuilds the
+`index/all-classes.md` stub index from `annotated.html`. To add or refresh a node:
+extract the page, read the text, copy method signatures **from the page or the
+header** (never inferred from a class name — the one fidelity rule here, since a
+fabricated CAPD feature would send a future session chasing an API that doesn't
+exist), and link back to the source html.
 
 > Scope: this is a tiered map — complete breadth (every module + concept has a
 > node; all classes are at least stubbed), selective depth (rich summaries only

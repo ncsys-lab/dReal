@@ -31,16 +31,20 @@ void computeODECoefficients(VectorType coeffs[], MatrixType dCoeffs[], size_type
 void computeODECoefficients(VectorType coeffs[], MatrixType dCoeffs[], HessianType hCoeffs[], size_type order) const;
 
 // parameters / config:
-void setParameter(size_type d, const ScalarType& v);  // rebind WITHOUT re-parsing
-void setParameter(const char* name, ...);  void setParameters(const VectorType&);
+void setParameter(size_type d, const ScalarType& v);  // rebind WITHOUT re-parsing (BasicFunction)
+void setParameter(const std::string& name, const ScalarType&);  void setParameters(const VectorType&);
 size_type dimension() const;  size_type imageDimension() const;
 size_type degree() const;  void setDegree(size_type);
 void setCurrentTime(const ScalarType&) const;  void differentiateTime() const;
 ```
 
-Parser syntax: `"[par:...;][time:t;]var:x1,...;fun:expr1,...;"`. No scientific-notation
-constants — use parameters. The `Map(Fn,...)` / `reset` C-routine path gives **identical
-evaluation performance** (docs); it changes only DAG construction.
+Parser syntax: `"[par:...;][time:t;]var:x1,...;fun:expr1,...;"` (`par:`/`time:` optional).
+Elementary funcs `sin/cos/exp/log/sqrt/sqr`, operators `+ - * / ^` (the `^` exponent may not
+depend on a variable — its gradient is assumed zero). Docstring constant guidance: use
+representable-number constants; route interval or very-high-precision constants through `par:`.
+The `Map(Fn,...)` / `reset` C-routine path builds the same AD DAG, so per-call evaluation is
+identical to the string path (our inference from the shared DAG) — it only skips the one-time
+text parse.
 
 **dReal status.** Used: string construction + `setParameter` rebinding, cached once per flow;
 the `IOdeSolver` internally drives `computeODECoefficients` (C0 only). Direct
@@ -51,6 +55,11 @@ the `IOdeSolver` internally drives `computeODECoefficients` (C0 only). Direct
 - *Parse cost:* the string-parse + `createEvalPath` DAG build is the per-flow setup, already
   amortized by `CapdOdeCache`. The C-routine path offers no evaluation speedup (only avoids the
   text parse at construction), so it is not a per-call lever.
+- *Faster-than-DAG eval (not usable here):* `codeTranslation(className, namespace, path)`
+  (`Map.h:285`) generates a fixed-dimension static-array-DAG C++ class the docstring recommends
+  for "most aggressive optimization" — the only documented way to beat the dynamic-DAG eval
+  speed. But it *emits a source file to compile*, so it cannot apply to dReal's per-query
+  runtime-parsed flows.
 - *Backward narrowing:* `derivative(u)` / the variational `computeODECoefficients` overloads
   are the entry points a C1 sensitivity-based backward step would call (see
   `../../concepts/variational-equations.md`).

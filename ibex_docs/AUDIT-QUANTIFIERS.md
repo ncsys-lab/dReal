@@ -2,7 +2,7 @@
 
 > ⚠ **PARTLY STALE on the LP/polytope claims (verified 2026-07-02)** — written pre-commit
 > `fa3b74bd7`. `--forall-polytope` (`use_polytope_in_forall`) is **no longer "broken by `LP_LIB=none`"
-> / crashing**: IBEX now builds `-DLP_LIB=soplex` (`CMakeLists.txt:204`, `dreal_main.cc:487-491`), so
+> / crashing**: IBEX now builds `-DLP_LIB=soplex` (`CMakeLists.txt:189`, `dreal_main.cc:494-498`), so
 > the Q7/D2 "revive polytope-in-forall" item is **done** and the flag is functional (measured *mixed*
 > — helps some encodings, hurts others: `exists_forall_perf.md:195-197`). The quantifier cost-law /
 > pre-prune / nested-crash findings are unaffected and still hold. Full correction:
@@ -61,7 +61,7 @@ extend the shapes it can attack.
 | **Q4** | **Adaptive `prec`** on the `y`-split + tune `inner_delta` for high-dim `y` | 1 | 4 | med (controls the `dim(y)` blow-up) | sweep `prec`/`inner_delta`; watch tractability cliff |
 | **Q5** | **Smear-ordered** parameter splitting (split the `y` that most affects φ first) | 1 | 2 | med (high-dim transcendental) | needs a small `CtcQuantif` patch — see note |
 | **Q6** | **Inner arithmetic / inner regions** (box witnesses) for the `∃` direction | 3 | 2 | med (accelerates the `∃` blocks of `∀∃∃∀`) | micro-bench `∃`-heavy instances |
-| **Q7** | **Revive polytope-in-forall** (`use_polytope_in_forall`, the CAV 2018 CLP path, currently broken by `LP_LIB=none`) | 1 | 2 | med–high (the paper relied on it) | rebuild IBEX w/ Soplex/CLP; rerun the forall set |
+| **Q7** | **Polytope-in-forall** — SHIPPED `--forall-polytope` (`use_polytope_in_forall`, the CAV 2018 CLP path; `LP_LIB=soplex` now linked) | 1 | ✓ done | measured *mixed* (helps some encodings, hurts others) | `exists_forall_perf.md:195-197`; rerun per new encoding |
 
 ### Q1 — `CtcForAll`/`CtcExist` as a cheap sound pre-pruner  ⭐ (accelerate existing ∃∀)
 - **What it buys:** dReal's `ContractorForall::Prune` pays a *full nested solve* every
@@ -77,7 +77,7 @@ extend the shapes it can attack.
   (`ibex_CtcForAll.cpp:44`). Sound proj-inter.
 - **Integration:** add it as an extra contractor in the `forall` constraint's slot in
   `generic_contractor_generator.cc`, *alongside* (not replacing) `ContractorForall`
-  (built at `theory_solver.cc:188-190`). It composes into dReal's existing fixpoint
+  (built at `theory_solver.cc:193`). It composes into dReal's existing fixpoint
   loop like any other `Ctc`.
 - **Cost/risk:** exponential in `dim(y)` if `prec` is small — so keep it **shallow**.
   For high-`dim(y)` it must be a skimmer, not a solver (a deep `CtcForAll` would be
@@ -133,7 +133,11 @@ extend the shapes it can attack.
   tightening pays off **super-linearly** here. Transcendentals are handled by HC4
   fwd-bwd already; **`CtcAcid`/`Ctc3BCid`** (the [`AUDIT.md`](AUDIT.md) tier-A headline)
   tightens further. So tier A is *more* valuable for quantified queries than for plain
-  NRA. dReal currently uses HC4-only inside (`theory_solver.cc:197`, verified).
+  NRA. `--acid`/`--3bcid` are now **shipped** but only top-level (over the whole assertion
+  system — `theory_solver.cc:240-244`, `contractor_ibex_acid.{cc,h}`); dReal still uses
+  **HC4-only *inside* the quantifier** — both `CtcForAll`'s `CtcFwdBwd` leaves and the
+  CE-search `context_for_counterexample_` (`theory_solver.cc:207`, verified). Wiring
+  ACID/3BCID into that inner context is the unshipped lever.
 
 ### Q4 — Adaptive precision + the `inner_delta` knob (tame the `dim(y)` blow-up)
 - IBEX's quantifier cost is `O((rad(y)/prec)^{dim y})`; the docs prescribe **adaptive
@@ -150,7 +154,8 @@ extend the shapes it can attack.
   [`classes/strategy/Bisectors.md`](classes/strategy/Bisectors.md)) — would cut the
   number of splits on high-dim transcendental parameter boxes. Requires a small patch
   to `CtcQuantif` to accept a custom `Bsc` (it currently doesn't), so it's a deeper
-  item — but a natural fork patch given dReal already maintains 12.
+  item — but a natural fork patch given dReal already maintains a fork patch series
+  (`../ibex-fork/MIGRATION.md`).
 
 ### Q6 — Inner arithmetic / inner regions for the `∃` direction (box witnesses)
 - For an `∃y φ(x,y)` block (the `∃` levels of `∀∃∃∀`), dReal/`CtcExist` certify by
@@ -161,29 +166,31 @@ extend the shapes it can attack.
   transcendental coverage is partial — confirm per-function before relying on it.
   Reference: [`chapters/interval.md`](chapters/interval.md) §inner arithmetic.
 
-### Q7 — Revive polytope-in-forall (the CAV 2018 CLP path, currently broken)
-- `forall-semantics.md` §6.7: `use_polytope_in_forall` (`config.h:241`, verified)
-  routes the CE-search context through IBEX **polytope** contractors — *"the LP pruning
-  the CAV 2018 implementation ran on CLP"* — but the doc states it **crashes** under
-  this build because no LP solver is linked (`LP_LIB=none`). So a documented,
-  paper-validated forall accelerator is currently *dead*. Reviving it = the same build
-  decision as [`AUDIT.md`](AUDIT.md) D2 (link Soplex/CLP), but with a **stronger
-  motivation here**: CAV 2018 specifically used it for ∃∀. Transcendental applicability
-  is fine (X-Taylor uses Hansen slopes of the derivatives). This is the cleanest
-  "re-enable a thing that already exists and was designed for exactly this."
+### Q7 — Polytope-in-forall (the CAV 2018 CLP path) — SHIPPED
+- `use_polytope_in_forall` (`config.h:331`, default `false`) routes the CE-search context
+  through IBEX **polytope** contractors — *"the LP pruning the CAV 2018 implementation ran
+  on CLP"* (`forall-semantics.md` §6.7). Now **live**: IBEX builds with `-DLP_LIB=soplex`
+  (`CMakeLists.txt:189`), so passing `--forall-polytope` (`dreal_main.cc:494-498`) runs the
+  real LP relaxation instead of crashing — the same build decision as [`AUDIT.md`](AUDIT.md)
+  D2, motivated here because CAV 2018 used it for ∃∀. **Measured *mixed*** (helps some
+  encodings, hurts others — `exists_forall_perf.md:195-197`), never a verdict flip
+  (COMPLETENESS/perf only). Transcendental applicability is fine (X-Taylor uses Hansen
+  slopes of the derivatives). Enable per-encoding and measure.
 
 ## Honesty boundary (proven vs hypothesized)
 **Proven** (verified in source this pass): the IBEX quantifier-contractor mechanics
 and that they nest (`ibex_CtcQuantif.h:59`, `ibex_CtcForAll.cpp`); that `CtcQuantif`
 hardcodes `LargestFirst`; that dReal is depth-one and crashes on nesting, uses
-HC4-only inside, and that `use_polytope_in_forall` is broken under `LP_LIB=none`
+HC4-only inside, and that `use_polytope_in_forall` is now **live** under `LP_LIB=soplex`
+(shipped `--forall-polytope`, measured mixed)
 (the latter three via the project's cross-referenced `forall-semantics.md` + the
 config/theory_solver anchors confirmed in [`AUDIT.md`](AUDIT.md)/[`dreal-ibex-usage.md`](dreal-ibex-usage.md)).
 **Measured** (2026-06-30): **Q1** is now implemented and benchmarked — see its
 "IMPLEMENTED + MEASURED" note above (sound; speedups real but **encoding-fragile** — large
 on the first `odeexpr_v2` encoding, gone after a re-encoding; no rescue of the δ⁻ⁿ
-existential wall under any encoding). **Hypothesized** (still NOT benchmarked):
-every *other* speedup/tractability claim (Q2–Q7) and the ranking. The dominant risk for all
+existential wall under any encoding). **Q7** (`--forall-polytope`) is likewise shipped and
+measured *mixed* (`exists_forall_perf.md`). **Hypothesized** (still NOT benchmarked):
+every *other* speedup/tractability claim (Q2–Q6) and the ranking. The dominant risk for all
 of Q1/Q2/Q5 is the **`dim(y)` exponential** — on
 genuinely high-dimensional parameter blocks, exhaustive interval quantification can
 be *worse* than CEGIS's targeted CE search; these levers are "cheap shallow pruning +

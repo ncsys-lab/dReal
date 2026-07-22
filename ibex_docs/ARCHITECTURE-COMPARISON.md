@@ -38,16 +38,16 @@ for statement.
 
 | Step | `ibex::Solver::next()` — `../../ibex-fork/src/solver/ibex_Solver.cpp` | `IcpSeq::CheckSat()` — `../src/dreal/solver/icp_seq.cc` |
 |---|---|---|
-| Cell buffer | `CellBuffer& buffer` (DFS = `CellStack`, `ibex_Solver.h:237`; `ibex_DefaultSolver.cpp:110`) | `vector<pair<Box,int>> stack` — DFS vector, `icp_seq.cc:42-46` |
-| Pop current | `Cell* c = buffer.top()` `:184` | `tie(current_box, current_branching_point) = stack.back(); stack.pop_back()` `:83-84` |
-| Incremental impact | `context.impact = BitSet::singleton(n, c->bisected_var)` `:188-192` | `int` branching dim carried in the stack pair `:46`, consumed by worklist (§2) |
-| Contract / prune | `ctc.contract(c->box, context)` `:195` | `contractor.Prune(cs, ur)` `:89` |
-| Empty → discard | `if (c->box.is_empty()) throw EmptyBoxException` → pop `:197,242-248` | `if (current_box.empty()) continue` `:95-99` |
-| Accept criterion | `check_sol(box)` — Newton certification, adds to Cov `:201-209,344` | `EvaluateBox(...)` → `evaluation_result->none()` → `return true` `:103-119` |
-| Stop bisection | `is_too_small`: `diam ≤ eps_x_min` `:212,474-478` | box not bisectable → `return true` `:128,136-142` (no model, but δ-leaf) |
-| Bisect | `bsc.bisect(*c)` → 2 cells `:216` | `config().brancher()(...)` → `box_left/box_right` `:124-127` |
-| Push children | `buffer.push(second); buffer.push(first)` `:221-222` | `stack.emplace_back(...left/right...)` `:128-135` |
-| Outer driver | `solve(): while(next(status))` collect ALL boxes `:271-313` | `while(!stack.empty())` return at FIRST δ-box `:70,118` |
+| Cell buffer | `CellBuffer& buffer` (DFS = `CellStack`, `ibex_Solver.h:237`; `ibex_DefaultSolver.cpp:110`) | `vector<pair<Box,int>> stack` — DFS vector, `icp_seq.cc:60` |
+| Pop current | `Cell* c = buffer.top()` `:184` | `tie(current_box, current_branching_point) = stack.back(); stack.pop_back()` `:125-126` |
+| Incremental impact | `context.impact = BitSet::singleton(n, c->bisected_var)` `:188-192` | `int` branching dim carried in the stack pair `:60`, consumed by worklist (§2) |
+| Contract / prune | `ctc.contract(c->box, context)` `:195` | `contractor.Prune(cs, ur)` `:131` |
+| Empty → discard | `if (c->box.is_empty()) throw EmptyBoxException` → pop `:197,242-248` | `if (current_box.empty()) continue` `:137-140` |
+| Accept criterion | `check_sol(box)` — Newton certification, adds to Cov `:201-209,344` | `EvaluateBox(...)` → `evaluation_result->none()` → `return true` `:146-160` |
+| Stop bisection | `is_too_small`: `diam ≤ eps_x_min` `:212,474-478` | box not bisectable → `return true` `:184-195` (no model, but δ-leaf) |
+| Bisect | `bsc.bisect(*c)` → 2 cells `:216` | `config().brancher()(...)` → `box_left/box_right` `:166-173` |
+| Push children | `buffer.push(second); buffer.push(first)` `:221-222` | `stack.emplace_back(...left/right...)` `:176-182` |
+| Outer driver | `solve(): while(next(status))` collect ALL boxes `:271-313` | `while(!stack.empty())` return at FIRST δ-box `:112,160` |
 
 **The one structural divergence that drives everything else** (VERIFIED): IBEX's loop is a
 *covering* algorithm. `solve()` keeps calling `next()` until the buffer drains, accumulating
@@ -55,7 +55,7 @@ every solution/boundary/unknown box into a `CovSolverData` manifold
 (`ibex_Solver.cpp:271-313`, `check_sol` at `:344-427` runs inflating-Newton existence proofs
 and appends to `manif`). dReal's loop is a *satisfiability* decision: the instant
 `EvaluateBox` reports the box is within δ on every constraint, it `return true`s with that one
-box as the model (`icp_seq.cc:115-119`) — it never enumerates a covering, never runs Newton
+box as the model (`icp_seq.cc:157-160`) — it never enumerates a covering, never runs Newton
 certification, never builds a Cov. That is the SMT-vs-CSP problem-shape gap AUDIT tier E
 names, now confirmed in source.
 
@@ -65,13 +65,13 @@ names, now confirmed in source.
 
 | Feature | IBEX class (`../../ibex-fork/src/…`) | dReal equivalent (`../src/dreal/…`) | Why dReal reimplements | Leftover opportunity? |
 |---|---|---|---|---|
-| **Solve loop** | `Solver::next/solve` (`solver/ibex_Solver.cpp:167-313`) | `IcpSeq::CheckSat` (`solver/icp_seq.cc:34-152`); driver `TheorySolver::CheckSat` (`solver/theory_solver.cc:311-348`) | First-model decision, not covering; must return a **conflict explanation** on UNSAT for the SAT layer (§3) — `Solver` only emits a Cov | **No** (a) — different output contract |
-| **Bisector / var-select** | `Bsc`: `RoundRobin` / `SmearSumRelative` (`solver/ibex_DefaultSolver.cpp:107-109`) | `BranchLargestFirst` / `FindMaxDiam` (`solver/brancher.cc:29-69`), pluggable `config().brancher()` | Branch only over the **δ-active dimensions** `EvaluateBox` flags (`icp_seq.cc:126`), not all vars; rounding-token-aware (`safe_diam`, `brancher.cc:37`) | **Minor (b?)** — smear/grad-based selection unused; gradient is cold (fork #1), so low-value. See §3 |
+| **Solve loop** | `Solver::next/solve` (`solver/ibex_Solver.cpp:167-313`) | `IcpSeq::CheckSat` (`solver/icp_seq.cc:37-201`); driver `TheorySolver::CheckSat` (`solver/theory_solver.cc:345-383`) | First-model decision, not covering; must return a **conflict explanation** on UNSAT for the SAT layer (§3) — `Solver` only emits a Cov | **No** (a) — different output contract |
+| **Bisector / var-select** | `Bsc`: `RoundRobin` / `SmearSumRelative` (`solver/ibex_DefaultSolver.cpp:107-109`) | `BranchLargestFirst` / `FindMaxDiam` (`solver/brancher.cc:29-69`), pluggable `config().brancher()` | Branch only over the **δ-active dimensions** `EvaluateBox` flags (`icp_seq.cc:166-173`), not all vars; rounding-token-aware (`safe_diam`, `brancher.cc:37`) | **Minor (b?)** — smear/grad-based selection unused; gradient is cold (fork #1), so low-value. See §3 |
 | **Propagation / fixpoint** | `CtcPropag` (agenda), `CtcFixPoint` (ratio) | `ContractorWorklistFixpoint` (`contractor/contractor_worklist_fixpoint.cc:90-156`); `ContractorFixpoint` (`contractor_fixpoint.cc:48-68`) | Worklist keyed on `branching_point` + `input_to_contractors_` (`:94-130`) = **impact-set incrementality**, hand-rolled; carries dReal's `output()` bitset | **No** (a) — already reimplements IBEX's impact optimization |
 | **Compose (∘)** | `CtcCompo` (`contractor/ibex_CtcCompo`) | `ContractorSeq` (`contractor/contractor_seq.cc:43-50`) | Threads dReal's `ContractorStatus` (box + output bitset + used-constraints) through each sub-contractor | **No** (a) — trivial, must carry SMT status |
 | **Union (∪)** | `CtcUnion` (`contractor/ibex_CtcUnion`) | `ContractorJoin` (`contractor/contractor_join.cc:43-51`, `InplaceJoin`) | Same — joins `ContractorStatus`es, not bare boxes | **No** (a) |
-| **Cell buffer / search stack** | `CellBuffer` → `CellStack` (DFS) / `CellHeap` (best-first) (`cell/ibex_CellStack.h:25-49`); rich `Cell` w/ `BoxProperties` (`cell/ibex_Cell.h:77-95`) | `vector<pair<Box,int>>` (`solver/icp_seq.cc:42`); alternating push order (`:129-147`) | No per-cell property map needed; box+branch-dim suffices; **DPLL(T) owns the real backtrack stack** (§3) | **No** (a) — but no best-first option exists (see §3 note) |
-| **∃∀ contractor** | `CtcForAll` / `CtcQuantif` (`contractor/ibex_CtcForAll.cpp:37-102`): bisect parameter box `y`, contract `x` at `mid(y)` — pure interval proj-union | `ContractorForall` (`contractor/contractor_forall.h:75-267`) + `CounterexampleRefiner` (`contractor/counterexample_refiner.cc`) | **Recursive δ-CEGIS**: runs a *nested* `Context::CheckSat()` to find a CE (`contractor_forall.h:221`), prunes against it, nlopt-refines it (`:228-229`); double-sided `inner_δ<ε<δ` error (Kong/Solar-Lezama/Gao CAV18, `:195-197`) | **No** (a) — a genuinely different, stronger algorithm tied to dReal's own solver |
+| **Cell buffer / search stack** | `CellBuffer` → `CellStack` (DFS) / `CellHeap` (best-first) (`cell/ibex_CellStack.h:25-49`); rich `Cell` w/ `BoxProperties` (`cell/ibex_Cell.h:77-95`) | `vector<pair<Box,int>>` (`solver/icp_seq.cc:60`); alternating push order (`:176-183`) | No per-cell property map needed; box+branch-dim suffices; **DPLL(T) owns the real backtrack stack** (§3) | **No** (a) — but no best-first option exists (see §3 note) |
+| **∃∀ contractor** | `CtcForAll` / `CtcQuantif` (`contractor/ibex_CtcForAll.cpp:37-102`): bisect parameter box `y`, contract `x` at `mid(y)` — pure interval proj-intersection (∀ ⇒ intersect the per-`y` projections, `../../ibex-fork/doc/contractor.rst:664-667`) | `ContractorForall` (`contractor/contractor_forall.h:73-265`) + `CounterexampleRefiner` (`contractor/counterexample_refiner.cc`) | **Recursive δ-CEGIS**: runs a *nested* `Context::CheckSat()` to find a CE (`contractor_forall.h:220`), prunes against it, nlopt-refines it (`:228`); double-sided `inner_δ<ε<δ` error (Kong/Solar-Lezama/Gao CAV18, `:195-197`) | **No** (a) — a genuinely different, stronger algorithm tied to dReal's own solver |
 | **Newton certification** | `inflating_newton` in `check_sol` (`solver/ibex_Solver.cpp:344-427`) | none in the loop | dReal decides δ-sat by `EvaluateBox` width test, not existence proof; equalities are δ-relaxed | **No** (a) for sat; possible **(b)** as a *contractor* (AUDIT D1, `CtcNewton` late) |
 
 ---
@@ -85,19 +85,19 @@ cannot provide, or (b) a **real missed lever** where IBEX's tuned code could rep
 structurally unusable as dReal's `CheckSat`, each VERIFIED:
 1. **Explanation as theory lemma.** On UNSAT, dReal must hand the SAT layer a *conflict set*
    of literals, not a paving. `TheorySolver::CheckSat` reads
-   `contractor_status.Explanation()` (`theory_solver.cc:336,345`), built from
+   `contractor_status.Explanation()` (`theory_solver.cc:370,379`), built from
    `used_constraints_`/`unsat_witness_` accumulated *during* pruning
    (`contractor_status.h:56-95`; e.g. `ContractorForall::Prune` calls `AddUsedConstraint`,
-   `contractor_forall.h:242`). `context_impl.cc:274-321` then feeds that explanation to
+   `contractor_forall.h:241`). `context_impl.cc:459-523` then feeds that explanation to
    `sat_solver->AddLearnedClauseDirect/Pattern` to drive CDCL backjumping. `ibex::Solver`
    emits a `CovSolverData`, which has no conflict-clause notion — adopting it would mean
    discarding the lemma channel that the entire DPLL(T)/CAV26 pattern-matching layer consumes.
-2. **First-model, not covering.** `IcpSeq` returns at the first δ-box (`icp_seq.cc:118`);
+2. **First-model, not covering.** `IcpSeq` returns at the first δ-box (`icp_seq.cc:160`);
    `ibex::Solver::solve` is defined to drain the buffer and validate *all* solution boxes
    (`ibex_Solver.cpp:271-313`). Using it would do strictly more work for a decision query.
 3. **Incremental literal-driven re-entry.** The real branch-and-backtrack tree lives in the
-   SAT solver (`context_impl.cc:204-348` SAT⇄theory loop); the theory solver is invoked per
-   assignment with a fresh `ContractorStatus(box)` (`theory_solver.cc:327`). IBEX's `Solver`
+   SAT solver (`context_impl.cc:430-525` SAT⇄theory loop); the theory solver is invoked per
+   assignment with a fresh `ContractorStatus(box)` (`theory_solver.cc:361`). IBEX's `Solver`
    owns its own persistent cell tree and Cov — two stateful search drivers would fight.
 
 **(a) Compose / Union / Fixpoint / Worklist — JUSTIFIED, and notably thorough.** These are
@@ -112,20 +112,27 @@ reimplemented. The thing one might assume was the missed optimization is already
 
 **(a) ∃∀ — JUSTIFIED, and dReal's is the stronger algorithm.** This is the clearest case
 *against* "borrow IBEX." `CtcForAll` (`ibex_CtcForAll.cpp:37-102`) is a pure interval
-projection-union: bisect the parameter box `y` down to `prec`, contract `x` against `mid(y)`
-at each leaf. dReal's `ContractorForall` instead solves a *nested SMT problem* for a
-counterexample (`contractor_forall.h:221`, `context_for_counterexample_.CheckSat()`),
-δ-strengthens `¬φ` (`:88-89`), refines the CE with nlopt (`:228-229`,
+projection-intersection (∀ ⇒ intersect the per-`y` projections,
+`../../ibex-fork/doc/contractor.rst:664-667`): bisect the parameter box `y` down to `prec`,
+contract `x` against `mid(y)` at each leaf. dReal's `ContractorForall` instead solves a
+*nested SMT problem* for a
+counterexample (`contractor_forall.h:220`, `context_for_counterexample_.CheckSat()`),
+δ-strengthens `¬φ` (`:85-87`), refines the CE with nlopt (`:228`,
 `counterexample_refiner.cc`), and controls two-sided δ-error via `inner_δ<ε<δ`
-(`:188-191`). Swapping in `CtcForAll` would *lose* capability (the δ-decision guarantees and
+(`:91-94`, the constructor's `DREAL_ASSERT`s enforcing `inner_delta < epsilon < precision`). Swapping in `CtcForAll` would *lose* capability (the δ-decision guarantees and
 the local-opt refinement), not gain speed. Confirms AUDIT's "different problem shape."
 
 **(b) The honest, narrow opportunities — and they are NOT the search loop:**
-- **Atomic contractors inside the loop (the real lever, per AUDIT tier A).** dReal composes
-  *only* HC4 fwd-bwd per atom (`theory_solver.cc:197`) + integer + optional polytope. IBEX's
-  `DefaultSolver` composes HC4 **then `CtcAcid(HC4)`** by default
-  (`ibex_DefaultSolver.cpp:83-85`), plus Newton on square systems (`:88-91`). ACID/3BCID are
-  not in dReal's `BuildContractor` at all. This is leftover opportunity — but it lives in the
+- **Atomic contractors inside the loop (the real lever, per AUDIT tier A).** dReal's *default*
+  run composes *only* HC4 fwd-bwd per atom (`theory_solver.cc:207`) + integer + optional
+  polytope. IBEX's `DefaultSolver` composes HC4 **then `CtcAcid(HC4)`** by default
+  (`ibex_DefaultSolver.cpp:84-85`), plus Newton on square systems (`:87-90`). ACID/3BCID are
+  now **shipped** as opt-in contractors (`--acid`/`--3bcid` → `make_contractor_ibex_acid` over
+  the assertion system, `theory_solver.cc:240-244`; `contractor_ibex_acid.{cc,h}`) — appended
+  after the per-formula contractors, **default OFF**, and parallel-safe under `--jobs>1` via a
+  per-worker `ContractorIbexAcidMt` cell (`contractor.cc:215-217`, mirrors polytope's Mt variant).
+  So the leftover lever is no longer a missing capability but a **default-tuning** question (measure
+  ACID-on per family); `CtcNewton` remains genuinely absent (AUDIT D1). It lives in the
   *contractor* slot dReal already exposes, requiring **no** change to the search loop.
   Consistent with [`AUDIT.md`](AUDIT.md) A1/A2 and [`KNOBS.md`](KNOBS.md).
 - **Variable-selection heuristic (minor, low-confidence).** dReal branches on max-diameter
@@ -136,7 +143,7 @@ the local-opt refinement), not gain speed. Confirms AUDIT's "different problem s
   Unverified whether smear helps dReal's instances — would need `/benchmark`, not asserted here.
 - **Best-first search (capability, not perf).** IBEX offers `CellHeap`/`CellList` for
   best-first/BFS (`ibex_DefaultSolver.cpp:110`); dReal's stack is DFS-only with an alternating
-  push order (`icp_seq.cc:129-147`). Not a clear win for a decision procedure and orthogonal to
+  push order (`icp_seq.cc:176-183`). Not a clear win for a decision procedure and orthogonal to
   the contractor lever; noted for completeness, not recommended.
 
 **Bottom line.** The search/solver loop is a *faithful, leaner* reimplementation whose every
@@ -153,7 +160,7 @@ points the lever.
 
 - **VERIFIED in source:** every `file:line` above was read directly. IBEX `Solver::next` loop
   structure, `check_sol` certification/Cov output, `DefaultSolver` contractor composition
-  (HC4+ACID(+Newton)(+polytope)), `CellStack`=DFS, `CtcForAll` proj-union algorithm; dReal
+  (HC4+ACID(+Newton)(+polytope)), `CellStack`=DFS, `CtcForAll` proj-intersection algorithm; dReal
   `IcpSeq::CheckSat`, `BranchLargestFirst`, `BuildContractor` composition, worklist
   impact-set incrementality, `ContractorForall` recursive-CEGIS, the `context_impl.cc`
   SAT⇄theory loop and explanation→learned-clause path.

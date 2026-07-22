@@ -4,8 +4,9 @@
 The **arbitrary-order** set: stores **all derivatives up to a given order `n`** (a full jet
 of the flow w.r.t. initial conditions) in doubleton form, propagated with reorganization by
 the QR method (confirmed `CnRect2Set.h` / "Set that stores all derivatives to given order in
-doubleton form with reorganization moved by QR decomposition method"). The order is a
-template parameter (`DEGREE`). The C0/C1/C2 doubletons are the low-order special cases of
+doubleton form with reorganization moved by QR decomposition method"). The jet order is set at
+construction by a runtime `degree` argument (`CnRect2Set.h:42-46`); the `DEGREE` template
+parameter is a compile-time bound (default 0). The C0/C1/C2 doubletons are the low-order special cases of
 this same jet machinery; the multi-matrix sibling is `CnMultiMatrixRect2Set` =
 `CnDoubletonSet` (derivatives w.r.t. a multiindex `α` as doubletons, `CnDoubletonSet.h`).
 
@@ -16,7 +17,9 @@ this same jet machinery; the multi-matrix sibling is `CnMultiMatrixRect2Set` =
 - Jet accessors: value, derivative, "maximal order of partial derivative stored in the jet",
   "Taylor coefficients corresponding to multipointer `(1/mp!)·d^{mp}f_i`", and "an enclosure
   for first order variational equations for last performed step" (confirmed class doc).
-- `evalAt(f)` mean-value forms over the doubleton frames.
+- `evalAffineFunctional(gradient, x0)` — mean-value functional over the doubleton frames,
+  intersected with the direct evaluation (`CnRect2Set.h:64`). (No `evalAt` on this class — that
+  form lives on the C0/C1/C2 doubletons.)
 
 ## dReal status
 **Not used (structural).** dReal computes only C0 tubes; no jet of any order is requested.

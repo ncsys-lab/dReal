@@ -11,6 +11,18 @@ and after integration extract the matrix:
     IVector y = timeMap(finalTime, set);
     IMatrix monodromy = (IMatrix) set;                // V(finalTime)
 
+**The solver is unchanged — only the set is.** `IOdeSolver` (`= OdeSolver<IMap>`, a
+`C1DynSys`, `OdeSolver.h:39`) — the exact solver dReal already constructs — integrates the
+first-order variational equation itself; the monodromy is a **first-order** quantity, so
+switching a flow to it costs only a C0→C1 *set-type* change, no solver upgrade. CAPD's own
+worked example (`odesvar_rigorous.html`) is literally `IOdeSolver` + `ITimeMap` +
+`C1Rect2Set`; `IC2OdeSolver`/`ICnOdeSolver` enter only for 2nd-order Hessians / higher jets.
+**Two extraction routes:** the set-based `(IMatrix)set` above carries the Jacobian as a
+**doubleton** (`(MatrixType)originalSet`, `TimeMap_template.h:114` — wrapping-robust); the
+convenience overload `timeMap(t, v, D)` with a plain `IVector v` threads a raw `C1TimeJet`
+(`TimeMap.hpp:113` — no manual set, but the value part is an un-split box, looser over long
+horizons). Prefer the C1 set for tightness.
+
 **Functional form.** With a `SolutionCurve`, the monodromy is available at any intermediate
 time: `timeMap(t, set, solution); solution.derivative(t)` returns `V(t)` as an `IMatrix`
 (confirmed `$HDR/diffAlgebra/SolutionCurve.h:185,287`). `solution(t)` / `solution.timeDerivative(t)`

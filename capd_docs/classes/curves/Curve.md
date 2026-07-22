@@ -8,7 +8,7 @@ mined `timeDerivative` from for the 2026-06 tube fix.
 
 **Two specializations** (`$HDR/diffAlgebra/Curve.h`): the generic `Curve<...,false>`
 (non-interval) and `Curve<...,true>` (interval — dReal's). The interval one carries an extra
-`initMatrix` and four extra methods the doxygen page does not list.
+`initMatrix` and the interval-only methods listed below (absent from the doxygen page).
 
 ## Key API — all public evaluation methods
 
@@ -31,21 +31,21 @@ MatrixType oneStepDerivativeOfNumericalMethod(const ScalarType& h) const; // Jph
 void       setInitMatrix (const MatrixType& M);
 
 // inherited from ParametricCurve / CurveInterface:
-virtual HessianType hessian(const ScalarType&) const;   // no-op stub on C0 curve
-virtual JetType     jet    (const ScalarType&) const;   // no-op stub on C0 curve
-virtual void        eval   (ScalarType, JetType&) const;// no-op stub on C0 curve
+virtual HessianType hessian(const ScalarType&) const;   // throws std::logic_error on a C0 curve
+virtual JetType     jet    (const ScalarType&) const;   // throws std::logic_error on a C0 curve
+virtual void        eval   (ScalarType, JetType&) const;// throws std::logic_error on a C0 curve
 Real getLeftDomain() const;  Real getRightDomain() const;  void setDomain(Real, Real);
 ```
 
 `operator()` (interval, `Curve.hpp:59`) is *already* the mean-value-in-space form: it forms
 `phi + jacPhi·deltaX`, **intersects** it with the direct Horner sum, and adds `rem`. So the C0
 value range dReal reads is as tight as this curve allows. `hessian`/`jet`/`eval` are inherited
-stubs that throw/no-op unless the object is actually a `C2Curve`/`CnCurve` (a C0 `IOdeSolver`
-does not build those).
+stubs that **throw** `std::logic_error` (ParametricCurve.h:53-62) unless the object is actually a
+`C2Curve`/`CnCurve` (a C0 `IOdeSolver` does not build those).
 
 **dReal status.** `operator()` + `timeDerivative` used (`contractor_odes_capd.cc:374,377`).
 `derivative`/`valueAtCenter`/`remainder`/`getCenter`/`oneStepDerivative*`/`setInitMatrix`
-unused; `hessian`/`jet`/`eval` are C0 no-ops. See `dreal-capd-usage.md`.
+unused; `hessian`/`jet`/`eval` throw on a C0 curve. See `dreal-capd-usage.md`.
 
 **Why it might matter.** `derivative(h)` is the in-step flow Jacobian — the C1 sensitivity an
 interval-Newton backward step would use, but it is only populated meaningfully when the solver

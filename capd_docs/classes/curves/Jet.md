@@ -9,7 +9,7 @@ jet through a map, and `C2Curve`/`CnCurve` evaluation returns one. `Curve::JetTy
 **Key API** (from `$HDR/diffAlgebra/Jet.h`; indexed by `Multiindex`/`Multipointer`):
 
 ```cpp
-size_type degree() const;  static size_type dimension();  // imageDimension / domainDimension
+size_type degree() const;  size_type dimension() const;  size_type imageDimension() const; // #vars / #polys
 RefVectorType operator()(const Multipointer& mp) const;    // vector of d^{mp} f_i
 RefVectorType operator()(const Multiindex&   mi) const;
 RefVectorType operator()(void) const;                      // 0-order: the value

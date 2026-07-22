@@ -36,8 +36,9 @@ above 100 slices instead of 16.
 ## Why dReal skips it
 
 dReal does not run IBEX's optimization loop, so there is no "objective variable"
-in an extended system to shave. The general shaving power dReal *would* want is
-[`CtcAcid`](./CtcAcid.md) / [`Ctc3BCid`](./Ctc3BCid.md) over all variables, not
+in an extended system to shave. The general shaving power is
+[`CtcAcid`](./CtcAcid.md) / [`Ctc3BCid`](./Ctc3BCid.md) over all variables — which
+dReal already **ships** (`--acid`/`--3bcid`, `contractor_ibex_acid.{cc,h}`) — not
 this one-variable optimization specialization. Recorded so it isn't mistaken for a
 general shaving option.
 

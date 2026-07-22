@@ -6,8 +6,11 @@ CP 2007): for each variable, *shave* its bounds (3B) then *constructive-disjoin*
 the remaining interval (CID). The fixed-parameter parent of
 [`CtcAcid`](CtcAcid.md).
 
-> **dReal status:** unused. Useful if you want the shaving power without ACID's
-> adaptivity (e.g. to pin parameters for a sweep). See [`../../AUDIT.md`](../../AUDIT.md) A.
+> **dReal status:** **shipped** — `--3bcid` (default off, mutually exclusive with
+> `--acid`). `ContractorIbexAcid` builds `ibex::Ctc3BCid(hc4_sub, --s3b)` over a stock
+> `CtcHC4` when `use_3bcid()` (`contractor_ibex_acid.cc`); works under `--jobs>1` via
+> the per-worker `ContractorIbexAcidMt` cell. Use it for the shaving power without
+> ACID's adaptivity (e.g. to pin `--s3b` for a sweep). See [`../../AUDIT.md`](../../AUDIT.md) A.
 
 ## Constructors (verbatim)
 

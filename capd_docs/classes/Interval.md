@@ -8,8 +8,9 @@ dReal builds with (`CAPD_INTERVAL_TYPE=NATIVE`).
 
 ## Key API (member methods, from `intervals/Interval.h`)
 - Construction: `Interval()` (=[0,0]), `Interval(x)`, `Interval(lo,hi)`, copy,
-  `Interval("lo","hi")` (string ctor — safest enclosure of non-representable decimals, always
-  non-zero width).
+  `Interval("lo","hi")` (string ctor — outward-rounded endpoints: `readDown(lo)`/`readUp(hi)`
+  in `Interval_Base.h`, so the enclosure is tightest-safe; width is non-zero **only** for
+  non-representable decimals — an exactly-representable value like `"0.5"` gives zero width).
 - Endpoints: `leftBound()`, `rightBound()` (scalars); `left()`, `right()` (point intervals);
   `setLeftBound(x)`, `setRightBound(x)`.
 - Midpoint/width: `mid()`; free `diam` (rigorous), `width` (non-rigorous).

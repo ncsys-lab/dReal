@@ -41,15 +41,22 @@ The `.rst` leaves the descriptions `*(to be completed)*`; the catalog from the
 headers (`bisector/`):
 - `LargestFirst(prec=0, ratio)` — split the widest component.
 - `RoundRobin(prec, ratio)` — each component in turn.
-- `SmearFunction` family — `SmearMax`, `SmearSum`, `SmearSumRelative` (all
-  `(System&, prec, ratio)`): weight components by the Jacobian "smear" (impact).
-- `LSmear` — Lsmear, dual-based variable selection (Araya & Neveu 2018).
+- `SmearFunction` family — `SmearMax`, `SmearSum`, `SmearSumRelative`,
+  `SmearMaxRelative` (all `(System&, prec, ratio)`): weight components by the
+  Jacobian "smear" (impact). **dReal reimplements all four** — see below.
+- `LSmear` — Lsmear, dual-based variable selection (Araya & Neveu 2018; extends
+  `SmearSumRelative`).
 - `OptimLargestFirst` — optimizer variant.
 
 Per-variable precision: pass a `Vector` instead of a scalar `prec` (for physical
-quantities of different magnitude). **dReal uses none of these** — its branching
-is SMT/theory-driven. Listed in [`../AUDIT.md`](../AUDIT.md) E (correctly ignored),
-though the smear *idea* echoes `CtcAcid`'s smearsumrel variable ordering (audit A).
+quantities of different magnitude). dReal does **not** instantiate IBEX's `Bsc`
+classes (it branches inside DPLL(T)), but `--smear <variant>` (default off)
+**reimplements** IBEX's four `SmearFunction` variants (`smearsum`, `smearsumrel`,
+`smearmax`, `smearmaxrel`) as a dReal brancher (`brancher_smear.{h,cc}`), replacing
+largest-first with Jacobian-smear variable choice — soundness-free (variable choice
+never moves a verdict). NRA-only: the smear Jacobian skips `Kind::ODE_LOHNER`, so
+`smearsum` helps the odeexpr families but *collapses* the ODE families — enable
+per-project, not globally. A/B + mechanism: solver `--smear` docs (`CLAUDE.md`).
 
 ## Cell buffers — dReal manages its own search stack
 

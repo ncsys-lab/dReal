@@ -2,8 +2,10 @@
 
 > ⚠ **Stale `LP_LIB=none` aside** (pre-`fa3b74bd7`) — corrected 2026-07-02: the LSmear row's "not
 > usable in dReal's build, ships `LP_LIB=none`, polytope path dormant" reasoning is superseded — IBEX
-> builds `-DLP_LIB=soplex` now (`CMakeLists.txt:204`); an LP backend **is** linked. (LSmear is still
-> not wired into dReal, but not for lack of an LP solver.) See [`README.md`](../../README.md) banner.
+> builds `-DLP_LIB=soplex` (`CMakeLists.txt`); an LP backend **is** linked. (LSmear is still not
+> wired into dReal, but only because it needs an `ExtendedSystem`/goal, not for lack of an LP solver.)
+> Separately, the **smear formula IS now shipped** in dReal via `--smear` (`brancher_smear.cc`) — see
+> the dReal-status block below. See [`README.md`](../../README.md) banner.
 
 Headers in [`bisector/`](../../../../ibex-fork/src/bisector/). A **bisector** is the
 operator an IBEX strategy (the [`Solver`](../../chapters/solver.md) /
@@ -13,14 +15,15 @@ child boxes. The base class `Bsc` (`ibex_Bsc.h`) declares the one method every v
 implements — `BisectionPoint choose_var(const Cell& cell)` — and owns the precision /
 skip logic; the subclasses differ only in *which* variable they choose.
 
-> **dReal status:** **unused (correctly).** dReal runs its **own** branch-and-prune
-> inside DPLL(T), with theory-driven variable selection; it never instantiates an IBEX
-> `Bsc`. This node is a **design-comparison** reference. See the
-> [strategy chapter](../../chapters/strategy.md), [`../../AUDIT.md`](../../AUDIT.md) E
-> ("correctly ignored"), and the architecture deep-dive
-> [`../../ARCHITECTURE-COMPARISON.md`](../../ARCHITECTURE-COMPARISON.md). The one idea
-> that *does* resurface in dReal-relevant code is the **smear** criterion — the same
-> `smearsumrel` rule orders variables in [`CtcAcid`](../contractors/CtcAcid.md) (audit A).
+> **dReal status:** the `Bsc` **classes** are unused (correctly) — dReal runs its **own**
+> branch-and-prune inside DPLL(T) and never instantiates an IBEX `Bsc`. But the **smear
+> *formula*** is now **shipped twice**: `--smear` (`brancher_smear.cc`) reimplements all four
+> SmearFunction variants over box dimensions using an `ibex::System`'s interval Jacobian
+> (`System::f_ctrs.jacobian`), and [`CtcAcid`](../contractors/CtcAcid.md) orders its shaved
+> variables by the same `smearsumrel` criterion. So this node is a **design-comparison**
+> reference for the `Bsc` hierarchy, but the useful idea it documents is no longer dormant.
+> See the [strategy chapter](../../chapters/strategy.md), [`../../AUDIT.md`](../../AUDIT.md) E,
+> and [`../../ARCHITECTURE-COMPARISON.md`](../../ARCHITECTURE-COMPARISON.md).
 
 ---
 
@@ -120,9 +123,9 @@ Jacobian) beyond the bare box.
 | **RoundRobin** | cycle through indices: `var=(last_var+1)%n`, skipping `too_small`, using `cell.bisected_var` (`ibex_RoundRobin.cpp:26-47`). | `(prec, ratio=0.45)` — **`prec` mandatory** | dead simple; guarantees every variable is eventually split (fairness/completeness of paving). | constraint-blind; usually slower convergence than smear. | no | unused | reference only; needs the `Cell` to carry `bisected_var` (search-tree state dReal lacks). |
 | **SmearMax** | `argmax_j max_i (\|J[i][j]\|·diam(box[j]))` (`.cpp:92-107`). | `(System&, prec, ratio=0.45)` | targets the variable with one dominant constraint impact. | a single large entry dominates; ignores how broadly a variable matters. | yes | unused | idea only; `Bsc` class is tied to IBEX `Cell`/`Solver`. |
 | **SmearSum** | `argmax_j Σ_i (\|J[i][j]\|·diam(box[j]))` (`.cpp:110-127`). | `(System&, prec, ratio=0.45)` | rewards variables that matter across many constraints. | large-magnitude constraints swamp small ones (no normalization). | yes | unused | idea only. |
-| **SmearSumRelative** | `argmax_j Σ_i (\|J[i][j]\|·diam(box[j]) / NC_i)`, `NC_i=Σ_k \|J[i][k]\|·diam(box[k])` (`.cpp:129-162`). | `(System&, prec, ratio=0.45)` | normalized → constraints weigh equally; the most balanced smear, IBEX's go-to. | per-box Jacobian + normalizer cost; needs the assembled system. | yes | unused | **idea is already live in dReal** via [`CtcAcid`](../contractors/CtcAcid.md)'s `smearsumrel` variable ordering (audit A). |
+| **SmearSumRelative** | `argmax_j Σ_i (\|J[i][j]\|·diam(box[j]) / NC_i)`, `NC_i=Σ_k \|J[i][k]\|·diam(box[k])` (`.cpp:129-162`). | `(System&, prec, ratio=0.45)` | normalized → constraints weigh equally; the most balanced smear, IBEX's go-to. | per-box Jacobian + normalizer cost; needs the assembled system. | yes | unused (class) | **formula shipped in dReal**: [`CtcAcid`](../contractors/CtcAcid.md)'s `smearsumrel` shave-ordering and the `--smear` brancher (`brancher_smear.cc`) both use this criterion. |
 | **SmearMaxRelative** | `argmax (\|J[i][j]\|·diam/NC_i)` (`.cpp:164-194`; see ⚠️ above). | `(System&, prec, ratio=0.45)` | normalized single-impact target. | implementation quirk (stale `maxsmear` leak); rarely used. | yes | unused | not recommended even in IBEX context — prefer SmearSumRelative. |
-| **LSmear** (Araya & Neveu) | dual-weighted smear: solve LP relaxation `mid(J)·x≤0`, weight each constraint by its dual multiplier, then smear; falls back to `SmearSumRelative` when the LP isn't optimal/bounded (`ibex_LSmear.cpp:111-169`). Default mode `LSMEAR_MG` linearizes the Jacobian at the inflated midpoint. | `(ExtendedSystem&, prec, ratio=0.45, lsmode=LSMEAR_MG)` | best-performing selector in its paper for optimization B&B; focuses on constraints active at the optimum. | needs an **`ExtendedSystem` + an LP solver** (`LPSolver`); heaviest per-node cost. | yes (+ LP) | unused | **not usable in dReal's build** — it requires an LP backend, and dReal ships `LP_LIB=none` (the polytope path is dormant, see [`../../AUDIT.md`](../../AUDIT.md) D2). Optimization-only. |
+| **LSmear** (Araya & Neveu) | dual-weighted smear: solve LP relaxation `mid(J)·x≤0`, weight each constraint by its dual multiplier, then smear; falls back to `SmearSumRelative` when the LP isn't optimal/bounded (`ibex_LSmear.cpp:111-169`). Default mode `LSMEAR_MG` linearizes the Jacobian at the inflated midpoint. | `(ExtendedSystem&, prec, ratio=0.45, lsmode=LSMEAR_MG)` | best-performing selector in its paper for optimization B&B; focuses on constraints active at the optimum. | needs an **`ExtendedSystem` + an LP solver** (`LPSolver`); heaviest per-node cost. | yes (+ LP) | unused | **optimization-only** — needs an `ExtendedSystem` (a goal var) that dReal's sat/unsat search never builds. Not a build limitation: dReal links `LP_LIB=soplex`, so the LP backend is present (the earlier "`LP_LIB=none`" claim was stale). |
 | **OptimLargestFirst** | LargestFirst over all non-objective vars; bisects the objective `goal_var` only under special guards: `choose_obj && bisectable && l < diam(goal) && diam(goal)/l < 1e10` (`ibex_OptimLargestFirst.cpp:28-63`). | `(goal_var, choose_obj, prec=0, ratio=0.45)` | keeps the optimizer from wastefully splitting the objective variable. | optimization-specific; meaningless without a goal variable. | no (but needs `goal_var` index) | unused | optimization-only; no shape in dReal's sat/unsat search. |
 
 ---
@@ -140,15 +143,19 @@ is exactly why [`../../AUDIT.md`](../../AUDIT.md) tier E records bisectors as "c
 ignored." (Architecture contrast in detail:
 [`../../ARCHITECTURE-COMPARISON.md`](../../ARCHITECTURE-COMPARISON.md).)
 
-What *is* portable is the **smear formula** — `Σ_i |J[i][j]|·diam(box[j]) / NC_i` — as a
-ranking over box dimensions. dReal already assembles an `ibex::System` for the dormant
-polytope path, so the Jacobian is in reach; and the value of the idea is already
-demonstrated inside dReal-relevant code, since [`CtcAcid`](../contractors/CtcAcid.md) uses
-the **same `smearsumrel` criterion** to order which variables it shaves first (audit A). If
-dReal ever wanted constraint-aware box selection, that criterion — not the `Bsc` class — is
-the thing to borrow. Any such change is a **completeness** lever (better split order → fewer
-nodes / more refutations), never a soundness one: variable *choice* cannot make a sound
-contractor unsound, only change how fast the search converges.
+What *was* portable is the **smear formula** — `Σ_i |J[i][j]|·diam(box[j]) / NC_i` — as a
+ranking over box dimensions, and dReal now **ships** it. `--smear` (`brancher_smear.cc`)
+assembles its own `ibex::System` over the joint variables, reads the interval Jacobian via
+`System::f_ctrs.jacobian`, and reimplements all four SmearFunction variants — the
+`relative` (normalize by `NC_i`) and `use_max` (max-vs-sum) axes — directly over box
+dimensions, falling back to largest-first on an uninformative/non-finite Jacobian exactly as
+IBEX's `SmearFunction` does. The `Bsc` *class* is bypassed; only the formula is borrowed.
+[`CtcAcid`](../contractors/CtcAcid.md) independently uses the same `smearsumrel` criterion to
+order its shaved variables. Both are **completeness** levers (better split/shave order →
+fewer nodes / more refutations), never soundness ones: variable *choice* cannot make a sound
+contractor unsound, only change how fast the search converges. `--smear` is measured strongest
+as `smearsum` on the odeexpr families but collapses the ODE families corpus-wide (the Jacobian
+skips `Kind::ODE_LOHNER`) — enable per-project, not globally (dReal `CLAUDE.md` §Smear).
 
 Related: [strategy chapter](../../chapters/strategy.md),
 [`../contractors/CtcAcid.md`](../contractors/CtcAcid.md), [`../../AUDIT.md`](../../AUDIT.md),

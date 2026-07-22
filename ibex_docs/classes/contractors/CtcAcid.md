@@ -1,10 +1,11 @@
-# `CtcAcid` — adaptive 3BCID shaving (audit A — now IMPLEMENTED as `--acid`)
+# `CtcAcid` — adaptive 3BCID shaving (SHIPPED as `--acid`)
 
-> ⚠ **Corrected 2026-07-02:** this is no longer an unrealized "opportunity." ACID is **implemented and
-> live** as `--acid` (and 3BCID as `--3bcid`), constructing `ibex::CtcAcid`/`ibex::Ctc3BCid` over the
-> HC4 path at `contractor_ibex_acid.cc:107-115` (flags `dreal_main.cc:364-367,674-681`; default off,
-> mutually exclusive, and they **throw** under `--jobs>1`). Any "dReal doesn't run this / should
-> adopt it" framing below predates the implementation. See [`README.md`](../../README.md) top banner.
+> **Shipped.** ACID is live as `--acid` (and 3BCID as `--3bcid`), constructing
+> `ibex::CtcAcid`/`ibex::Ctc3BCid` over a stock `CtcHC4` sub-contractor in
+> `contractor_ibex_acid.cc` (flags in `dreal_main.cc`; default off, mutually exclusive). It **works
+> under `--jobs>1`** — `make_contractor_ibex_acid` dispatches to a per-worker `ContractorIbexAcidMt`
+> cell, one `ibex::CtcAcid` per worker thread (`ibex::CtcAcid` keeps mutable adaptivity state, so it
+> cannot be shared). Any "dReal doesn't run this / should adopt it" framing below is historical.
 
 Header: [`ibex_CtcAcid.h`](../../../../ibex-fork/src/contractor/ibex_CtcAcid.h)
 (`contractor/`). `class CtcAcid : public Ctc3BCid`. The **adaptive** version of
@@ -12,8 +13,8 @@ Header: [`ibex_CtcAcid.h`](../../../../ibex-fork/src/contractor/ibex_CtcAcid.h)
 shave, so the user doesn't pick `vhandled`. **IBEX's own solver enables ACID by
 default**, which is why it's the audit's top candidate.
 
-> **dReal status:** **unused.** Strongest single lever to layer onto dReal's HC4
-> contraction without touching the existing path. See [`../../AUDIT.md`](../../AUDIT.md) A.
+> **dReal status:** **shipped** (`--acid`, default off) — the strongest single
+> lever layered onto dReal's HC4 contraction. See [`../../AUDIT.md`](../../AUDIT.md) A.
 
 ## Constructors (verbatim from the header)
 
@@ -28,11 +29,13 @@ static constexpr double default_ctratio = 0.002;
 ```
 
 - `sys` — a `System`, used to order variables by the *smearsumrel* criterion
-  (which vars to shave first). **dReal must assemble a `System`** to use this
-  (it currently builds per-constraint contractors; see integration note).
-- `ctc` — the **sub-contractor** applied on each slice. For dReal this would be
-  its HC4/fwd-bwd contractor (docs warn: *don't* use `Box` as sub-contractor;
-  HC4 is the right choice).
+  (which vars to shave first). dReal assembles one over the box vars + non-`forall`
+  assertions in `ContractorIbexAcid`'s constructor (`contractor_ibex_acid.cc`).
+- `ctc` — the **sub-contractor** applied on each slice. dReal passes a stock
+  `ibex::CtcHC4` over that same `System` (not its callback-bearing fwd-bwd, so no
+  per-variable lemma attribution — `AddUsedConstraint(formulas_)` records the whole
+  formula set coarsely on any narrowing). IBEX docs warn *don't* use `Box` here;
+  HC4 is the recommended choice.
 - `ct_ratio` — the adaptive kernel: keep shaving variables until the average gain
   drops below `ct_ratio`. **Code default `0.002`.** ⚠️ The constructor's doc
   comment says "default value is 0.005" — the `static constexpr` (line 94) is the
@@ -47,19 +50,22 @@ gain, set `nbcidvar` to where average gain falls below `ct_ratio`) with **runnin
 phases** (apply 3BCID to the first `nbcidvar` smear-ordered variables). So cost
 self-regulates to the instance.
 
-## Integration cost for dReal (the honest caveat)
+## How it's wired (as shipped)
 
-1. Needs a `System` over the current Box's variables — dReal would have to build
-   one (it already does for the dormant polytope path — reuse that assembly).
-2. The sub-contractor must be dReal's HC4; ACID calls it many times per box, so
-   it amplifies whatever the HC4 call costs (and the fork already drove that cost
-   down — patches #1,#11). Net contraction is **stronger** (fewer search nodes),
-   per-node cost **higher** — a classic completeness-vs-time trade; validate on
-   the ODE/odeexpr families (`/benchmark`).
-3. Runs inside DPLL(T) on transient literals — must respect dReal's
-   empty-detection (`is_empty()`, post fork #11) and not break the backward
-   callback contract (#2,#5,#6,#7). All present in the fork's IBEX; the work is
-   dReal-side wiring in `generic_contractor_generator.cc`.
+1. **System assembly** — `ContractorIbexAcid` builds an `ibex::System` over the box
+   vars + non-`forall` assertions (same assembly as `ContractorIbexPolytope`), then
+   `is_dummy_` short-circuits when there are 0 constraints.
+2. **Cost profile** — the sub-contractor (stock `CtcHC4`) is called many times per
+   box, amplifying the HC4 cost (which the fork already drove down — patches
+   #1,#11). Net contraction is **stronger** (fewer search nodes), per-node cost
+   **higher** — a classic completeness-vs-time trade. Enable per-project and
+   `/benchmark`; the `--s3b` (shave depth) and `--acid-ct-ratio` (adaptive-stop)
+   knobs tune it.
+3. **Runs inside DPLL(T)** on transient literals — respects dReal's empty-detection
+   (`iv.is_empty()`) and the FE_UPWARD rounding contract (`DREAL_ASSERT_ROUNDING`,
+   a wrong ambient mode here is a silent false `unsat` — SOUNDNESS). Assembled in
+   `theory_solver.cc` via `make_contractor_ibex_acid`, appended after the
+   per-constraint contractors so it sees the whole assertion system.
 
 Related: [`Ctc3BCid.md`](Ctc3BCid.md) (the fixed-param parent),
 [chapter](../../chapters/contractor.md), [`../../KNOBS.md`](../../KNOBS.md).

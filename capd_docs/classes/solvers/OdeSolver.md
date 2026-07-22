@@ -42,13 +42,15 @@ Jacobian outputs (`encloseC0Map`'s `o_jacPhi`, the `MatrixType& derivative` over
 `JacPhi`, `encloseC1Map`) are **not** used.
 
 ## Why it might matter
-Even on this exact class (no need to switch to `IC2OdeSolver`), `encloseC0Map` already returns
-`o_jacPhi` and the `operator()(v, MatrixType& der)` overloads already return ∂φ/∂x₀ for free
-alongside the value dReal consumes — a ready monodromy for interval-Newton backward narrowing,
-which dReal currently does not exploit at all (it hands C0 values to ibex HC4). Confirm whether
-the C0 `o_jacPhi` is the full flow Jacobian or only the numerical-scheme Jacobian before relying
-on it (the doc labels it "derivative of numerical scheme"; the C1 monodromy via `encloseC1Map`
-is the unambiguous flow-derivative route).
+`encloseC0Map` returns `o_jacPhi` and the `operator()(v, MatrixType& der)` overloads return ∂φ/∂x₀
+alongside the value dReal consumes — a candidate monodromy for interval-Newton backward narrowing,
+which dReal does not exploit at all (it hands C0 values to ibex HC4). But the header settles the
+rigor question against the C0 route: `encloseC0Map`'s `o_phi`/`o_jacPhi` are the *numerical-scheme*
+value and its Jacobian (`OdeSolver.h:67,70` — "phi is a numerical method", "Dphi(x)"); the rigorous
+flow enclosure is `o_phi + o_rem`, and the rigorous flow Jacobian additionally needs `o_jacRem`,
+which only `encloseC1Map` supplies (`OdeSolver.h:74-84`). So the unambiguous rigorous monodromy is
+the C1 route (`encloseC1Map`, or `IC2OdeSolver`), not C0 `o_jacPhi` alone. Backward narrowing is a
+COMPLETENESS lever (sharper enclosures never cause a false `unsat`).
 
 ## Source
 [OdeSolver.h](../../../../CAPD/docs/html/OdeSolver_8h.html) ·

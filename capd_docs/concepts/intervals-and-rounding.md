@@ -24,7 +24,7 @@ optimization can reorder/contract FP ops so the directed-rounding switch no long
 brackets the operation it was meant to. **However, the same CAPD docs state the
 cure — `-frounding-math` — and dReal builds CAPD with exactly that flag**
 (verified: `gcc_build/capd_ep/src/capd_external/CMakeLists.txt` →
-`-O2 -frounding-math`; dReal's own `CMakeLists.txt:99`; `user_programs.dox`:
+`-O2 -frounding-math`; dReal's own `CMakeLists.txt` applies it to dReal source too; `user_programs.dox`:
 *"without option -frounding-math compiler can optimize code so that it is not
 rigorous anymore"*). So NATIVE here is **not** a live soundness hole — it is
 mitigated by the build. `DoubleRounding::isWorking()` remains worthwhile as a

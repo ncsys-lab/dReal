@@ -5,9 +5,12 @@ Header:
 (`system/`). The temporary builder for a [`System`](System.md): declare the shared
 argument list once, then add the goal/constraints.
 
-> **dReal status:** used in `contractor_ibex_polytope.cc` to assemble the
-> constraint system for the polytope hull. The same assembly is what an
-> [`CtcAcid`](../contractors/CtcAcid.md) integration would reuse (audit A).
+> **dReal status:** used at three live sites, each running the same `add_var`
+> (all box vars) + `add_ctr` (non-`forall` constraints) assembly:
+> `contractor_ibex_polytope.cc` (polytope hull, `--polytope`),
+> `contractor_ibex_acid.cc` ([`CtcAcid`](../contractors/CtcAcid.md)/`Ctc3BCid`
+> shaving, `--acid`/`--3bcid`), and `brancher_smear.cc` (smear Jacobian,
+> `--smear`). The CtcAcid integration is **shipped**, not an audit-A opportunity.
 
 ## Usage (from the [system chapter](../../chapters/system.md))
 

@@ -1,7 +1,7 @@
 # `CtcKuhnTucker` / `CtcKuhnTuckerLP` — first-order (KKT) contractors (NLP only)
 
 > ⚠ **Stale `LP_LIB=none` blocker note** (pre-`fa3b74bd7`) — corrected 2026-07-02: IBEX now builds
-> `-DLP_LIB=soplex` (`CMakeLists.txt:204`), so the "requires `-DLP_LIB`, which dReal's build does not
+> `-DLP_LIB=soplex` (the `ibex_external` `ExternalProject_Add` in `CMakeLists.txt`), so the "requires `-DLP_LIB`, which dReal's build does not
 > provide" reasoning below no longer holds (this contractor is still not wired into dReal, but the LP
 > half of the blocker is gone). See [`README.md`](../../README.md) top banner.
 
@@ -48,17 +48,19 @@ CtcKuhnTuckerLP(const NormalizedSystem& sys, bool reject_unbounded=true);
 Same interface and the same costly-build / fixed-box warnings, but it discharges
 the KKT system with **linear programming** ([`CtcPolytopeHull`](./CtcPolytopeHull.md))
 instead of Newton — the header notes this *"avoids pessimism due to
-preconditioning"*. Consequence: it **requires `-DLP_LIB`**, which dReal's build
-does not provide (`LP_LIB=none`), so it is doubly out of reach today.
+preconditioning"*. It needs an LP backend, which the fork build **now provides**
+(`-DLP_LIB=soplex`; see the top banner and the live [`CtcPolytopeHull`](./CtcPolytopeHull.md)
+path) — so the LP half of the old blocker is gone; only "dReal has no NLP objective
+to apply KKT to" keeps it unused.
 
 ## Audit angle
 
 If dReal ever adds rigorous OMT (sound global optimum bounds), the path is the
 IBEX `Optimizer` + `ExtendedSystem` + one of these KKT contractors — see
 [`../../chapters/optim.md`](../../chapters/optim.md). That is a **capability
-addition**, not a speedup for the existing refutation search, and the LP variant
-is additionally gated on reviving an LP backend (the same D2 decision as the
-[polytope hull](./CtcPolytopeHull.md)).
+addition**, not a speedup for the existing refutation search. The LP variant is no
+longer gated on the LP backend — SoPlex is linked (`LP_LIB=soplex`) and already
+drives the live [polytope hull](./CtcPolytopeHull.md) / `--polytope` path.
 
 Related: [`CtcPolytopeHull.md`](./CtcPolytopeHull.md),
 [`../../chapters/optim.md`](../../chapters/optim.md),

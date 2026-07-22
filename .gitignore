@@ -458,6 +458,10 @@ pyrightconfig.json
 pyvenv.cfg
 pip-selfcheck.json
 
+# Track the project's own checked-in tooling dir (overrides the venv-template
+# [Ss]cripts pattern above, which is meant for a virtualenv's Scripts/ dir).
+!/scripts/
+
 # End of https://www.toptal.com/developers/gitignore/api/python,macos,jetbrains,clion,venv,cmake,c++
 
 

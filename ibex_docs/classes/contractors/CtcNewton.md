@@ -30,8 +30,10 @@ static constexpr double default_ceil = 0.01;
 ## Cost caveat for dReal
 
 - Newton needs the **Jacobian/Hansen matrix** → it reintroduces exactly the
-  gradient/derivative build that fork patch #1 made *lazy/cold* because dReal's
-  HC4 path never used it. So `CtcNewton` is not free on top of the current build.
+  gradient/derivative build that the fork's lazy-init-gradient patch (`f5bf3361`;
+  see the catalog [`MIGRATION.md`](../../../../ibex-fork/MIGRATION.md)) made
+  *lazy/cold* because dReal's HC4 path never uses it. So `CtcNewton` is not free on
+  top of the current build.
 - It shines on **square, solution-isolating** subsystems near convergence — many
   dReal queries (especially ODE/`forall_t`) aren't that shape. Most useful as a
   *late* contractor (small boxes, `ceil` small) layered after HC4, not as a

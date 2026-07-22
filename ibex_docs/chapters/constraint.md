@@ -4,10 +4,14 @@ Source: [`constraint.rst.txt`](../../../ibex-docs/_sources/constraint.rst.txt) �
 `constraint.html`. A *numerical constraint* is `f(x) op 0` — a `Function` plus a
 comparison operator.
 
-> **dReal status:** uses `NumConstraint` to feed `SystemFactory`
-> (`contractor_ibex_polytope.cc`). The docs' own point — *"constraints do not play
-> an important role; IBEX is a **contractor** programming library"* — matches dReal:
-> it builds contractors, not constraints, for the HC4 path.
+> **dReal status:** `NumConstraint` is dReal's HC4 fwd-bwd atom container — one per
+> relational atom (`contractor_ibex_fwdbwd.cc`), whose `.f`/`right_hand_side()` feed
+> IBEX's HC4 backward directly (never wrapped in a standalone `CtcFwdBwd`). The
+> polytope/ACID/`forall` paths skip `NumConstraint` and feed `ExprCtr`s into a
+> `SystemFactory` via `add_ctr(ExprCtr)` (`contractor_ibex_polytope.cc`,
+> `..._acid.cc`, `..._forall.cc`). Either way the docs' own point — *"constraints do
+> not play an important role; IBEX is a **contractor** programming library"* — holds:
+> dReal wraps each atom into a contractor, never keeping a constraint as such.
 
 ## `NumConstraint`
 

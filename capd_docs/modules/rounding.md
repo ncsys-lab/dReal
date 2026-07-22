@@ -12,8 +12,8 @@ classes plus a rounding-mode enum, in `capd::rounding` (`rounding/DoubleRounding
   actually takes effect).
 - `class IntRounding` — no-op equivalent for integer types (all integer ops are exact).
 - `enum RoundingMode { RoundUnknown = -1, RoundNearest, RoundDown, RoundUp, RoundCut }`.
-- Typedef `capd::intervals::DoubleRounding` is the default `T_Rnd` for `double`/`long double`
-  intervals.
+- `capd::rounding::DoubleRounding` is the default `T_Rnd` template argument for `double`/`long
+  double` intervals (`intervals/DoubleInterval.h`, `LongDoubleInterval.h`, `lib.h`).
 
 ## dReal status
 **Used (underlying mechanism), but governed by dReal's own discipline.** dReal does NOT call

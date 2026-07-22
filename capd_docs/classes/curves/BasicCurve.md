@@ -1,7 +1,8 @@
 # capd::diffAlgebra::BasicCurve
 
 **What it is.** `BasicCurve<MatrixT>` is the raw coefficient *storage* for a parametric
-Taylor curve `c(t,x_0) = c(t,x̂_0) + ∂c/∂x(x−x̂_0) + smallRemainder(t,x)` (its own doc string).
+Taylor curve `c(t,x) = c(t,x₀) + (∂c/∂x)(x−x₀) + smallRemainder(t,x)` (its docstring; x₀ is
+the reference/center point).
 `Curve` (the evaluation class dReal uses) derives from it. Not used directly by dReal — it is
 the backing store behind `solver.getCurve()`.
 
@@ -23,8 +24,10 @@ const ScalarType& remainderCoefficient(size_type d, size_type k, size_type j) co
 // bulk accessors + begin*/end* iterators for each family:
 const VectorType* getCoefficientsAtCenter() const;  // ... getCoefficients, getRemainderCoefficients
 const MatrixType* getMatrixCoefficients() const;    // ... getMatrixRemainderCoefficients
-void setInitMatrix(const MatrixType&);  void setInitHessian(...);  void setInitJet(...);
 ```
+
+(The `setInitMatrix`/`setInitHessian`/`setInitJet` methods are NOT here — they are inherited
+from `CurveInterface` as throwing stubs and only implemented in `Curve`/`C2Curve`/`CnCurve`.)
 
 The separate **center / interval / remainder / matrix** stores are exactly the doubleton
 decomposition the centered evaluation in `Curve::operator()` reads from (`centerCoefficient`,

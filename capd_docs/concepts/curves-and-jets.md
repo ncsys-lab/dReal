@@ -30,7 +30,7 @@ exist only on the `isInterval=true` specialization. Signatures (all take local t
 | `derivative(h)` / `operator[](h)` | `MatrixType` (IMatrix) | The flow **Jacobian** `Jphi(h)·initMatrix` — `∂c/∂x_0`, the in-step variational/monodromy block. |
 | `oneStepDerivative(h)` | `MatrixType` | `Jphi(h)` incl. its remainder; `oneStepDerivativeOfNumericalMethod` excludes it. |
 | `setInitMatrix(M)` | `void` | Sets the left-multiplied initial matrix for `derivative`. |
-| `hessian(h)`, `jet(h)`, `eval(h, jet)` | — | C0 curve's are no-op/throwing stubs (inherited from `ParametricCurve`); **only meaningful on `C2Curve`/`CnCurve`**, which a C0 `IOdeSolver` does not produce. |
+| `hessian(h)`, `jet(h)`, `eval(h, jet)` | — | on the C0 curve all three **throw** `std::logic_error` (inherited abstract stubs, `ParametricCurve.h:53-62`); **only meaningful on `C2Curve`/`CnCurve`**, which a C0 `IOdeSolver` does not produce. |
 
 ## How dReal uses them, and the lever
 
@@ -49,8 +49,8 @@ curve. The remaining unused levers are *structural* (the C1 `derivative`/monodro
 that beats the current intersection for the C0 value range.
 
 **dReal status.** `operator()` and `timeDerivative` used; `valueAtCenter`/`remainder`/
-`getCenter`/`derivative`/`oneStepDerivative` unused; `hessian`/`jet`/`eval` no-ops on the C0
-curve. See `dreal-capd-usage.md`.
+`getCenter`/`derivative`/`oneStepDerivative` unused; `hessian`/`jet`/`eval` throw on the C0
+curve (inherited abstract stubs). See `dreal-capd-usage.md`.
 
 **Source.** [Curve.html](../../../CAPD/docs/html/classcapd_1_1diffAlgebra_1_1Curve.html),
 [odesvar_rigorous.html](../../../CAPD/docs/html/odesvar_rigorous.html)

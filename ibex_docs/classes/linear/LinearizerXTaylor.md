@@ -1,9 +1,9 @@
 # `LinearizerXTaylor` — corner-based interval Taylor relaxation
 
-> ⚠ **Stale "dormant" status** (pre-`fa3b74bd7`) — corrected 2026-07-02: the polytope path this
-> linearizer feeds is **live** via `--polytope` now that IBEX builds `-DLP_LIB=soplex`
-> (`CMakeLists.txt:204`). The "`--polytope` off, `LP_LIB=none`, knobs unexposed/unexplored" note below
-> is superseded. See [`README.md`](../../README.md) top banner.
+> ✅ **Polytope path is SHIPPED** (was mislabeled "dormant" pre-`fa3b74bd7`; corrected 2026-07-02):
+> this linearizer feeds `--polytope`, which is live because IBEX builds `-DLP_LIB=soplex`
+> (`CMakeLists.txt`, `LP_LIB=soplex`). Any "`--polytope` off / `LP_LIB=none` / knobs
+> unexplored" text is WRONG. See [`README.md`](../../README.md) top banner.
 
 Header:
 [`ibex_LinearizerXTaylor.h`](../../../../ibex-fork/src/numeric/ibex_LinearizerXTaylor.h)
@@ -11,10 +11,12 @@ Header:
 dReal feeds to [`CtcPolytopeHull`](../contractors/CtcPolytopeHull.md) (Araya,
 Trombettoni, Neveu, CPAIOR 2012).
 
-> **dReal status:** constructed at library defaults
-> (`contractor_ibex_polytope.cc:108`), but the polytope path is **dormant**
-> (`--polytope` off, `LP_LIB=none`). The knobs below are *unexposed and unexplored*
-> — relevant only if the polytope path is revived (audit D).
+> **dReal status:** constructed at `contractor_ibex_polytope.cc:108-109` with
+> `(RELAX, RANDOM_OPP, HANSEN)` — the header defaults, passed explicitly. The
+> polytope path is **live** (`--polytope`, default off; `LP_LIB=soplex`). The
+> `approx_mode`/`corner_policy`/`slope_formula` knobs are **not** exposed as CLI
+> flags — they sit at these defaults — so tuning them is the open lever, not
+> reviving a dead path.
 
 ## Constructor + the option menu (verbatim from the header)
 

@@ -1,15 +1,21 @@
 # Composition operators — `CtcCompo` / `CtcUnion` / `CtcFixPoint` / `CtcPropag`
 
-The "contractor programming" combinators (Chabert & Jaulin 2009). dReal does
-**not** use any of them — it hand-rolls the equivalents inside DPLL(T) so they can
-carry SMT bookkeeping (explanations, theory lemmas, the Box abstraction). Each is
-documented here as the *reference shape* for its dReal analog, with the one knob
-worth cross-checking flagged.
+The "contractor programming" combinators (Chabert & Jaulin 2009). In dReal's
+DPLL(T) search loop **none** of them is used — it hand-rolls the equivalents so
+they can carry SMT bookkeeping (explanations, theory lemmas, the Box abstraction).
+(`CtcCompo`/`CtcUnion` *do* appear outside that loop: the shipped
+`--forall-pre-prune` contractor materializes a `∀`-body with `ibex::CtcCompo` for
+`∧` and `ibex::CtcUnion` for `∨` — `contractor_ibex_forall.cc`.) Each is documented
+here as the *reference shape* for its dReal analog, with the one knob worth
+cross-checking flagged.
 
-> **dReal status (all four):** **not used.** Analogs:
+> **dReal status:** in the DPLL(T) search loop, **none used** — hand-rolled analogs
 > `CtcCompo`→`contractor_seq.cc`, `CtcUnion`→`contractor_join.cc`,
 > `CtcFixPoint`→`contractor_fixpoint.cc`,
-> `CtcPropag`→`contractor_worklist_fixpoint.cc`. See
+> `CtcPropag`→`contractor_worklist_fixpoint.cc`. **But `CtcCompo`/`CtcUnion` *are*
+> instantiated directly** to build the `∀`-body inside the shipped
+> `--forall-pre-prune` pre-pruner (`contractor_ibex_forall.cc`: `∧`→`CtcCompo`,
+> `∨`→`CtcUnion`); `CtcFixPoint`/`CtcPropag` are used nowhere. See
 > [`../../dreal-ibex-usage.md`](../../dreal-ibex-usage.md).
 
 ---
@@ -88,7 +94,7 @@ base class of [`CtcHC4`](./CtcHC4.md).
 
 ```cpp
 CtcPropag(const Array<Ctc>& cl, double ratio=default_ratio, bool incr=false);
-static constexpr double default_ratio = 0.01;   // ⚠ member-comment (line 84) says "set to 0.1"
+static constexpr double default_ratio = 0.01;   // ⚠ member doc-comment says "set to 0.1"
 ```
 
 | Param | Default | Meaning |

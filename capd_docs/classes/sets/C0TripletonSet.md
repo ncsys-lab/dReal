@@ -14,7 +14,7 @@ A C0 set whose **error term is split across two intersected frames**: `x + C*r0 
 **Used.** `--ode-c0-set tripleton` selects `C0TripletonSet<IMatrix, C0Rect2Policies>` (`dynset/typedefs.h:46`; `dreal-capd-usage.md`). Note: this is also CAPD's library-wide `DefaultC0Set` (`typedefs.h:50`) — i.e. CAPD considers the tripleton the sensible default, whereas dReal defaults to the cheaper doubleton.
 
 ## Why it might matter
-The **tightest of the three wired C0 sets without HO's double-integration cost** — the dual-frame intersection on the error term directly attacks wrapping from strong rotation / disparate eigenvalues. The audit question of whether dReal's default should move from doubleton to tripleton is exactly the doubleton-vs-tripleton tradeoff this class embodies; CAPD's own choice is a data point for "yes."
+The **tightest of the three wired C0 sets without HO's double-integration cost** — the dual-frame intersection on the error term directly attacks wrapping from strong rotation / disparate eigenvalues. The audit question of whether dReal's default should move from doubleton to tripleton is exactly the doubleton-vs-tripleton tradeoff this class embodies (`AUDIT.md` tier B1 — a rank-1 "easiest to try" lever); CAPD's own choice is a data point for "yes."
 
 ## Source
 [classcapd_1_1dynset_1_1C0TripletonSet.html](../../../../CAPD/docs/html/classcapd_1_1dynset_1_1C0TripletonSet.html)

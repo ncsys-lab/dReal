@@ -1,9 +1,9 @@
 # dReal's current IBEX usage — the audit's reference point
 
 > ⚠ **STALE on polytope/ACID/LP status (verified 2026-07-02)** — written pre-commit `fa3b74bd7`.
-> IBEX now builds `-DLP_LIB=soplex` (`CMakeLists.txt:204`), so "polytope path is dormant / built with
+> IBEX now builds `-DLP_LIB=soplex` (`CMakeLists.txt:189`), so "polytope path is dormant / built with
 > no LP solver / `LP_LIB=none`" is **wrong**: `--polytope`, `--acid`, `--3bcid`, `--forall-polytope`
-> are all **live** opt-in contractors (default off; `--acid`/`--3bcid` throw under `--jobs>1`). Only
+> are all **live** opt-in contractors (default off; `--acid`/`--3bcid` run under `--jobs>1` via a per-worker Mt cell). Only
 > the default run is HC4-only; **Newton** is the sole genuinely-absent contractor. Full correction +
 > anchors: [`README.md`](README.md) top banner. Trust source + `CMakeLists.txt`, not this page.
 
@@ -14,8 +14,8 @@ this. Verified by grepping `src/dreal/` and reading the contractor-binding layer
 > Soundness note (read `docs/soundness-vs-completeness.md`): IBEX is the
 > interval/contraction backend. A wrong-rounding or over-tight interval op here
 > is a **SOUNDNESS** hazard (false `unsat`); a looser contractor only costs
-> **COMPLETENESS** (missed refutation). The fork's gaol patches (#8, #12) and
-> dReal's `UpwardRoundingScope` exist precisely to protect soundness.
+> **COMPLETENESS** (missed refutation). The fork's soundness patches (#8/#12 gaol,
+> #13 atan2) and dReal's `UpwardRoundingScope` exist precisely to protect soundness.
 
 ## The thin slice dReal binds
 
@@ -36,11 +36,11 @@ No corner-policy / slope-formula tuning is exposed.
 **HC4 is dReal's only *default* IBEX contractor**, but `--polytope` (and the
 shaving contractors `--acid`/`--3bcid`) are functional escape hatches:
 - `config.use_polytope_` and `use_polytope_in_forall_` default to **`false`**
-  (`config.h:325-326`); the `--polytope` / `--forall-polytope` flags
+  (`config.h:330-331`); the `--polytope` / `--forall-polytope` flags
   (`dreal_main.cc:169,175`) must be passed to wire `ContractorIbexPolytope` into
   `generic_contractor_generator.cc:61-122`.
 - **Since commit `fa3b74bd7`, dReal builds IBEX with `-DLP_LIB=soplex`**
-  (`CMakeLists.txt:204`; vendored SoPlex 4.0.2, `libsoplex.a` linked at `:213`).
+  (`CMakeLists.txt:189`; vendored SoPlex 4.0.2, `libsoplex.a` linked at `:224`).
 
 `CtcPolytopeHull`'s header requires *"ibex installed with a LP solver
 (`-DLP_LIB`)"* — which is now satisfied. So passing `--polytope` **runs the real
@@ -70,8 +70,12 @@ contractor (ACID/3BCID/Newton) into dReal's existing loop" is.
 
 ## What dReal does NOT touch (the opportunity + the correctly-ignored)
 
-- **Unused atomic contractors** → opportunity: `Ctc3BCid`, `CtcAcid` (shaving /
-  constructive disjunction), `CtcNewton` (interval Newton), `CtcInverse`.
+- **Shaving contractors** `CtcAcid` / `Ctc3BCid` (shaving / constructive disjunction) are
+  **shipped** as opt-in `--acid` / `--3bcid` (`make_contractor_ibex_acid` over the assertion
+  system, `theory_solver.cc:240-244`; `contractor_ibex_acid.{cc,h}`; default OFF, parallel-safe
+  under `--jobs>1` via a per-worker `ContractorIbexAcidMt` cell, `contractor.cc:215-217`).
+  **Genuinely unused** atomic contractors (still opportunity): `CtcNewton`
+  (interval Newton), `CtcInverse`.
 - **Unavailable** → `LinearizerAffine2` / affine arithmetic: **not in the fork**
   (it lives in the separate `ibex-affine` plugin, which dReal does not build —
   verified: no `*affine*` source in the fork). Any affine-relaxation idea is a
@@ -81,9 +85,9 @@ contractor (ACID/3BCID/Newton) into dReal's existing loop" is.
   `Set`/paving, the Minibex parser, the COV file format, bisectors + cell buffers
   (dReal branches inside DPLL(T)).
 
-## The 12 fork patches = dReal's IBEX divergence
+## The fork patches = dReal's IBEX divergence
 
-`../ibex-fork/MIGRATION.md` is the catalog. Cross-reference before proposing
+`../ibex-fork/MIGRATION.md` is the live catalog (de-numberized — don't hardcode a count). Cross-reference before proposing
 anything in the same area — several "obvious" levers are **already pulled**, and
 the patches' profiling numbers tell you where the hot path actually is.
 
@@ -101,9 +105,11 @@ the patches' profiling numbers tell you where the hot path actually is.
 | 10 | `3902fa35` | batch the nearest-rounding window in transcendentals | gaol rounding | halves FPU mode toggles per transcendental |
 | 11 | `cc6fb001` | empty domains via **return-status, not exception** | HC4 | `__cxa_throw` was up to **~27%** CPU on throw-dense (UNSAT) benches — eliminated |
 | 12 | `9500de6b` | `underflow_saturate` backward targets (dreal/dreal4#321) | gaol arith | subnormal-band backward ops were false-`unsat` — **soundness fix** (accepted δ-completeness tradeoff) |
+| 13 | `a507cd10` | guard infinite `x` endpoints in forward `atan2` straddle branch (dreal/dreal4#258) | arith (`ibex_Interval.h`) | `atan2([3,3],[−∞,∞])` collapsed to empty → **false-`unsat` SOUNDNESS fix** (in-pin at `e054af7b`) |
 
 **Reading for the audit:** patches 1,2,5,6,7,11 are all on the `Function`/HC4
 backward path — that path is heavily profiled and tuned. Patches 8,9,10,12 are on
-gaol interval arithmetic (rounding + soundness). So the *micro*-optimization
-budget of the existing path is largely spent; the remaining leverage is
-**algorithmic** (contractors dReal doesn't run yet) — see [AUDIT.md](AUDIT.md).
+gaol interval arithmetic (rounding + soundness), and #13 is an `ibex_Interval.h`
+arithmetic soundness fix. So the *micro*-optimization budget of the existing path
+is largely spent; the remaining leverage is **algorithmic** — Newton is unshipped,
+ACID/3BCID now opt-in (`--acid`/`--3bcid`) — see [AUDIT.md](AUDIT.md).

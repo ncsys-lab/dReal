@@ -15,7 +15,7 @@ page). This is the catch-all for any class without a rich node under
   `solver`, `optim`, `loup`, `strategy` (search), `cell`, `bisector`, `set`,
   `predicate` (separators), `parser`, `combinatorial`. See
   [`../dreal-ibex-usage.md`](../dreal-ibex-usage.md).
-- Regenerate with `/tmp/ibex_harvest.py` (walks `../ibex-fork/src/*/ibex_*.h`).
+- Regenerate with `python3 scripts/harvest_class_briefs.py --ibex` (walks `../ibex-fork/src/*/ibex_*.h`).
 
 <!-- BODY BELOW IS AUTO-HARVESTED -->
 

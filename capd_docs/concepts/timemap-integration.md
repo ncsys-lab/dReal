@@ -35,7 +35,13 @@ solution-curve object and **all variational `derivative`/`hessian`/`jet` overloa
 - The `MatrixType& derivative` overload is the **drop-in monodromy** route: one extra arg to
   the same `timeMap(...)` call yields ∂φ/∂x₀, enabling interval-Newton/mean-value contraction
   on the initial box (backward narrowing) that ibex HC4 cannot do from C0 slice values alone.
-  Requires switching the solver to `IC2OdeSolver`/`ICnOdeSolver` and a C1+ set.
+  Needs only a **C1 set** (e.g. `C1Rect2Set`) fed to the *existing* `ITimeMap` — `IOdeSolver`
+  (`= OdeSolver<IMap>`, a `C1DynSys`, `OdeSolver.h:39`) already integrates the first-order
+  variational equation, so **no solver change**; CAPD's own worked example
+  (`odesvar_rigorous.html`) drives the monodromy with plain `IOdeSolver` + `ITimeMap` +
+  `C1Rect2Set`. `IC2OdeSolver`/`ICnOdeSolver` (via `IC2TimeMap`/`ICnTimeMap`,
+  `poincare/typedefs.h:58-59`) are needed only for the 2nd-order `HessianType` and Cn
+  `JetType` overloads, not the monodromy. See `variational-equations.md`.
 - `SolutionCurve` gives O(1) re-evaluation at arbitrary sub-times — dReal currently re-derives
   per-slice from `getCurve()` each step, which is equivalent but the curve object could
   simplify the windowed gate-state evaluation.

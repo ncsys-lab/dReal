@@ -49,8 +49,10 @@ from drifting. All `Factor*` variants trigger when `size(r) > factor · size(r0)
 | `InvBByCFactorReorganization` | "Factor based reorganization **for C1 sets**" (`InvBByCFactorReorganization.h`) | the C1-part analogue |
 
 (`FactorPolicy` = base holding the `factor`; the **factor itself is a hidden scalar
-knob** — `dynset_reorganizedset.html` notes small initial sets benefit "a lot" from
-tuning it, but it is not exposed by dReal.)
+knob** — `dynset_module.html` says reorganization "can improve result a lot" for small
+initial sets [the doc's advice is to use reorganizing sets, which the pinned build
+already does; that the *factor value* is a tunable lever is my inference], and it is
+not exposed by dReal.)
 
 ## dReal status
 **Hard-wired, unexposed.** All three `--ode-c0-set` sets bind
@@ -62,9 +64,10 @@ fixed — none is a flag.
 - **`SelectiveQRWithPivoting`** is a near-free speed win: same enclosure as
   `FullQR` on a well-conditioned frame, less QR work (`QRPolicy.h:172`). It is the
   policy-level analogue of "don't pay for orthogonalization you don't need."
-- **The reorganization `factor`** is a tightness/speed dial that is currently a
-  hidden constant; `dynset_reorganizedset.html` says it matters "a lot" for small
-  initial sets (which is exactly dReal's regime — narrow ICP boxes).
+- **The reorganization `factor`** is a plausible tightness/speed dial, currently a
+  hidden constant. `dynset_module.html` says reorganization "can improve result a lot"
+  for small initial sets — exactly dReal's regime (narrow ICP boxes) — though the doc
+  recommends reorganizing *sets*, not a factor value (the factor lever is my inference).
 - Exposing a `--ode-set-policy` (QR × reorg × factor) would make this whole menu
   reachable for per-family tuning, the same way `--ode-c0-set` exposes geometry.
 

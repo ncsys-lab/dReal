@@ -27,13 +27,16 @@ elementary transcendental functions. With `CAPD_INTERVAL_TYPE=NATIVE`, dReal use
 **Used (core).** dReal consumes `capd::interval` indirectly through `IVector`/`IMap` enclosures
 produced by the CAPD ODE solver; see `dreal-capd-usage.md` (build flag `CAPD_INTERVAL_TYPE=NATIVE`).
 dReal does its own contraction in ibex, so most of these free functions are exercised inside CAPD's
-Taylor stepper rather than called directly by dReal.
+Taylor stepper rather than called directly by dReal. In particular the `atan2` above is CAPD's
+stepper-internal enclosure; the atan2 *contractor* dReal drives — and the unbounded-argument
+false-`unsat` fix (dreal/dreal4#258, ibex-fork `a507cd10`, in-pin `e054af7b`) — live in IBEX, not
+this module (SOUNDNESS: it had asserted φ T-unsatisfiable on a T-satisfiable φ; now fixed).
 
 ## Why it might matter
 The string constructor `DInterval("2.5","3.0")` is the rigorous way to enclose a
 non-representable decimal — relevant to dReal's `to_capd_string` feed-faithfulness discipline
 (`docs/decisions.md` "ODE feed faithfulness"). The non-rigorous `operator<<` enclosure caveat
-(line 161 of the example page) is exactly the soundness trap dReal's 17-sig-fig printing avoids.
+is exactly the soundness trap dReal's 17-sig-fig printing avoids.
 
 ## Source
 [group__intervals.html](../../../CAPD/docs/html/group__intervals.html)

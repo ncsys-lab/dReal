@@ -1,16 +1,12 @@
-# AUDIT.md — where dReal could leverage IBEX better
+# AUDIT.md — dReal's IBEX leverage: shipped vs. still-open
 
-> ⚠ **PARTLY STALE (verified 2026-07-02)** — written pre-commit `fa3b74bd7`. IBEX now builds
-> `-DLP_LIB=soplex` (`CMakeLists.txt:204`), so the "revive the polytope hull / `LP_LIB=none` /
-> dormant" opportunities below (D2, tier-6, etc.) are **already done**: `--polytope`, `--acid`,
-> `--3bcid`, `--forall-polytope` are all **live** opt-in contractors (default off; `--acid`/`--3bcid`
-> throw under `--jobs>1`). Only the default run is HC4-only; **Newton** is the sole genuinely-absent
-> contractor. Full correction + source anchors: [`README.md`](README.md) top banner. Ground truth is
-> source + `CMakeLists.txt`, not this audit.
-
-The payoff of the crawl: prioritized, header-grounded opportunities for dReal to
-use IBEX more, each cross-referenced to current usage
-([`dreal-ibex-usage.md`](dreal-ibex-usage.md)) and the nearest fork patch.
+The payoff of the crawl: header-grounded opportunities for dReal to use IBEX more,
+each cross-referenced to current usage
+([`dreal-ibex-usage.md`](dreal-ibex-usage.md)) and the nearest fork patch. **Most of
+the original audit is now shipped** — the headline (`CtcAcid` shaving) and the
+polytope hull both landed as opt-in flags. This file is now organized shipped-first,
+with the still-open items (chiefly **Newton**) called out as such. Ground truth is
+source + `CMakeLists.txt`.
 
 > **Companion deep-dives (second pass):** the full contractor catalog with
 > strengths/weaknesses is
@@ -19,26 +15,38 @@ use IBEX more, each cross-referenced to current usage
 > and the "does dReal needlessly reimplement IbexSolve?" question is answered
 > (with file:line on both sides) in
 > [`ARCHITECTURE-COMPARISON.md`](ARCHITECTURE-COMPARISON.md). Their net conclusion
-> *reinforces* this audit: the search loop is correctly dReal's own, and the one
-> real loop-level gap is precisely tier A below.
+> *reinforced* this audit: the search loop is correctly dReal's own, and the one
+> real loop-level gap was precisely tier A — now shipped (see below).
 >
 > **Second audit section — nested quantifiers:** for ∃∀ / `∀∃∃∀` queries over
 > high-dimensional transcendental constraints (a distinct workload), see the focused
 > **[`AUDIT-QUANTIFIERS.md`](AUDIT-QUANTIFIERS.md)** — how IBEX's *composable*
-> `CtcForAll`/`CtcExist` contractors can pre-prune dReal's CEGIS loop and provide a
+> `CtcForAll`/`CtcExist` contractors pre-prune dReal's CEGIS loop and provide a
 > sound skeleton for the deeper alternations dReal currently crashes on. (Its top
-> lever, Q3, is tier A again — a strong inner contractor compounds super-linearly when
-> the cost is exponential in the quantified dimension.)
+> lever, Q1's `CtcForAll` pre-pruner, **shipped** as `--forall-pre-prune` — a strong
+> inner contractor compounds super-linearly when the cost is exponential in the
+> quantified dimension.)
+>
+> **Third section — levers *beyond* what mainline IBEX ships:** affine arithmetic,
+> OBBT, monotonicity-based `CtcMohc`, DynIbex validated-RK ODE, and alt-integrators
+> are ranked by *(integration cost × completeness win)* with source-grounded
+> feasibility sketches in the companion **[`RELATED-WORK.md`](RELATED-WORK.md)**. This
+> AUDIT covers what IBEX *already ships* (the shipped contractors + the sole absent
+> mainline one, **Newton**); RELATED-WORK covers what would need porting.
 
-**The one-paragraph framing (the crawl's main finding).** By default, dReal's
-*only active IBEX contractor is HC4* (`Function::backward`). The polytope/X-Taylor
-path is present but **dormant** (`--polytope` off, `LP_LIB=none`). And the
-micro-optimization budget of the HC4 path is **already spent** — fork patches
-already inlined the rounding-mode toggles (#9, 23–44%), batched the rounding
-windows (#10), eliminated the exception unwinding (#11, ~27%), and made the unused
-gradient lazy (#1). So the remaining leverage is **algorithmic**: the strong
-atomic contractors IBEX ships and dReal doesn't run — above all **ACID** (which
-IBEX's own solver enables by default). That is the headline.
+**The one-paragraph framing (the crawl's main finding, now largely realized).** By
+default, dReal's *only active IBEX contractor is HC4* (`Function::backward`). The
+micro-optimization budget of that HC4 path is **already spent** — fork patches
+inlined the rounding-mode toggles (23–44%), batched the rounding windows, eliminated
+the exception unwinding (~27%), and made the unused gradient lazy (see
+`../../ibex-fork/MIGRATION.md`). So the remaining leverage was **algorithmic**: the
+strong atomic contractors IBEX ships and dReal didn't run — above all **ACID** (which
+IBEX's own solver enables by default). **That headline is now shipped** as opt-in
+`--acid`/`--3bcid` (`theory_solver.cc:244`), alongside the LP-relaxation polytope hull
+(`--polytope`, over `LP_LIB=soplex`) and the `--forall-pre-prune` CtcForAll pre-pruner.
+All three are default-off (soundness-neutral opt-ins) and run under `--jobs>1` via a
+per-worker `*Mt` cell. **Newton** is the sole contractor IBEX ships that dReal still
+has no path to.
 
 > **Soundness framing (mandatory, per project `CLAUDE.md`):** every item here is a
 > **COMPLETENESS** lever (tighter contraction → fewer search nodes / more
@@ -50,51 +58,63 @@ IBEX's own solver enables by default). That is the headline.
 > speedup," not "wrong answer." SAT↔UNSAT *verdict* flips on benchmarks would
 > signal an **integration bug**, not an expected outcome → escalate per `/benchmark`.
 
-## Consolidated ranking (try-order)
+## Shipped (was the audit's headline try-order)
+
+| Item | Tier | Flag | Wired at | Tune with |
+|---|---|---|---|---|
+| **`CtcAcid` shaving on the HC4 path** | A | `--acid` | `theory_solver.cc:244`; `contractor_ibex_acid.cc:110` | `--acid-ct-ratio` (default 0.002), `--s3b` (default 10) |
+| `Ctc3BCid` (fixed-parameter sibling) | A | `--3bcid` (mut. excl. with `--acid`) | `theory_solver.cc:244`; `contractor_ibex_acid.cc:114` | `--s3b` (best 5–200) |
+| LP-relaxation **polytope hull** | D | `--polytope` / `--forall-polytope` | `theory_solver.cc:237`; `contractor_ibex_polytope.cc:108` | corners/slope hardcoded RANDOM_OPP/HANSEN (no flag) |
+| `CtcForAll` **pre-pruner** for ∃∀ | Q1 | `--forall-pre-prune` | `contractor_ibex_forall.cc` | `--forall-pre-prune-prec` (default 0.5) |
+
+All default-off, soundness-neutral, `--jobs>1`-safe (per-worker `*Mt` cell). Next step
+for each is its "Validate with" column below — none has a committed A/B yet.
+
+## Still-open try-order
 
 | Try # | Item | Tier | Ease (1=hard,5=easy) | Likelihood it helps | Value if it does | Validate with |
 |---|---|---|---|---|---|---|
-| **1** | **`CtcAcid` shaving on the HC4 path** | A | 2 | **high** (IBEX's default) | **high** | `/benchmark` odeexpr (43 NRA) + ODE families; watch PAR2, no verdict flips |
-| 2 | `Ctc3BCid` (fixed) + `s3b` sweep | A | 3 | high | high | OFAT sweep of `s3b`∈{5,10,20,50}; feeds #1's adaptivity sanity-check |
-| 3 | Cross-check dReal's own fixpoint stop-ratio vs IBEX (0.01/0.1) | B | 4 | low–med | low–med | A/B the worklist ratio; likely small (micro-opt spent) |
-| 4 | Fork-patch **integration guard** checklist | C | 5 | n/a (correctness) | safety | unit tests: callback fires, `is_empty()` path, lemma precision |
-| 5 | `CtcNewton` as a *late* (small-box) contractor | D | 3 | low–med | med (near solutions) | enable with small `ceil`; odeexpr; mind gradient cost (#1) |
-| 6 | **Revive polytope hull** (`LP_LIB`→soplex/clp, `--polytope` on) + tune X-Taylor | D | 2 | unknown | med | rebuild IBEX w/ LP; benchmark; then sweep `corners`/`slope` |
-| 7 | `LinearizerAffine2` (build `ibex-affine` plugin) | D | 1 | unknown | med | requires plugin integration first |
+| 1 | **Tune the shipped shaving** — `--acid-ct-ratio`/`--s3b` sweep on the odeexpr NRA family | A | 4 | high | high | OFAT sweep `s3b`∈{5,10,20,50}, `ct_ratio`∈{0.001,0.002,0.005}; PAR2, no verdict flips |
+| 2 | Cross-check dReal's own fixpoint stop-ratio vs IBEX (0.01/0.1) | B | 4 | low–med | low–med | A/B the worklist ratio; likely small (micro-opt spent) |
+| 3 | `CtcNewton` as a *late* (small-box) contractor | D | 3 | low–med | med (near solutions) | enable with small `ceil`; odeexpr; mind gradient cost (fork lazy-gradient patch) |
+| 4 | Expose polytope `corners`/`slope` as flags + sweep | D | 3 | unknown | med | once `--polytope` shows a win on some family; else leave hardcoded |
+| 5 | `LinearizerAffine2` (affine plugin port) | D | 1 | unknown | med | plugin port off `origin/dev_affine_arith` first — sketch + soundness obligation in [`RELATED-WORK.md`](RELATED-WORK.md) |
 
-## Tier A — strong contraction add-ons (the headline)
+## Tier A — strong contraction add-ons (the headline — SHIPPED)
 
-### A1. `CtcAcid` — adaptive 3BCID shaving on top of HC4  ⭐
+### A1. `CtcAcid` — adaptive 3BCID shaving on top of HC4  ⭐ SHIPPED
 - **What it buys:** ACID shaves variable bounds and constructive-disjoins the
   remainder, *adaptively* choosing how many variables to shave per box. It is the
   single strongest general-purpose contractor IBEX ships.
-- **Hard evidence (the strongest single argument in this audit):** IBEX's own
-  `DefaultSolver` composes, in order, `CtcHC4(sys, 0.01)` **then**
-  `CtcAcid(sys, CtcHC4(sys, 0.1))` (`ibex-fork/src/solver/ibex_DefaultSolver.cpp:82-85`,
-  verified). dReal composes **HC4 fwd-bwd only** (`src/dreal/solver/theory_solver.cc:197`).
-  So dReal runs exactly the first half of IBEX's default contractor stack and omits
-  the second — ACID is not an exotic add-on, it's the piece IBEX considers standard.
-  Full cross-side analysis: [ARCHITECTURE-COMPARISON.md](ARCHITECTURE-COMPARISON.md)
-  (which confirms this is the *only* loop-level "leftover" — see its verdict).
-- **dReal status:** ⚪ not run. Node: [`classes/contractors/CtcAcid.md`](classes/contractors/CtcAcid.md).
-- **How:** in `generic_contractor_generator.cc`, after building the per-constraint
-  HC4 contractors, assemble an `ibex::System` over the Box variables (dReal already
-  does this for the dormant polytope path — reuse it) and wrap the HC4 contractor
-  in `CtcAcid(sys, hc4_ctc)`. Knobs: `ct_ratio=0.002`, `s3b=10` (see KNOBS §3).
+- **Hard evidence (why it was the headline):** IBEX's own `DefaultSolver` composes,
+  in order, `CtcHC4(sys, 0.01)` **then** `CtcAcid(sys, CtcHC4(sys, 0.1, true))`
+  (`ibex-fork/src/solver/ibex_DefaultSolver.cpp:82-85`, verified). dReal's default
+  composes **HC4 fwd-bwd only** (`src/dreal/solver/theory_solver.cc:207`) — the first
+  half of IBEX's default stack. ACID is not an exotic add-on, it's the piece IBEX
+  considers standard. Full cross-side analysis:
+  [ARCHITECTURE-COMPARISON.md](ARCHITECTURE-COMPARISON.md).
+- **dReal status:** 🟢 **shipped, opt-in `--acid`.** Assembled at
+  `theory_solver.cc:244`; `ibex::CtcAcid(system, hc4_sub, /*optim=*/false, s3b, scid, var_min_width, ct_ratio)`
+  (`scid`/`var_min_width` passed at IBEX defaults — KNOBS §3) built at
+  `contractor_ibex_acid.cc:110`, wrapping dReal's callback-bearing HC4 sub
+  (so theory lemmas survive — the C1 checklist was met at build time). Per-worker
+  `ContractorIbexAcidMt` under `--jobs>1` (`contractor.cc:215`). Node:
+  [`classes/contractors/CtcAcid.md`](classes/contractors/CtcAcid.md).
+- **Remaining work:** tune `--acid-ct-ratio` (default 0.002) and `--s3b` (default 10)
+  — see the still-open try-order #1 and KNOBS §3.
 - **Cost/risk:** per-box cost rises (ACID calls HC4 many times); net win depends on
-  search-node reduction outweighing it. The HC4 call is already cheap (#1,#11).
-  The sub-contractor must be dReal's **callback-bearing** fwd-bwd (not stock
-  `CtcFwdBwd`) so theory lemmas survive — see C1.
+  search-node reduction outweighing it. Soundness-neutral — a COMPLETENESS lever.
 - **Validate:** `/benchmark` odeexpr first (pure NRA, isolates the contractor),
   then ODE families. PAR2 < baseline = win; any SAT↔UNSAT flip = integration bug.
 
-### A2. `Ctc3BCid` — the fixed-parameter sibling
-- **What:** same shaving without ACID's adaptivity; you set `s3b`/`scid`/`vhandled`
-  directly. Node: [`Ctc3BCid.md`](classes/contractors/Ctc3BCid.md).
-- **Why bother if A1 exists:** it's the clean experiment to (a) confirm shaving
-  helps dReal's instances at all and (b) find a good `s3b` (the header's
-  "tune-first" param, best 5–200) before trusting ACID's auto-tuning. Cheaper to
-  reason about; a good first probe.
+### A2. `Ctc3BCid` — the fixed-parameter sibling  SHIPPED
+- **What:** same shaving without ACID's adaptivity; you set `s3b` directly.
+  🟢 **shipped, opt-in `--3bcid`** (mutually exclusive with `--acid` —
+  `dreal_main.cc:687` throws if both set); `ibex::Ctc3BCid(hc4_sub, s3b)` at
+  `contractor_ibex_acid.cc:114`. Node: [`Ctc3BCid.md`](classes/contractors/Ctc3BCid.md).
+- **Why keep it beside A1:** the clean experiment to (a) confirm shaving helps dReal's
+  instances at all and (b) find a good `s3b` (the header's "tune-first" param, best
+  5–200) before trusting ACID's auto-tuning. Cheaper to reason about; a good first probe.
 
 ## Tier B — cheap tuning of the path dReal already uses
 ### B1. Fixpoint stop-ratio cross-check
@@ -106,31 +126,48 @@ KNOBS §2.
 
 ## Tier C — guards (correctness, not speed)
 ### C1. Fork-patch integration checklist for any borrowed contractor
-Before A1/A2/D ship, confirm the borrowed IBEX contractor:
-1. uses dReal's **callback-bearing** fwd-bwd as sub-contractor (lemma tracking,
+Met when A1/A2/polytope shipped; **re-apply for any future borrowed contractor**
+(e.g. Newton). The borrowed IBEX contractor must:
+1. use dReal's **callback-bearing** fwd-bwd as sub-contractor (lemma tracking,
    fork #2/#5/#6/#7) — not a fresh `CtcFwdBwd`;
-2. detects emptiness via `is_empty()` (return-status, fork #11) — not a caught
+2. detect emptiness via `is_empty()` (return-status, fork #11) — not a caught
    `EmptyBoxException`;
-3. runs under `UpwardRoundingScope` so gaol rounding stays sound (#8,#9,#10,#12);
-4. tolerates running inside DPLL(T) on transient literals (no global state that
-   leaks across a throw — see the `Bug002` SIGBUS class in dReal's own tests).
+3. run under `UpwardRoundingScope` so gaol rounding stays sound (#8,#9,#10,#12);
+4. tolerate running inside DPLL(T) on transient literals (no global state that
+   leaks across a throw — see the `Bug002` SIGBUS class in dReal's own tests);
+5. ship a per-worker `*Mt` cell (IBEX contractors hold mutable state) for `--jobs>1`.
 This is a **conscious checklist**, not a code change — it's where an integration
 silently degrades lemmas or soundness if skipped.
 
 ## Tier D — conditional / niche
-- **D1. `CtcNewton` late.** Interval-Newton on small, square, solution-isolating
-  subboxes (gate `ceil` small). Reintroduces the gradient build fork #1 made cold —
-  so only worth it where convergence-phase tightening pays. Many ODE/`forall_t`
-  queries aren't square. Node: [`CtcNewton.md`](classes/contractors/CtcNewton.md).
-- **D2. Revive the polytope hull.** Two coupled decisions: flip `LP_LIB` to
-  Soplex/CLP (re-adding a dep the team dropped) **and** turn on `--polytope`; then
-  the unexplored X-Taylor knobs (`corners`, `slope` — KNOBS §4) become tunable.
-  Uncertain payoff on dReal's instances; medium effort (build change). Nodes:
-  [`CtcPolytopeHull.md`](classes/contractors/CtcPolytopeHull.md),
+- **D1. `CtcNewton` late — STILL OPEN (the sole absent contractor).** Interval-Newton
+  on small, square, solution-isolating subboxes (gate `ceil` small). Reintroduces the
+  gradient build the fork's lazy-gradient patch made cold — so only worth it where
+  convergence-phase tightening pays. Many ODE/`forall_t` queries aren't square.
+  **`ibex::CtcNewton` already compiles and is installed** in the built fork
+  (`ibex-fork/src/contractor/ibex_CtcNewton.{cpp,h}`, in `src/contractor/CMakeLists.txt`;
+  header at `gcc_build/ibex-install/include/ibex/ibex_CtcNewton.h`) — so the only missing
+  piece is a dReal contractor cell + flag over locally-square subsystems (the C1 checklist
+  in Tier C applies), not an upstream build. [`RELATED-WORK.md`](RELATED-WORK.md) ranks this
+  its **#1** lever (effort S, no soundness risk). Node:
+  [`CtcNewton.md`](classes/contractors/CtcNewton.md).
+- **D2. Polytope hull — SHIPPED.** `LP_LIB=soplex` (`CMakeLists.txt:189`, vendored
+  SoPlex 4.0.2) and `--polytope`/`--forall-polytope` are live (`theory_solver.cc:237`;
+  `ibex::CtcPolytopeHull(LinearizerXTaylor(system, RELAX, RANDOM_OPP, HANSEN))` at
+  `contractor_ibex_polytope.cc:108`). The X-Taylor `corners`/`slope` knobs are
+  hardcoded at those IBEX defaults, not yet exposed as flags (still-open try-order #4;
+  KNOBS §4). `--forall-polytope` has *mixed* measured perf (`exists_forall_perf.md`).
+  Nodes: [`CtcPolytopeHull.md`](classes/contractors/CtcPolytopeHull.md),
   [`LinearizerXTaylor.md`](classes/linear/LinearizerXTaylor.md).
-- **D3. Affine linearization (`LinearizerAffine2`).** Tighter relaxation than
-  X-Taylor for some systems — but **not in the fork** (it's the `ibex-affine`
-  plugin). Build-integration task gated on D2 being worth it first.
+- **D3. Affine linearization (`LinearizerAffine2`) — full sketch in
+  [`RELATED-WORK.md`](RELATED-WORK.md).** A `Linearizer` drop-in beside `LinearizerXTaylor`
+  (byte-identical `linearize(const IntervalVector&, LPSolver&)` signature, verified) that
+  captures the first-order variable *correlations* an X-Taylor corner misses — but it lives
+  on the dead `origin/dev_affine_arith` branch (a ~12-file plugin port with API drift), and
+  its one soundness obligation is auditing the fAF2 error-free-transform rounding scope so
+  the accumulated `_err` stays an over-estimate. RELATED-WORK.md carries the source-grounded
+  sketch alongside the OBBT / `CtcMohc` / DynIbex beyond-mainline levers; probe only if
+  `--polytope` shows a win first.
 - **D4. `CtcInverse` / `CtcQInter`.** Inverse-image contraction and outlier-robust
   q-intersection — niche; no obvious dReal use shape.
 
@@ -160,11 +197,14 @@ the CAPD PDE/DAE notes:
 
 ## Honesty boundary (what's proven vs hypothesized)
 **Proven** (header/doc/code-verified): every default and option menu in
-[KNOBS.md](KNOBS.md); that ACID is IBEX's default contractor; that the polytope
-path is dormant (`--polytope` off + `LP_LIB=none`); that affine isn't in the fork;
-that the HC4 hot-path levers are already pulled (fork patches, with their measured
-%); the Tier-E "different problem shape" reasoning.
-**Hypothesized** (NOT yet measured — no benchmark was run for this audit): every
-*expected speedup*. The ranking orders items by plausibility + ease, not by
-evidence. Next step for any item is its "Validate with" column — start with A1 on
-the odeexpr family.
+[KNOBS.md](KNOBS.md); that ACID is IBEX's default contractor; that `--acid`/`--3bcid`/
+`--polytope`/`--forall-pre-prune` are shipped opt-in flags built at the cited
+`theory_solver.cc`/`contractor_ibex_*.cc` sites over `LP_LIB=soplex`; that Newton is
+the sole absent contractor; that affine isn't in the fork; that the HC4 hot-path
+levers are already pulled (fork patches, with their measured %); the Tier-E "different
+problem shape" reasoning.
+**Hypothesized** (NOT yet measured — no committed A/B for the shipped flags): every
+*expected speedup*. Shipping ≠ measured-win — each opt-in is default-off precisely
+because its benchmark payoff is unproven. Next step for any item is its "Validate
+with" column — start with the still-open try-order #1 (tune the shipped shaving) on
+the odeexpr NRA family.

@@ -22,7 +22,10 @@ Strategy classes (constructor defaults verified in header):
 - `IEncFoundStepControl(minStep = 1/1048576, stepFactor = 0.25)` — **default for `ICnOdeSolver`.**
   Picks `optStep = step/factor·1.5`, then shrinks ×0.8 until `solver.enclosure(t,x)` validates.
 - `FixedStepControl<ScalarType>` — user-fixed step.
-- `NoStepControl` / `NoStepControlInterface` — disabled (returns step 1; for maps).
+- `NoStepControl` / `NoStepControlInterface` — control disabled (fixed step): `computeNextTimeStep`
+  keeps the current step (`min(getStep(), maxStep)`), and the `StepControlInterface<NoStepControl,double>`
+  specialization no-ops the tolerance setters. Header frames it as "empty time step control for the
+  solutions to ODEs" (StepControl.h:172).
 
 `minStep` floor ≈ 9.54e-7; below it the solver gives up (throws).
 
@@ -33,6 +36,15 @@ Strategy classes (constructor defaults verified in header):
 `_terms`/`minStep` knobs are unexplored.
 
 ## Why it might matter
+- **The abs/rel tolerances dReal sets ARE this step-control's only knob.** The `epsilon` fed to
+  `computeNextStep` is `getEffectiveTolerance = max(absTol, relTol·‖coeff₀‖)`, where `‖coeff₀‖`
+  is the current state norm (0th Taylor coefficient; `StepControlInterface::getEffectiveTolerance`,
+  StepControl.h:119-126). So the adaptive step is `h ≈ min_i (ε/‖coeff_i‖)^{1/i}` over the last
+  `_terms` orders. dReal pins both `--ode-abs-tol`/`--ode-rel-tol` at 1e-10 (`kDefaultOdeAbsTol`/
+  `kDefaultOdeRelTol`, config.h) and never touches the policy object, so this is the *only*
+  step-control lever it currently exposes: loosening either tol raises ε → larger steps → faster
+  but looser per-step enclosures (COMPLETENESS lever, never soundness). `--ode-max-step` (default 0
+  = `m_maxStep` left at 1e100, fully adaptive) is the hard cap on the resulting `h`.
 - **`_terms = 1` is aggressive.** The header's own remark (on the analogous nonrigorous
   control) warns a single last-term predictor over-predicts when that coefficient is near zero;
   the nonrigorous default compensates with `_terms = 2`. dReal could pass

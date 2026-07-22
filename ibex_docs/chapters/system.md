@@ -5,11 +5,12 @@ Source: [`system.rst.txt`](../../../ibex-docs/_sources/system.rst.txt) ·
 optionally a goal + initial box. Many IBEX algorithms require a `System` (not a
 loose constraint array).
 
-> **dReal status:** uses `SystemFactory` + `System` to assemble the constraint set
-> for `CtcPolytopeHull` (`contractor_ibex_polytope.cc`). Does **not** use the goal,
+> **dReal status:** builds `SystemFactory` + `System` to assemble the constraint
+> set for `CtcPolytopeHull` (`contractor_ibex_polytope.cc`) **and** for the shipped
+> `CtcAcid`/`Ctc3BCid` shaving (`contractor_ibex_acid.cc` — the `System` supplies
+> the variable ordering `CtcAcid` needs). Does **not** use the goal,
 > `NormalizedSystem`, `ExtendedSystem`, or KKT machinery (those are for the IBEX
-> optimizer). A `System` is also the object `CtcAcid` needs for its variable
-> ordering — relevant to audit A.
+> optimizer).
 
 ## Fields
 

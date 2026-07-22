@@ -43,6 +43,14 @@ sign`. Division is generalized: `[2,3]/[-1,2]` is a union → `/` returns its hu
 > patches (#9 inline FPCR, #10 batched windows) make cheap. This is *the* reason
 > dReal's interval ops are sound only under `UpwardRoundingScope` (FE_UPWARD).
 
+> **atan2 unbounded-endpoint soundness** (fixed in-fork, `a507cd10`; dreal/dreal4#258):
+> forward `atan2(y,x)`'s x-straddles-zero branch divided by an infinite `x` endpoint
+> with no guard (its `y.ub()≤0` sibling had them), so `atan2([3,3],[−∞,∞])` collapsed
+> the forward image to the **empty set** → false `unsat` — **SOUNDNESS** (asserts
+> T-unsat on a T-sat φ). The fork guards ±∞ endpoints (x→+∞ contributes angle 0,
+> x→−∞ contributes π), matching the sibling branch; bounded args are bit-identical.
+> Any SMT-LIB2 generator emitting `arctan2` with an unbounded argument relied on this.
+
 ## Backward (relational) arithmetic — the HC4 atoms
 
 `bwd_add(y,x1,x2)`, `bwd_mul`, `bwd_sqr`, `bwd_pow`, `bwd_exp`, `bwd_log`,
