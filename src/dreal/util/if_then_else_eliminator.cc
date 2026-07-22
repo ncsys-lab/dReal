@@ -225,8 +225,7 @@ Expression IfThenElseEliminator::VisitMax(const Expression& e,
 
 Expression IfThenElseEliminator::VisitIfThenElse(const Expression& e,
                                                  const Formula& guard) {
-  static int counter{0};
-  const Variable new_var{"ITE" + to_string(counter++),  // lint: allow int
+  const Variable new_var{"ITE" + to_string(counter_++),  // lint: allow int
                          Variable::Type::CONTINUOUS};
   ite_variables_.insert(new_var);
   const Formula c{Visit(get_conditional_formula(e), guard)};
@@ -345,8 +344,9 @@ Formula IfThenElseEliminator::VisitForall(const Formula& f, const Formula&) {
   // variables). In this way, we can use the existing ITE-elim routine.
   Variables quantified_variables{get_quantified_variables(f)};
   const Formula& quantified_formula{get_quantified_formula(f)};
-  IfThenElseEliminator ite_eliminator_forall;
+  IfThenElseEliminator ite_eliminator_forall{counter_};
   const Formula eliminated{ite_eliminator_forall.Process(!quantified_formula)};
+  counter_ = ite_eliminator_forall.counter_;
   quantified_variables.insert(ite_eliminator_forall.variables().begin(),
                               ite_eliminator_forall.variables().end());
   return forall(quantified_variables, Nnfizer{}.Convert(!eliminated));
