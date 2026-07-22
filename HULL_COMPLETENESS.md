@@ -305,6 +305,14 @@ order-20/hull-16 and the current order-12/hull-4 on speed.
 
 ## Current state / decision
 
+> **SUPERSEDED (2026-06) — see the Resolution section at the top.** This section
+> and everything below it are the pre-fix snapshot, kept for the historical
+> record. The centered-in-time (mean-value) range fix shipped: the ~4× looseness
+> defect is closed, the F1 case refutes at the default hull-grid, and hull-grid
+> is no longer completeness-load-bearing. The width-based sub-slicing sketched
+> below was **not** needed and was not built. The only remaining follow-up is
+> the optional knob re-tune on the tightened tube (tracked in OPTIMIZATION_LOG.md).
+
 After the soundness-vs-completeness distinction was clarified (this is a
 **completeness** tradeoff — missed refutation / false-`delta-sat` — never a
 false-`unsat`), the owner **accepted the tradeoff** and the faster default was

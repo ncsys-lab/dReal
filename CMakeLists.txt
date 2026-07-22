@@ -145,24 +145,11 @@ target_link_libraries(dreal4_cmake PUBLIC "${CADICAL_LIB}")
 # ---------------------------------------------------------------------------
 # IBEX via ExternalProject — source-built from the dReal team's fork
 #
-# The fork carries eleven surgical patches on top of ibex-team/ibex-lib@master:
-#   1. function: lazy-init gradient (perf-critical, ~65% of Function::init)
-#   2. Function::backward callback (perf-critical, eliminates HC4 snapshot)
-#   3. parser.yc namespace-qualify apply() (Linux/clang ADL fix)
-#   4. mathlib aarch64/arm64 Linux support
-#   5. fire backward callback for non-scalar args (soundness: callback audit)
-#   6. copy old-value in backward callback to avoid alias (soundness: callback audit)
-#   7. HC4Revise: report partial narrowings on EmptyBoxException (soundness: callback audit)
-#   8. gaol: Interval::log/pow soundness gaps (strict-< for ub==0, fractional pow)
-#   9. gaol: inline aarch64 FPCR rounding fast-path (perf: ARM64 transcendental fesetround)
-#  10. gaol: batch the nearest-rounding region in transcendentals (perf: ~8% on odeexpr)
-#  11. function: empty domains via return-status instead of EmptyBoxException
-#      (perf: removes __cxa_throw unwinding from the HC4 backward hot path)
-#  12. gaol: underflow_saturate backward targets (soundness: dreal/dreal4#321 —
-#      bwd_pow/exp/sqr/mul/div no longer false-unsat on subnormal-band targets)
-# See ../ibex-fork/MIGRATION.md for the divergence catalog. All twelve are
-# candidate upstream PRs; once they land, drop the fork and point at
-# ibex-team/ibex-lib directly.
+# The fork carries a series of surgical soundness/perf/portability patches on
+# top of ibex-team/ibex-lib@master. The canonical patch catalog (what each one
+# does, and its upstream-PR status) is ../ibex-fork/MIGRATION.md — this file
+# deliberately doesn't duplicate it. Every patch is a candidate upstream PR;
+# once they all land, drop the fork and point at ibex-team/ibex-lib directly.
 #
 # For local development against a working tree, override IBEX_GIT_REPOSITORY
 # with a file:// URL pointing at the local fork checkout.
@@ -179,10 +166,8 @@ include(ExternalProject)
 set(IBEX_INSTALL_DIR     "${CMAKE_BINARY_DIR}/ibex-install")
 set(IBEX_GIT_REPOSITORY  "https://github.com/ncsys-lab/ibex-lib.git"
     CACHE STRING "Git repository for the ibex fork (override with file://path for local dev)")
-# Pinned to the fork HEAD sha (reproducible) rather than the moving branch ref.
-# d9930909 = the 12-patch series; patch #12 adds underflow_saturate so HC4
-# backward ops stop false-unsat'ing on subnormal-band targets (dreal/dreal4#321).
-# Bump when fork patches land. (Local-dev iteration still works via
+# Pinned to a fork sha (reproducible) rather than the moving branch ref.
+# Bump when new fork patches land. (Local-dev iteration still works via
 # -DIBEX_GIT_TAG=<branch-or-sha> and -DIBEX_GIT_REPOSITORY=file:///path/to/ibex-fork.)
 set(IBEX_GIT_TAG         "d99309094850efb84e2ebc11a62ee655d690639f"
     CACHE STRING "Git ref for the ibex fork (branch, tag, or sha)")

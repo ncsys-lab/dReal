@@ -325,8 +325,10 @@ tolerance-based adaptive control, and for these short/smooth horizons the step
 count is already near-minimal, so loosening tolerance can't reduce it further.
 Both the tolerance and n_steps levers are therefore closed for fwd/bwd; the
 per-step Taylor-coefficient cost (order) is the only step-cost lever. Kept tol
-1e-10 (tighter = safer, no speed cost). Follow-up: the dead `n_steps`/`max_step`
-in fwd/bwd is a cleanup candidate.
+1e-10 (tighter = safer, no speed cost). *(Update 2026-07-21: the dead
+`n_steps`/`max_step` computation described above was excised by the per-slice
+tube rewrite — `max_step` survives only as the live `--ode-max-step` knob and
+`n_steps` only on the `run_capd_trace` visualization path. No cleanup remains.)*
 
 ### Vector-field CSE before to_capd_string (CAPD-side, deferred)
 
