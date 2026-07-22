@@ -45,6 +45,16 @@ bool is_integer(const double v) {
   return modf(v, &intpart) == 0.0;
 }
 
+bool is_representable_integer(const double v) {
+  // Mode-INDEPENDENT for the same reason as is_integer above: the range test
+  // and modf are exact.
+  if (!(-kMaxExactInt <= v && v <= kMaxExactInt)) {
+    return false;
+  }
+  double intpart{};  // dummy variable
+  return modf(v, &intpart) == 0.0;
+}
+
 int convert_int64_to_int(const int64_t v) {
   if (numeric_limits<int>::min() <= v && v <= numeric_limits<int>::max()) {
     return v;

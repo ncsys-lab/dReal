@@ -21,6 +21,19 @@ namespace dreal {
 /// Returns true if @p v is represented by `int`.
 bool is_integer(double v);
 
+/// 2^53: every integer of magnitude <= this is exactly representable as a
+/// double, and every integer arithmetic step the Int machinery performs on
+/// such values (ceil/floor contraction, +/-1 bisection in Box::bisect_int) is
+/// exact. The Int variable domain (dreal/dreal4#284) and the integral checks
+/// on it use this bound, NOT the C `int` range.
+constexpr double kMaxExactInt{9007199254740992.0};
+
+/// Returns true if @p v is an integer exactly representable as a double,
+/// i.e. integral with |v| <= 2^53 (kMaxExactInt). This is the predicate for
+/// the Int variable-domain machinery (dreal/dreal4#284); `is_integer` above
+/// is the narrower "fits in a C int" contract that gates static_cast<int>.
+bool is_representable_integer(double v);
+
 /// Converts @p v of int64_t to int.
 /// @throw std::runtime_error if this conversion result in a loss of precision.
 int convert_int64_to_int(std::int64_t v);
