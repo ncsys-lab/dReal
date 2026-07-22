@@ -21,6 +21,7 @@
 #include "dreal/solver/brancher.h"
 #include "dreal/solver/brancher_smear.h"
 #include "dreal/solver/icp_stat.h"
+#include "dreal/solver/seed/seed.h"
 #include "dreal/util/assert.h"
 #include "dreal/util/cds.h"
 #include "dreal/util/interrupt.h"
@@ -184,10 +185,23 @@ IcpParallel::IcpParallel(const Config& config)
 bool IcpParallel::CheckSat(const Contractor& contractor,
                            const vector<FormulaEvaluator>& formula_evaluators,
                            ContractorStatus* const cs) {
+  // --seed-samples seed-and-verify pre-pass boxes (see icp_seq.cc for the
+  // full rationale). Proposed single-threaded here on the main thread before
+  // any worker spawns, and pushed onto the global stack AFTER the root box
+  // below so workers pop them first (LIFO); the root box stays behind them,
+  // so no subspace is dropped (COMPLETENESS preserved) and the unchanged
+  // Prune+EvaluateBox loop remains the sole arbiter of delta-SAT.
+  vector<Box> seed_boxes;
+
   // Initial Prune (main thread) — establish the FE_UPWARD phase here too.
   {
     const UpwardRoundingScope phase_scope;
-    contractor.Prune(cs, phase_scope.token());
+    const UpwardRounding ur{phase_scope.token()};
+    contractor.Prune(cs, ur);
+    if (!cs->box().empty() && config().seed_samples() > 0 &&
+        AllRelational(formula_evaluators)) {
+      seed_boxes = SeedBoxes(formula_evaluators, cs->box(), config(), ur);
+    }
   }
   if (cs->box().empty()) {
     return false;
@@ -229,6 +243,10 @@ bool IcpParallel::CheckSat(const Contractor& contractor,
 
   global_stack.push(cs->box());
   ++number_of_boxes;
+  for (const Box& seed_box : seed_boxes) {
+    global_stack.push(seed_box);
+    ++number_of_boxes;
+  }
 
   for (int i = 0; i < number_of_jobs; ++i) {
     status_vector_.push_back(*cs);
