@@ -30,6 +30,13 @@ namespace dreal {
 /// Applications of Satisfiability Testing (SAT'09).
 class IfThenElseEliminator {
  public:
+  IfThenElseEliminator() = default;
+
+  /// Constructs an eliminator whose ITE<N> numbering starts at @p counter.
+  /// VisitForall uses this so its nested eliminator continues the parent's
+  /// numbering, keeping aux-var names unique within one output formula.
+  explicit IfThenElseEliminator(int counter) : counter_{counter} {}
+
   /// Returns a equisatisfiable formula by eliminating
   /// if-then-expressions in @p f by introducing new variables.
   Formula Process(const Formula& f);
@@ -91,6 +98,11 @@ class IfThenElseEliminator {
   std::vector<Formula> added_formulas_;
   // The variables introduced by the elimination process.
   std::unordered_set<Variable, hash_value<Variable>> ite_variables_;
+  // Mints the <N> in ITE<N> aux-var names. Per-instance (not static) so the
+  // names are deterministic regardless of process history. Variables are
+  // id-keyed, so equal display names across eliminator instances (e.g. one
+  // per asserted formula) never collide logically.
+  int counter_{0};
 
   // Makes VisitFormula a friend of this class so that it can use private
   // operator()s.
