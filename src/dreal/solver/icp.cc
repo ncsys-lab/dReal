@@ -15,18 +15,33 @@
 */
 #include "dreal/solver/icp.h"
 
+#include <iostream>
 #include <ostream>
 #include <tuple>
 #include <utility>
 
 #include "dreal/util/logging.h"
 #include "dreal/util/rounded_interval.h"
+#include "dreal/util/rounding.h"
 
 using std::vector;
 
 namespace dreal {
 
 Icp::Icp(const Config& config) : config_{config} {}
+
+void WarnDegenerateDeltaSat(const std::string& reason, const Box& box) {
+  // Decimal formatting must run under FE_TONEAREST (docs/rounding.md). The
+  // caller may be inside the ICP FE_UPWARD phase, so open a nested nearest
+  // scope for the print; Box's operator<< brackets ibex's clobbering interval
+  // printer itself, so the mode is FE_TONEAREST again at our dtor.
+  const NearestRoundingScope print_scope;
+  std::cerr << "WARNING: degenerate delta-sat: " << reason
+            << ". The delta-sat verdict may be a missed refutation "
+               "(COMPLETENESS; the verdict itself is unchanged). Mitigation: "
+               "give every real variable finite, moderate bounds. Box:\n"
+            << box << "\n";
+}
 
 optional<DynamicBitset> EvaluateBox(
     const vector<FormulaEvaluator>& formula_evaluators, const Box& box,

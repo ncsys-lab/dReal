@@ -186,6 +186,12 @@ bool IcpSeq::CheckSat(const Contractor& contractor,
           "IcpSeq::CheckSat() Found that the current box is not satisfying "
           "delta-condition but it's not bisectable.:\n{}",
           current_box);
+      // Upstream dreal/dreal4#68: this delta-sat is degenerate — the box
+      // still violates the delta-condition but cannot be bisected further.
+      // COMPLETENESS hazard (may assert phi^delta T-satisfiable on a
+      // T-unsatisfiable phi — missed refutation); warn loudly on stderr,
+      // verdict unchanged.
+      WarnDegenerateDeltaSat("non-bisectable box below delta", current_box);
       return true;
     }
     branch_timer_guard.pause();

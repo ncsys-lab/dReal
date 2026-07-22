@@ -28,11 +28,14 @@
 
 #include <fmt/format.h>
 
+#include <cmath>
+
 #include "dreal/contractor/odes/contractor_odes.h"
 #include "dreal/util/pattern_matching/substitutions_map.h"
 #include "dreal/version.h"
 #include "dreal/solver/auditor.h"
 #include "dreal/solver/filter_assertion.h"
+#include "dreal/solver/icp.h"
 #include "dreal/util/assert.h"
 #include "dreal/util/exception.h"
 #include "dreal/util/if_then_else_eliminator.h"
@@ -543,6 +546,19 @@ optional<Box> Context::Impl::CheckSat() {
     }
     DREAL_LOG_DEBUG("ContextImpl::CheckSat() - Found Model\n{}", *result);
     model_ = ExtractModel(*result);
+    // Upstream dreal/dreal4#265: an unbounded variable interval admits a
+    // +-inf witness endpoint ("satisfied" only at infinity in extended-real
+    // interval arithmetic). COMPLETENESS hazard (may assert phi^delta
+    // T-satisfiable on a T-unsatisfiable phi — missed refutation); an
+    // upstream-acknowledged design limit, mitigated by bounding every real.
+    // One check on the final model box covers IcpSeq and IcpParallel alike;
+    // warn loudly on stderr, verdict unchanged.
+    for (int i = 0; i < model_.size(); ++i) {
+      if (std::isinf(model_[i].lb()) || std::isinf(model_[i].ub())) {
+        WarnDegenerateDeltaSat("witness box has unbounded endpoints", model_);
+        break;
+      }
+    }
     return model_;
   } else {
     model_.set_empty();
