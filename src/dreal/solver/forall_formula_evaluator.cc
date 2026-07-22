@@ -122,8 +122,37 @@ FormulaEvaluationResult ForallFormulaEvaluator::operator()(
         max_diam = diam_i;
       }
     }
-    return FormulaEvaluationResult{FormulaEvaluationResult::Type::UNKNOWN,
-                                   Box::Interval(0.0, max_diam)};
+    // dreal/dreal4#280 refutation certificate: instantiate every universal
+    // dim at the counterexample's midpoint p* and interval-evaluate each
+    // disjunct of the body over (full existential box) x {p*}. If every
+    // disjunct is UNSAT there, the body is false at p* for EVERY x in the
+    // box, so the forall holds nowhere in the box: report UNSAT (EvaluateBox
+    // then discards the box). Previously this case fell through to UNKNOWN;
+    // IcpSeq would branch, an all-Int existential box collapses to
+    // non-bisectable points, and the non-bisectable exit ACCEPTED the
+    // violated box — COMPLETENESS (asserts phi^delta T-satisfiable on a
+    // T-unsatisfiable phi — missed refutation). Midpoint, not the raw CE
+    // box: the nested delta-certified box can straddle a binder bound by up
+    // to delta, making a binder disjunct spuriously satisfiable. The
+    // certificate is sound at ANY universal point — it relies only on the
+    // outward-rounded interval UNSAT-ness of each disjunct, so no false
+    // `unsat` is possible.
+    Box point_ce{*counterexample};
+    for (const Variable& forall_var : get_quantified_variables(formula())) {
+      point_ce[forall_var] = safe_mid(point_ce[forall_var], ur);
+    }
+    bool all_unsat{!evaluators_.empty()};
+    for (const RelationalFormulaEvaluator& evaluator : evaluators_) {
+      if (evaluator(point_ce, ur).type() !=
+          FormulaEvaluationResult::Type::UNSAT) {
+        all_unsat = false;
+        break;
+      }
+    }
+    return FormulaEvaluationResult{
+        all_unsat ? FormulaEvaluationResult::Type::UNSAT
+                  : FormulaEvaluationResult::Type::UNKNOWN,
+        Box::Interval(0.0, max_diam)};
   } else {
     DREAL_LOG_DEBUG("ForallFormulaEvaluator::operator()  --  No CE found: ");
     return FormulaEvaluationResult{FormulaEvaluationResult::Type::VALID,

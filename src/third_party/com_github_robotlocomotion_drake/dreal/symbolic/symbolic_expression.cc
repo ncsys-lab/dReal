@@ -381,9 +381,32 @@ Expression& operator+=(Expression& lhs, const Expression& rhs) {
   if (is_zero(rhs)) {
     return lhs;
   }
-  // Simplification: Expression(c1) + Expression(c2) => Expression(c1 + c2)
+  // Simplification: Expression(c1) + Expression(c2) => Expression(c1 + c2),
+  // but ONLY when the double addition is exact. dreal/dreal4#264: once the
+  // true sum leaves +/-2^53, the raw fold rounds (ties-to-even) and collapses
+  // formulas that distinguish the two sides — a false-unsat SOUNDNESS hole.
+  // An inexact sum folds to fl(c1+c2) + r, where r is TwoSum's exactly-
+  // representable rounding error carried as a one-ulp RealConstant term, so
+  // the represented value stays exactly c1 + c2 (helpers:
+  // symbolic_expression_cell.h). This function holds NearestRoundingScope,
+  // which TwoSum requires.
   if (is_constant(lhs) && is_constant(rhs)) {
-    return lhs = get_constant_value(lhs) + get_constant_value(rhs);
+    const double v1{get_constant_value(lhs)};
+    const double v2{get_constant_value(rhs)};
+    const double s{v1 + v2};
+    if (!std::isfinite(s)) {
+      // Overflow of finite operands: dreal/dreal4#321's sound interval, not a
+      // lying +/-inf scalar. (An addition rounding to zero is always exact —
+      // Hauser — so true_is_zero is exactly v1 == -v2.)
+      return lhs = sound_constant_fold(s, /*true_is_zero=*/v1 == -v2,
+                                       /*inputs_finite=*/std::isfinite(v1) &&
+                                           std::isfinite(v2));
+    }
+    const double err{two_sum_err(v1, v2, s)};
+    if (err == 0.0) {
+      return lhs = Expression{s};
+    }
+    return lhs = Expression{s} + exact_residual_term(err);
   }
 
   // Simplification: flattening. To build a new expression, we use

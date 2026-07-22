@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <functional>
 #include <limits>
 #include <utility>
@@ -93,8 +94,14 @@ void Box::Add(const Variable& v) {
       v.get_type() == Variable::Type::BINARY) {
     values_[n] = Interval(0.0, 1.0);
   } else if (v.get_type() == Variable::Type::INTEGER) {
-    values_[n] =
-        Interval(-numeric_limits<int>::max(), numeric_limits<int>::max());
+    // dreal/dreal4#284: the default Int domain is the full double-exact
+    // integer range +/-2^53, NOT the C int range — an int32-sized domain
+    // silently excluded Int values >= 2^31 (x = 2147483648 contracted to
+    // empty: a false unsat on an assertion-free query). Within +/-2^53 every
+    // integer step the Int machinery performs (ceil/floor contraction, the
+    // +/-1 arithmetic in bisect_int) is exact; beyond it the parser's
+    // convert_int64_to_double already rejects literals loudly.
+    values_[n] = Interval(-kMaxExactInt, kMaxExactInt);
   }
 }
 
@@ -107,9 +114,9 @@ void Box::Add(const Variable& v, const double lb, const double ub) {
   DREAL_ASSERT(v.get_type() != Variable::Type::BINARY ||
                (0.0 <= lb && ub <= 1.0));
 
-  // Integer variable => lb, ub ∈ Z.
+  // Integer variable => lb, ub ∈ Z (double-exact range; dreal/dreal4#284).
   DREAL_ASSERT(v.get_type() != Variable::Type::INTEGER ||
-               (is_integer(lb) && is_integer(ub)));
+               (is_representable_integer(lb) && is_representable_integer(ub)));
 
   values_[(*var_to_idx_)[v]] = Interval(lb, ub);
 }
@@ -251,8 +258,10 @@ ostream& operator<<(ostream& os, const Box& box) {
         if (interval.is_empty()) {
           os << "[ empty ]";
         } else {
-          os << "[" << static_cast<int>(interval.lb()) << ", "
-             << static_cast<int>(interval.ub()) << "]";
+          // int64_t: the Int domain spans +/-2^53 (dreal/dreal4#284) — an int
+          // cast is UB above 2^31.
+          os << "[" << static_cast<std::int64_t>(interval.lb()) << ", "
+             << static_cast<std::int64_t>(interval.ub()) << "]";
         }
         break;
       case Variable::Type::CONTINUOUS: {

@@ -107,5 +107,30 @@ TEST_F(FormulaEvaluatorTest, Neq) {
   cerr << "-----------------------\n";
 }
 
+// dreal/dreal4#280 — a forall constraint whose body is DEFINITIVELY violated
+// over the whole box must evaluate to UNSAT, not UNKNOWN. This is the exact
+// forall-equality of the upstream reproducer at the invalid model's point box
+// (c, e, f) = (1, -27, 22): forall p in [-0.1, 1.1]. f + p e + c p^2 = 1 is
+// off by 21 at p = 0 — for EVERY point of the box. Returning UNKNOWN made
+// IcpSeq branch; an all-Int existential box collapses to non-bisectable
+// points, and the non-bisectable exit then ACCEPTED the violated box —
+// COMPLETENESS (asserts phi^delta T-satisfiable on a T-unsatisfiable phi —
+// missed refutation). (Continuous variables here: the evaluator defect is
+// type-agnostic — Int only makes ICP hit the non-bisectable exit.)
+TEST_F(FormulaEvaluatorTest, ForallDefinitelyViolatedIsUnsat) {
+  const Variable p{"p"};
+  const Formula f{forall(Variables{p},
+                         !(Expression{-0.1} <= p) || !(p <= Expression{1.1}) ||
+                             (z_ + p * y_ + x_ * pow(p, 2) == 1.0))};
+  FormulaEvaluator evaluator{make_forall_formula_evaluator(
+      f, /*epsilon=*/0.05, /*delta=*/0.01, /*number_of_jobs=*/1)};
+  box_[x_] = 1.0;    // c
+  box_[y_] = -27.0;  // e
+  box_[z_] = 22.0;   // f
+  const FormulaEvaluationResult result{evaluator(box_, ur)};
+  EXPECT_EQ(result.type(), FormulaEvaluationResult::Type::UNSAT)
+      << "definitively violated forall evaluated as " << result;
+}
+
 }  // namespace
 }  // namespace dreal

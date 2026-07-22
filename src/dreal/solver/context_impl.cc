@@ -257,9 +257,11 @@ void Tighten(Box* box, const double delta, const Variables& ode_vars) {
         } break;
         case Variable::Type::INTEGER: {
           if (ode_vars.include(var)) continue;
-          // static_cast<int>(double) truncates toward zero independent of the
-          // rounding mode; only the safe_mid() is FE_UPWARD-sensitive.
-          interval = static_cast<int>(safe_mid(interval, ur));
+          // std::trunc truncates toward zero independent of the rounding mode
+          // (it is exact); only the safe_mid() is FE_UPWARD-sensitive. trunc,
+          // not static_cast<int>: the Int domain spans +/-2^53
+          // (dreal/dreal4#284), and an int cast is UB above 2^31.
+          interval = std::trunc(safe_mid(interval, ur));
         } break;
       }
     }

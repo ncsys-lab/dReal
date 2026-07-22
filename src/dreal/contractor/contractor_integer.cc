@@ -50,7 +50,13 @@ void ContractorInteger::Prune(ContractorStatus* contractor_status, const UpwardR
     if (iv.is_empty()) {
       continue;
     }
-    if (!is_integer(iv.lb()) || !is_integer(iv.ub())) {
+    // is_representable_integer, not is_integer: the Int domain spans
+    // +/-2^53 (dreal/dreal4#284). The int32-ranged is_integer would report
+    // wide integral bounds (e.g. the default +/-2^53 domain) as non-integer,
+    // re-assigning the interval and setting the output bit on every Prune —
+    // fixpoint churn on an already-contracted box.
+    if (!is_representable_integer(iv.lb()) ||
+        !is_representable_integer(iv.ub())) {
       const double new_lb{std::ceil(iv.lb())};
       const double new_ub{std::floor(iv.ub())};
       if (new_lb <= new_ub) {
