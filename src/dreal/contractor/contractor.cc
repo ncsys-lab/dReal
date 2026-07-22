@@ -23,6 +23,7 @@
 #include "dreal/contractor/contractor_fixpoint.h"
 #include "dreal/contractor/contractor_forall.h"
 #include "dreal/contractor/contractor_ibex_acid.h"
+#include "dreal/contractor/contractor_ibex_acid_mt.h"
 #include "dreal/contractor/contractor_ibex_forall.h"
 #include "dreal/contractor/contractor_ibex_forall_mt.h"
 #include "dreal/contractor/contractor_ibex_fwdbwd.h"
@@ -208,13 +209,17 @@ Contractor make_contractor_ibex_forall(Formula f, const Box& box,
 
 Contractor make_contractor_ibex_acid(vector<Formula> formulas, const Box& box,
                                      const Config& config) {
-  // No multi-threaded ACID cell exists; odeexpr (the target workload) runs
-  // single-threaded IcpSeq. Fail loud rather than silently racing a shared
-  // stateful ibex contractor across parallel ICP workers.
+  // ibex::CtcAcid keeps mutable shaving/adaptivity state, so a single cell
+  // cannot be shared across parallel ICP workers; the Mt variant builds one
+  // ContractorIbexAcid per worker thread (mirrors make_contractor_ibex_polytope).
   if (config.number_of_jobs() > 1) {
-    throw DREAL_RUNTIME_ERROR(
-        "The ACID/3BCID contractor (--acid/--3bcid) is not implemented for "
-        "parallel ICP (--jobs > 1).");
+    const auto ctc =
+        make_shared<ContractorIbexAcidMt>(std::move(formulas), box, config);
+    if (ctc->is_dummy()) {
+      return make_contractor_id(config);
+    } else {
+      return Contractor{ctc};
+    }
   }
   const auto ctc =
       make_shared<ContractorIbexAcid>(std::move(formulas), box, config);
@@ -256,10 +261,13 @@ Contractor make_contractor_join(vector<Contractor> vec, const Config& config) {
 Contractor mk_contractor_ode_lohner(Box const& box, const ode_constraint& ctr,
                                           ode_direction const dir, Config const& config,
                                           double const timeout) {
-  if (config.number_of_jobs() > 1) {
-    // Parallel ODE solving is not currently supported.
-    throw DREAL_RUNTIME_ERROR("Parallel ODE solving is unsupported. todo: fix.");
-  }
+  // Safe to share one instance across parallel ICP workers: Prune is const
+  // with no mutable members; CAPD IOdeSolver/ITimeMap are per-call and the
+  // parsed IMap parameter copies are thread_local (contractor_odes_capd.cc);
+  // the per-flow cache is mutex-guarded; AddInconclusiveOde writes each
+  // worker's own ContractorStatus, unioned by InplaceJoin; and the nested
+  // invariant contractors dispatch to their Mt variants under jobs > 1 via
+  // make_contractor_ibex_fwdbwd.
   return Contractor{std::make_shared<contractor_ode_lohner>(box, ctr, dir, config, timeout)};
 }
 

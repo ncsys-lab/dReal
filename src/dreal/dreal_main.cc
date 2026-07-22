@@ -676,12 +676,6 @@ void MainProgram::ExtractOptions() {
     int v{0};
     opt_.get("--seed-samples")->getInt(v);
     config_.mutable_seed_samples().set_from_command_line(v);
-    // The seed hook lives in IcpSeq only; IcpParallel ignores it, so the
-    // default-on count is harmless under --jobs > 1 (just inert). Only an
-    // explicit request to seed in parallel is an error worth flagging.
-    if (v > 0 && config_.number_of_jobs() > 1) {
-      throw DREAL_RUNTIME_ERROR("--seed-samples > 0 (seed-and-verify) is IcpSeq-only; not used with --jobs > 1.");
-    }
   }
   if (opt_.isSet("--acid")) {
     config_.mutable_use_acid().set_from_command_line(true);
