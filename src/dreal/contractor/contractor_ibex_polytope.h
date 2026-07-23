@@ -76,7 +76,16 @@ class ContractorIbexPolytope : public ContractorCell {
   IbexConverter ibex_converter_;
   std::unique_ptr<ibex::SystemFactory> system_factory_;
   std::unique_ptr<ibex::System> system_;
-  std::unique_ptr<ibex::LinearizerXTaylor> linear_relax_combo_;
+  // Linear relaxation selected by config.polytope_linearizer(); only the
+  // members that selection needs are constructed (kXTaylor: xtaylor only;
+  // kAffine: affine only; kBoth: all three, the compo referencing the other
+  // two). DECLARATION ORDER IS LOAD-BEARING: ctc_ holds a reference to the
+  // selected linearizer and the compo holds references to both single
+  // linearizers, so the linearizers are declared BEFORE ctc_ (and are
+  // therefore destroyed after it).
+  std::unique_ptr<ibex::LinearizerXTaylor> linear_relax_xtaylor_;
+  std::unique_ptr<ibex::LinearizerAffine2> linear_relax_affine_;
+  std::unique_ptr<ibex::LinearizerCompo> linear_relax_compo_;
   std::unique_ptr<ibex::CtcPolytopeHull> ctc_;
   std::vector<std::unique_ptr<const ibex::ExprCtr, ExprCtrDeleter>> expr_ctrs_;
 };

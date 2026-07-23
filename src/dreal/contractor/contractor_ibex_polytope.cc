@@ -103,12 +103,54 @@ ContractorIbexPolytope::ContractorIbexPolytope(vector<Formula> formulas,
     return;
   }
 
-  // Build Polytope contractor from system.
-  // https://github.com/ibex-team/ibex-lib/blob/283365f677012a80c0df3920878374f6888c398d/src/numeric/ibex_LinearizerCombo.cpp#L27C15-L27C126
-  linear_relax_combo_ = make_unique<ibex::LinearizerXTaylor>(
-    *system_, ibex::LinearizerXTaylor::RELAX, ibex::LinearizerXTaylor::RANDOM_OPP, ibex::LinearizerXTaylor::HANSEN
-  );
-  ctc_ = make_unique<ibex::CtcPolytopeHull>(*linear_relax_combo_);
+  // Build the linear relaxation selected by --polytope-linearizer, then the
+  // polytope-hull contractor over it.
+  //
+  // LinearizerAffine2::linearize returns the emitted cut count, or -1 when
+  // the affine evaluation alone proves the box infeasible (the ev-sign
+  // `return -1` sites, fork ibex_LinearizerAffine2.cpp); LinearizerCompo
+  // propagates a -1 from either side. CtcPolytopeHull::contract maps -1 to
+  // box.set_empty() (fork src/contractor/ibex_CtcPolytopeHull.cpp:69->81),
+  // so the -1 fast path surfaces in Prune below through the existing
+  // iv.is_empty() branch — the same all-output-bits + AddUsedConstraint
+  // unsat route as an LP-certified infeasibility. Soundness of the affine
+  // rows and of that refutation rests on the audited vendored kernels
+  // (ibex_docs/affine-rounding-audit.md, SOUND-WITH-SCOPE-WRAP; the scope
+  // wrap + D2 row-emission fix are in the built fork pin — the AFFINE-AUDIT
+  // comments in ibex_LinearizerAffine2.cpp are the tell).
+  //
+  // Unbounded-box caveat: CtcPolytopeHull::contract is an identity on any
+  // box with an unbounded dimension (ibex_CtcPolytopeHull.cpp:61), and the
+  // affine relaxation additionally skips any constraint whose affine form
+  // is invalid over the box — bound every real for this cell to bite
+  // (docs/writing-fast-dreal-formulas.md).
+  switch (config.polytope_linearizer()) {
+    case PolytopeLinearizer::kXTaylor:
+      // Today's default path, unchanged.
+      // https://github.com/ibex-team/ibex-lib/blob/283365f677012a80c0df3920878374f6888c398d/src/numeric/ibex_LinearizerCombo.cpp#L27C15-L27C126
+      linear_relax_xtaylor_ = make_unique<ibex::LinearizerXTaylor>(
+          *system_, ibex::LinearizerXTaylor::RELAX,
+          ibex::LinearizerXTaylor::RANDOM_OPP,
+          ibex::LinearizerXTaylor::HANSEN);
+      ctc_ = make_unique<ibex::CtcPolytopeHull>(*linear_relax_xtaylor_);
+      break;
+    case PolytopeLinearizer::kAffine:
+      linear_relax_affine_ = make_unique<ibex::LinearizerAffine2>(*system_);
+      ctc_ = make_unique<ibex::CtcPolytopeHull>(*linear_relax_affine_);
+      break;
+    case PolytopeLinearizer::kBoth:
+      // ibex::LinearizerCompo(Linearizer& l1, Linearizer& l2): logical AND —
+      // one LP holding both row sets (ibex_LinearizerCompo.h:29).
+      linear_relax_xtaylor_ = make_unique<ibex::LinearizerXTaylor>(
+          *system_, ibex::LinearizerXTaylor::RELAX,
+          ibex::LinearizerXTaylor::RANDOM_OPP,
+          ibex::LinearizerXTaylor::HANSEN);
+      linear_relax_affine_ = make_unique<ibex::LinearizerAffine2>(*system_);
+      linear_relax_compo_ = make_unique<ibex::LinearizerCompo>(
+          *linear_relax_xtaylor_, *linear_relax_affine_);
+      ctc_ = make_unique<ibex::CtcPolytopeHull>(*linear_relax_compo_);
+      break;
+  }
 
   // Build input.
   DynamicBitset& input{mutable_input()};

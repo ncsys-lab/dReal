@@ -174,6 +174,18 @@ void MainProgram::AddOptions() {
            "Use polytope contractor in forall contractor.\n",
            "--forall-polytope");
 
+  auto* const polytope_linearizer_validator =
+      new ez::ezOptionValidator("t", "in", "xtaylor,affine,both", false);
+  opt_.add("xtaylor" /* Default */, false /* Required? */,
+           1 /* Number of args expected. */,
+           0 /* Delimiter if expecting multiple args. */,
+           "Linear relaxation inside the polytope contractor. One of "
+           "(default = xtaylor):\n"
+           "xtaylor (corner X-Taylor rows), affine (affine-arithmetic rows; "
+           "can prove a box infeasible outright), both (AND of the two row "
+           "sets in one LP). Requires --polytope or --forall-polytope.\n",
+           "--polytope-linearizer", polytope_linearizer_validator);
+
   opt_.add("false" /* Default */, false /* Required? */,
            0 /* Number of args expected. */,
            0 /* Delimiter if expecting multiple args. */,
@@ -547,6 +559,29 @@ void MainProgram::ExtractOptions() {
     config_.mutable_use_polytope_in_forall().set_from_command_line(true);
     DREAL_LOG_DEBUG("MainProgram::ExtractOptions() --forall-polytope = {}",
                     config_.use_polytope_in_forall());
+  }
+
+  // --polytope-linearizer
+  if (opt_.isSet("--polytope-linearizer")) {
+    // CLI-level exclusion, mirroring the --acid/--3bcid throw below: a
+    // selector with no polytope cell to select for would be silently inert.
+    // Deliberately NOT a library-funnel guard (cf. the --branch/--smear
+    // guard in icp.cc): the nested forall-CE Context rewrites use_polytope
+    // from use_polytope_in_forall (contractor_forall.h), so a library-level
+    // check would false-positive a legitimate "--polytope + selector" run
+    // on an exist-forall instance. --forall-polytope also builds polytope
+    // cells (inside forall CE contexts), so it satisfies the requirement.
+    if (!config_.use_polytope() && !config_.use_polytope_in_forall()) {
+      throw DREAL_RUNTIME_ERROR(
+          "--polytope-linearizer requires --polytope (or --forall-polytope).");
+    }
+    string v;
+    opt_.get("--polytope-linearizer")->getString(v);
+    const PolytopeLinearizer lin =
+        (v == "affine") ? PolytopeLinearizer::kAffine
+        : (v == "both") ? PolytopeLinearizer::kBoth
+                        : PolytopeLinearizer::kXTaylor;
+    config_.mutable_polytope_linearizer().set_from_command_line(lin);
   }
 
   if (opt_.isSet("--forall-pre-prune")) {

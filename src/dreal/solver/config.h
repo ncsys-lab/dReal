@@ -62,6 +62,25 @@ enum class BrancherVariant {
 };
 
 
+/// Linear relaxation used inside the polytope contractor
+/// (ContractorIbexPolytope; --polytope-linearizer). kXTaylor = today's
+/// corner X-Taylor relaxation (ibex::LinearizerXTaylor,
+/// RELAX/RANDOM_OPP/HANSEN — the historical only path). kAffine = affine
+/// arithmetic rows (ibex::LinearizerAffine2 over the vendored fAF2 plugin;
+/// its linearize can return -1 = box PROVEN infeasible by affine evaluation
+/// alone, which CtcPolytopeHull turns into an empty box). kBoth = logical
+/// AND of the two row sets in one LP (ibex::LinearizerCompo; a -1 from
+/// either side propagates). Selecting a relaxation is a COMPLETENESS/perf
+/// lever (every relaxation over-approximates the constraint set; discarding
+/// certified-outside points and -1-refuted boxes is the sound direction) —
+/// soundness of the affine rows/refutations themselves rests on the audited
+/// vendored kernels: ibex_docs/affine-rounding-audit.md.
+enum class PolytopeLinearizer {
+  kXTaylor,  ///< default: corner X-Taylor rows (today's behavior, unchanged)
+  kAffine,   ///< LinearizerAffine2 rows; -1 fast path = proven infeasible
+  kBoth,     ///< LinearizerCompo(XTaylor, Affine2): AND of both row sets
+};
+
 class Config {
  public:
   Config() = default;
@@ -102,6 +121,13 @@ class Config {
 
   /// Returns a mutable OptionValue for 'use_polytope_in_forall'.
   OptionValue<bool>& mutable_use_polytope_in_forall();
+
+  /// Returns which linear relaxation the polytope contractor uses
+  /// (--polytope-linearizer; kXTaylor = today's default path).
+  PolytopeLinearizer polytope_linearizer() const;
+
+  /// Returns a mutable OptionValue for `polytope_linearizer`.
+  OptionValue<PolytopeLinearizer>& mutable_polytope_linearizer();
 
   /// Returns whether it runs the ibex::CtcForAll pre-pruner beside CEGIS.
   bool use_forall_pre_prune() const;
@@ -395,6 +421,10 @@ class Config {
   OptionValue<bool> visualize_{false};
   OptionValue<bool> use_polytope_{false};
   OptionValue<bool> use_polytope_in_forall_{false};
+  // Polytope-contractor linear relaxation (--polytope-linearizer; default
+  // kXTaylor = the historical path — see contractor_ibex_polytope.cc).
+  OptionValue<PolytopeLinearizer> polytope_linearizer_{
+      PolytopeLinearizer::kXTaylor};
   OptionValue<bool> use_forall_pre_prune_{false};
   OptionValue<double> forall_pre_prune_prec_{kDefaultForallPrePrunePrec};
   OptionValue<bool> use_worklist_fixpoint_{false};

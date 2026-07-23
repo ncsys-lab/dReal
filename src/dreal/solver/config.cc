@@ -51,6 +51,13 @@ OptionValue<bool>& Config::mutable_use_polytope_in_forall() {
   return use_polytope_in_forall_;
 }
 
+PolytopeLinearizer Config::polytope_linearizer() const {
+  return polytope_linearizer_.get();
+}
+OptionValue<PolytopeLinearizer>& Config::mutable_polytope_linearizer() {
+  return polytope_linearizer_;
+}
+
 bool Config::use_forall_pre_prune() const {
   return use_forall_pre_prune_.get();
 }
