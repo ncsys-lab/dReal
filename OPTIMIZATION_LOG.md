@@ -653,3 +653,19 @@ added pair on the clean long-runners, a mild under-estimate). That is right at t
 non-bit-identical change for a permanent fork liability — **NO-GO**. The unharvested
 bit-identical avenues A–D (ExpressionEvaluator ~5–7%, allocation ~5%) are the better next step;
 revisit msr-elimination only if A–D are exhausted and the densest instances remain msr-bound.
+
+## 2026-07-22 RELATED-WORK candidate campaign (IN PROGRESS)
+
+Implements the five `ibex_docs/RELATED-WORK.md` top candidates as opt-in flags —
+`--newton` (CtcNewton square-equality cell), `--branch abs|absdiam` (ABS activity
+brancher), `--obbt` (certified 2n-LP bound tightening), `--polytope-linearizer
+xtaylor|affine|both` (vendored affine plugin; gated on the fAF2 rounding audit,
+`ibex_docs/affine-rounding-audit.md`), `--mohc` (CtcMohc port, timeboxed) — plus ICP
+parity R1/R2/R3 (`icp_parity_gaps.md`) and test-coverage hardening (DRPM, ODE/ACID
+knobs, determinism). One binary, then one pooled 11-arm × 270-job all-family sweep
+(arms incl. `par1` = jobs-1-through-IcpParallel for the R3/G4 overhead gate and
+`drpm` = `--drpm-max-size 4`). Plan: `~/.claude/plans/take-a-look-at-rustling-crayon.md`.
+
+**Baseline (Phase 0):** dreal4-cmake `f51f78b8e` + ibex-fork `e054af7b`, `gcc_build`
+incremental build clean, full ctest green exit 0, **846 tests** (known-intentional
+skips only). Local benchmark baseline: `8b0299ce9` re-freeze (181 rows).
