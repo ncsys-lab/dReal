@@ -1,0 +1,11 @@
+(set-logic QF_NRA_ODE)
+(declare-fun x () Real [-100.000000, 100.000000])
+(declare-fun x_0 () Real [1.000000, 2.000000])
+(declare-fun x_t () Real [0.300000, 0.800000])
+(declare-fun time () Real [0.000000, 1.000000])
+(define-ode flow_1 ((= d/dt[x] (* -1.0 x))))
+(assert (and
+  (= [x_t] (integral 0. time [x_0] flow_1))
+  (<= x_t 0.35)
+))
+(check-sat)
