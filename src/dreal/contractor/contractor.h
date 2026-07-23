@@ -56,6 +56,8 @@ class Contractor {
     IBEX_FWDBWD,
     IBEX_POLYTOPE,
     IBEX_ACID,  // ACID / 3BCID shaving over the HC4 path (ContractorIbexAcid).
+    IBEX_NEWTON,  // Interval-Newton (Hansen-Sengupta) contraction on the
+                  // square equality subsystem (ContractorIbexNewton).
     IBEX_FORALL,  // Sound proj-inter pre-pruner over ibex::CtcForAll, run beside
                   // the CEGIS FORALL decider (ContractorIbexForall). PITFALL
                   // forall-vs-forall_t: the ∃∀ NRA quantifier, not `forall_t`.
@@ -126,6 +128,9 @@ class Contractor {
   friend Contractor make_contractor_ibex_acid(std::vector<Formula> formulas,
                                               const Box& box,
                                               const Config& config);
+  friend Contractor make_contractor_ibex_newton(std::vector<Formula> formulas,
+                                                const Box& box,
+                                                const Config& config);
   friend Contractor make_contractor_ibex_forall(Formula f, const Box& box,
                                                 const Config& config);
   friend Contractor make_contractor_fixpoint(
@@ -215,6 +220,20 @@ Contractor make_contractor_ibex_polytope(std::vector<Formula> formulas,
 /// @see ContractorIbexAcid.
 Contractor make_contractor_ibex_acid(std::vector<Formula> formulas,
                                      const Box& box, const Config& config);
+
+/// Returns a contractor wrapping IBEX's interval-Newton contractor
+/// (ibex::CtcNewton) on the square equality subsystem of @p formulas: the
+/// positive equality atoms over the variable set S they mention, kept only
+/// when #equalities == |S| > 0; otherwise the ID contractor is returned. If
+/// the number of jobs (in @p config) > 1, it creates a multi-threaded version
+/// based on ContractorIbexNewtonMt (one cell per worker thread —
+/// ibex::Function evaluation keeps mutable state and is not thread-safe to
+/// share).
+///
+/// @see ContractorIbexNewton.
+/// @see ContractorIbexNewtonMt.
+Contractor make_contractor_ibex_newton(std::vector<Formula> formulas,
+                                       const Box& box, const Config& config);
 
 /// Returns a sound proj-intersection pre-pruner over IBEX's ibex::CtcForAll for
 /// the ∀-formula @p f, meant to run *alongside* the CEGIS ContractorForall.

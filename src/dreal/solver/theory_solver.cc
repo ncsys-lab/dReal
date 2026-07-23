@@ -253,6 +253,15 @@ optional<Contractor> TheorySolver::BuildContractor(
     nl_ctcs.push_back(make_contractor_ibex_acid(assertions, box, config_));
   }
 
+  if (config_.use_newton()) {
+    // Add the interval-Newton contractor over the square equality subsystem
+    // of the assertions (the cell filters to positive equality atoms itself
+    // and degenerates to ID when the subsystem is not square). A COMPLETENESS
+    // lever (its absence can only mean a missed refutation — asserts φ^δ
+    // T-satisfiable on a T-unsatisfiable φ), never a soundness change.
+    nl_ctcs.push_back(make_contractor_ibex_newton(assertions, box, config_));
+  }
+
 
   // ODEs
   vector<Contractor> ode_fwd_ctcs;

@@ -28,6 +28,8 @@
 #include "dreal/contractor/contractor_ibex_forall_mt.h"
 #include "dreal/contractor/contractor_ibex_fwdbwd.h"
 #include "dreal/contractor/contractor_ibex_fwdbwd_mt.h"
+#include "dreal/contractor/contractor_ibex_newton.h"
+#include "dreal/contractor/contractor_ibex_newton_mt.h"
 #include "dreal/contractor/contractor_ibex_polytope.h"
 #include "dreal/contractor/contractor_ibex_polytope_mt.h"
 #include "dreal/contractor/contractor_id.h"
@@ -223,6 +225,31 @@ Contractor make_contractor_ibex_acid(vector<Formula> formulas, const Box& box,
   }
   const auto ctc =
       make_shared<ContractorIbexAcid>(std::move(formulas), box, config);
+  if (ctc->is_dummy()) {
+    return make_contractor_id(config);
+  } else {
+    return Contractor{ctc};
+  }
+}
+
+Contractor make_contractor_ibex_newton(vector<Formula> formulas, const Box& box,
+                                       const Config& config) {
+  // ibex::Function evaluation (the Jacobian + Gauss-Seidel work inside
+  // ibex::newton) keeps mutable per-call state, so a single cell cannot be
+  // shared across parallel ICP workers; the Mt variant builds one
+  // ContractorIbexNewton per worker thread (mirrors
+  // make_contractor_ibex_acid).
+  if (config.number_of_jobs() > 1) {
+    const auto ctc =
+        make_shared<ContractorIbexNewtonMt>(std::move(formulas), box, config);
+    if (ctc->is_dummy()) {
+      return make_contractor_id(config);
+    } else {
+      return Contractor{ctc};
+    }
+  }
+  const auto ctc =
+      make_shared<ContractorIbexNewton>(std::move(formulas), box, config);
   if (ctc->is_dummy()) {
     return make_contractor_id(config);
   } else {

@@ -146,6 +146,12 @@ OptionValue<int>& Config::mutable_acid_s3b() { return acid_s3b_; }
 double Config::acid_ct_ratio() const { return acid_ct_ratio_.get(); }
 OptionValue<double>& Config::mutable_acid_ct_ratio() { return acid_ct_ratio_; }
 
+bool Config::use_newton() const { return use_newton_.get(); }
+OptionValue<bool>& Config::mutable_use_newton() { return use_newton_; }
+
+double Config::newton_ceil() const { return newton_ceil_.get(); }
+OptionValue<double>& Config::mutable_newton_ceil() { return newton_ceil_; }
+
 const Config::Brancher& Config::brancher() const { return brancher_.get(); }
 
 OptionValue<Config::Brancher>& Config::mutable_brancher() { return brancher_; }

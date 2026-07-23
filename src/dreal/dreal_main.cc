@@ -403,6 +403,16 @@ void MainProgram::AddOptions() {
            fmt::format("ACID ct_ratio adaptive-stop threshold. (default = {})",
                        Config::kDefaultAcidCtRatio).c_str(),
            "--acid-ct-ratio", positive_double_option_validator);
+  opt_.add("false", false, 0, 0,
+           "Use the interval-Newton contractor on the square equality "
+           "subsystem of the assertions.\n",
+           "--newton");
+  opt_.add(fmt::format("{}", Config::kDefaultNewtonCeil).c_str(), false, 1, 0,
+           fmt::format("Newton application ceiling: the Newton step runs only "
+                       "when the box's max diameter is <= this (ibex CtcNewton "
+                       "ceil). (default = {})",
+                       Config::kDefaultNewtonCeil).c_str(),
+           "--newton-ceil", positive_double_option_validator);
 }
 
 bool MainProgram::ValidateOptions() {
@@ -743,6 +753,14 @@ void MainProgram::ExtractOptions() {
     double v{0};
     opt_.get("--acid-ct-ratio")->getDouble(v);
     config_.mutable_acid_ct_ratio().set_from_command_line(v);
+  }
+  if (opt_.isSet("--newton")) {
+    config_.mutable_use_newton().set_from_command_line(true);
+  }
+  if (opt_.isSet("--newton-ceil")) {
+    double v{0};
+    opt_.get("--newton-ceil")->getDouble(v);
+    config_.mutable_newton_ceil().set_from_command_line(v);
   }
 }
 

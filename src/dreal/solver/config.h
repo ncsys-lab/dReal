@@ -210,6 +210,17 @@ class Config {
   /// Returns a mutable OptionValue for `acid_ct_ratio`.
   OptionValue<double>& mutable_acid_ct_ratio();
 
+  /// Returns whether the interval-Newton square-equality contractor is
+  /// enabled.
+  bool use_newton() const;
+  /// Returns a mutable OptionValue for `use_newton`.
+  OptionValue<bool>& mutable_use_newton();
+
+  /// Returns the Newton application ceiling (ibex CtcNewton `ceil`).
+  double newton_ceil() const;
+  /// Returns a mutable OptionValue for `newton_ceil`.
+  OptionValue<double>& mutable_newton_ceil();
+
   /// @name NLopt Options
   ///
   /// Specifies stopping criteria of NLopt. See
@@ -353,6 +364,11 @@ class Config {
   static constexpr int kDefaultAcidS3b{10};
   static constexpr double kDefaultAcidCtRatio{0.002};
 
+  // Interval-Newton contractor knob (mirrors ibex::CtcNewton::default_ceil =
+  // 0.01, ibex_CtcNewton.h): the Newton step runs only when the box's max
+  // diameter is <= ceil, avoiding useless Jacobian evaluations on wide boxes.
+  static constexpr double kDefaultNewtonCeil{0.01};
+
   // --branch-decay default for --branch abs|absdiam: per-node multiplicative
   // activity aging, in (0, 1]. 0.999 (a slow ~693-node half-life) is our
   // choice, not a value from the ABS paper (the paper's rule is
@@ -475,6 +491,11 @@ class Config {
   OptionValue<bool> use_3bcid_{false};
   OptionValue<int> acid_s3b_{kDefaultAcidS3b};
   OptionValue<double> acid_ct_ratio_{kDefaultAcidCtRatio};
+
+  // Interval-Newton square-equality contractor (default off; see
+  // contractor_ibex_newton.cc).
+  OptionValue<bool> use_newton_{false};
+  OptionValue<double> newton_ceil_{kDefaultNewtonCeil};
 
   // Brancher to use. By default it uses `BranchLargestFirst`.
   OptionValue<Brancher> brancher_{BranchLargestFirst};
