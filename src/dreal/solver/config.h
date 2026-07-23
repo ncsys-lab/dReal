@@ -227,6 +227,12 @@ class Config {
   /// Returns a mutable OptionValue for `use_obbt`.
   OptionValue<bool>& mutable_use_obbt();
 
+  /// Returns whether the Mohc monotonic-occurrence propagation contractor is
+  /// enabled.
+  bool use_mohc() const;
+  /// Returns a mutable OptionValue for `use_mohc`.
+  OptionValue<bool>& mutable_use_mohc();
+
   /// @name NLopt Options
   ///
   /// Specifies stopping criteria of NLopt. See
@@ -505,6 +511,10 @@ class Config {
 
   // OBBT 2n-certified-LP contractor (default off; see contractor_ibex_obbt.cc).
   OptionValue<bool> use_obbt_{false};
+
+  // Mohc monotonic-occurrence propagation contractor (default off; see
+  // contractor_ibex_mohc.cc).
+  OptionValue<bool> use_mohc_{false};
 
   // Brancher to use. By default it uses `BranchLargestFirst`.
   OptionValue<Brancher> brancher_{BranchLargestFirst};

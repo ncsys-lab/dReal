@@ -417,6 +417,13 @@ void MainProgram::AddOptions() {
            "Use the OBBT (optimization-based bound tightening) contractor: "
            "2n certified LPs over the X-Taylor linear relaxation per prune.\n",
            "--obbt");
+  opt_.add("false", false, 0, 0,
+           "Use the Mohc monotonicity-exploiting propagation contractor "
+           "(occurrence-grouping monotone revise + monotone BoxNarrow; "
+           "strongest on constraints with multiple occurrences of a "
+           "variable). Composable with --acid/--3bcid — no mutual exclusion; "
+           "shaving and monotone revise are different mechanisms.\n",
+           "--mohc");
 }
 
 bool MainProgram::ValidateOptions() {
@@ -768,6 +775,9 @@ void MainProgram::ExtractOptions() {
   }
   if (opt_.isSet("--obbt")) {
     config_.mutable_use_obbt().set_from_command_line(true);
+  }
+  if (opt_.isSet("--mohc")) {
+    config_.mutable_use_mohc().set_from_command_line(true);
   }
 }
 

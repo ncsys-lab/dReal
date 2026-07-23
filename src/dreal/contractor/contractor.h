@@ -60,6 +60,9 @@ class Contractor {
                   // square equality subsystem (ContractorIbexNewton).
     IBEX_OBBT,  // Optimization-based bound tightening: 2n certified LPs over
                 // the X-Taylor linear relaxation (ContractorIbexObbt).
+    IBEX_MOHC,  // Mohc monotonic-occurrence propagation: occurrence-grouping
+                // monotone revise + monotone BoxNarrow over the assertion
+                // system (ContractorIbexMohc).
     IBEX_FORALL,  // Sound proj-inter pre-pruner over ibex::CtcForAll, run beside
                   // the CEGIS FORALL decider (ContractorIbexForall). PITFALL
                   // forall-vs-forall_t: the ∃∀ NRA quantifier, not `forall_t`.
@@ -134,6 +137,9 @@ class Contractor {
                                                 const Box& box,
                                                 const Config& config);
   friend Contractor make_contractor_ibex_obbt(std::vector<Formula> formulas,
+                                              const Box& box,
+                                              const Config& config);
+  friend Contractor make_contractor_ibex_mohc(std::vector<Formula> formulas,
                                               const Box& box,
                                               const Config& config);
   friend Contractor make_contractor_ibex_forall(Formula f, const Box& box,
@@ -219,8 +225,10 @@ Contractor make_contractor_ibex_polytope(std::vector<Formula> formulas,
                                          const Box& box, const Config& config);
 
 /// Returns a contractor wrapping IBEX's ACID (config.use_acid()) or 3BCID
-/// (config.use_3bcid()) shaving contractor over the HC4 path. Single-threaded
-/// only (odeexpr runs IcpSeq); throws if number_of_jobs > 1.
+/// (config.use_3bcid()) shaving contractor over the HC4 path. If the number
+/// of jobs (in @p config) > 1, it creates a multi-threaded version based on
+/// ContractorIbexAcidMt (one ContractorIbexAcid per worker thread —
+/// ibex::CtcAcid keeps mutable shaving/adaptivity state; see contractor.cc).
 ///
 /// @see ContractorIbexAcid.
 Contractor make_contractor_ibex_acid(std::vector<Formula> formulas,
@@ -250,6 +258,21 @@ Contractor make_contractor_ibex_newton(std::vector<Formula> formulas,
 /// @see ContractorIbexObbt.
 /// @see ContractorIbexObbtMt.
 Contractor make_contractor_ibex_obbt(std::vector<Formula> formulas,
+                                     const Box& box, const Config& config);
+
+/// Returns a contractor wrapping IBEX's Mohc monotonicity-exploiting
+/// propagation contractor (ibex::CtcMohc over the assertion system, all IBEX
+/// defaults; Araya et al., AAAI'10). Every MohcRevise starts with the
+/// HC4Revise pair and adds occurrence-grouping monotone revise + monotone
+/// BoxNarrow for multi-occurrence constraints. Composable with --acid/--3bcid
+/// (different mechanisms). If the number of jobs (in @p config) > 1, it
+/// creates a multi-threaded version based on ContractorIbexMohcMt (one cell
+/// per worker thread — CtcMohcRevise keeps mutable per-call state and is not
+/// thread-safe to share).
+///
+/// @see ContractorIbexMohc.
+/// @see ContractorIbexMohcMt.
+Contractor make_contractor_ibex_mohc(std::vector<Formula> formulas,
                                      const Box& box, const Config& config);
 
 /// Returns a sound proj-intersection pre-pruner over IBEX's ibex::CtcForAll for

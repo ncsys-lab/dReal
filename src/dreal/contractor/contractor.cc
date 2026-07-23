@@ -28,6 +28,8 @@
 #include "dreal/contractor/contractor_ibex_forall_mt.h"
 #include "dreal/contractor/contractor_ibex_fwdbwd.h"
 #include "dreal/contractor/contractor_ibex_fwdbwd_mt.h"
+#include "dreal/contractor/contractor_ibex_mohc.h"
+#include "dreal/contractor/contractor_ibex_mohc_mt.h"
 #include "dreal/contractor/contractor_ibex_newton.h"
 #include "dreal/contractor/contractor_ibex_newton_mt.h"
 #include "dreal/contractor/contractor_ibex_obbt.h"
@@ -276,6 +278,32 @@ Contractor make_contractor_ibex_obbt(vector<Formula> formulas, const Box& box,
   }
   const auto ctc =
       make_shared<ContractorIbexObbt>(std::move(formulas), box, config);
+  if (ctc->is_dummy()) {
+    return make_contractor_id(config);
+  } else {
+    return Contractor{ctc};
+  }
+}
+
+Contractor make_contractor_ibex_mohc(vector<Formula> formulas, const Box& box,
+                                     const Config& config) {
+  // Each ibex::CtcMohcRevise keeps mutable per-call state (active_mono_proc,
+  // Apply arrays, LB/RB, OG scratch) and CtcMohc::contract rewrites it every
+  // call, so a single cell cannot be shared across parallel ICP workers; the
+  // Mt variant builds one ContractorIbexMohc per worker thread (mirrors
+  // make_contractor_ibex_acid). The amohc statics race benignly across
+  // workers — documented in contractor_ibex_mohc.h.
+  if (config.number_of_jobs() > 1) {
+    const auto ctc =
+        make_shared<ContractorIbexMohcMt>(std::move(formulas), box, config);
+    if (ctc->is_dummy()) {
+      return make_contractor_id(config);
+    } else {
+      return Contractor{ctc};
+    }
+  }
+  const auto ctc =
+      make_shared<ContractorIbexMohc>(std::move(formulas), box, config);
   if (ctc->is_dummy()) {
     return make_contractor_id(config);
   } else {

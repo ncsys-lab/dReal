@@ -272,6 +272,18 @@ optional<Contractor> TheorySolver::BuildContractor(
     nl_ctcs.push_back(make_contractor_ibex_obbt(assertions, box, config_));
   }
 
+  if (config_.use_mohc()) {
+    // Add the Mohc monotonicity-aware propagation contractor over the
+    // assertion system (Araya et al., AAAI'10): occurrence-grouping monotone
+    // revise + monotone BoxNarrow recover width that plain HC4/ACID interval
+    // evaluation loses to the dependency problem on multi-occurrence
+    // constraints. A COMPLETENESS lever (its absence can only mean a missed
+    // refutation — asserts φ^δ T-satisfiable on a T-unsatisfiable φ), never
+    // a soundness change. Composable with --acid/--3bcid — shaving and
+    // monotone revise are different mechanisms.
+    nl_ctcs.push_back(make_contractor_ibex_mohc(assertions, box, config_));
+  }
+
 
   // ODEs
   vector<Contractor> ode_fwd_ctcs;

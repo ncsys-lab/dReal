@@ -155,6 +155,9 @@ OptionValue<double>& Config::mutable_newton_ceil() { return newton_ceil_; }
 bool Config::use_obbt() const { return use_obbt_.get(); }
 OptionValue<bool>& Config::mutable_use_obbt() { return use_obbt_; }
 
+bool Config::use_mohc() const { return use_mohc_.get(); }
+OptionValue<bool>& Config::mutable_use_mohc() { return use_mohc_; }
+
 const Config::Brancher& Config::brancher() const { return brancher_.get(); }
 
 OptionValue<Config::Brancher>& Config::mutable_brancher() { return brancher_; }
