@@ -58,6 +58,8 @@ class Contractor {
     IBEX_ACID,  // ACID / 3BCID shaving over the HC4 path (ContractorIbexAcid).
     IBEX_NEWTON,  // Interval-Newton (Hansen-Sengupta) contraction on the
                   // square equality subsystem (ContractorIbexNewton).
+    IBEX_OBBT,  // Optimization-based bound tightening: 2n certified LPs over
+                // the X-Taylor linear relaxation (ContractorIbexObbt).
     IBEX_FORALL,  // Sound proj-inter pre-pruner over ibex::CtcForAll, run beside
                   // the CEGIS FORALL decider (ContractorIbexForall). PITFALL
                   // forall-vs-forall_t: the ∃∀ NRA quantifier, not `forall_t`.
@@ -131,6 +133,9 @@ class Contractor {
   friend Contractor make_contractor_ibex_newton(std::vector<Formula> formulas,
                                                 const Box& box,
                                                 const Config& config);
+  friend Contractor make_contractor_ibex_obbt(std::vector<Formula> formulas,
+                                              const Box& box,
+                                              const Config& config);
   friend Contractor make_contractor_ibex_forall(Formula f, const Box& box,
                                                 const Config& config);
   friend Contractor make_contractor_fixpoint(
@@ -234,6 +239,18 @@ Contractor make_contractor_ibex_acid(std::vector<Formula> formulas,
 /// @see ContractorIbexNewtonMt.
 Contractor make_contractor_ibex_newton(std::vector<Formula> formulas,
                                        const Box& box, const Config& config);
+
+/// Returns a contractor performing optimization-based bound tightening: 2n
+/// certified LPs (min/max each variable) over one X-Taylor linearization of
+/// @p formulas, driving ibex::LPSolver in Mode::Certified directly. Only
+/// Neumaier-Shcherbina-certified LP results are used for contraction. If the
+/// number of jobs (in @p config) > 1, it creates a multi-threaded version of
+/// the contractor, which is based on ContractorIbexObbtMt.
+///
+/// @see ContractorIbexObbt.
+/// @see ContractorIbexObbtMt.
+Contractor make_contractor_ibex_obbt(std::vector<Formula> formulas,
+                                     const Box& box, const Config& config);
 
 /// Returns a sound proj-intersection pre-pruner over IBEX's ibex::CtcForAll for
 /// the ∀-formula @p f, meant to run *alongside* the CEGIS ContractorForall.

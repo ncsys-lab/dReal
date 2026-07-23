@@ -221,6 +221,12 @@ class Config {
   /// Returns a mutable OptionValue for `newton_ceil`.
   OptionValue<double>& mutable_newton_ceil();
 
+  /// Returns whether the OBBT (optimization-based bound tightening) LP
+  /// contractor is enabled.
+  bool use_obbt() const;
+  /// Returns a mutable OptionValue for `use_obbt`.
+  OptionValue<bool>& mutable_use_obbt();
+
   /// @name NLopt Options
   ///
   /// Specifies stopping criteria of NLopt. See
@@ -496,6 +502,9 @@ class Config {
   // contractor_ibex_newton.cc).
   OptionValue<bool> use_newton_{false};
   OptionValue<double> newton_ceil_{kDefaultNewtonCeil};
+
+  // OBBT 2n-certified-LP contractor (default off; see contractor_ibex_obbt.cc).
+  OptionValue<bool> use_obbt_{false};
 
   // Brancher to use. By default it uses `BranchLargestFirst`.
   OptionValue<Brancher> brancher_{BranchLargestFirst};

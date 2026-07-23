@@ -413,6 +413,10 @@ void MainProgram::AddOptions() {
                        "ceil). (default = {})",
                        Config::kDefaultNewtonCeil).c_str(),
            "--newton-ceil", positive_double_option_validator);
+  opt_.add("false", false, 0, 0,
+           "Use the OBBT (optimization-based bound tightening) contractor: "
+           "2n certified LPs over the X-Taylor linear relaxation per prune.\n",
+           "--obbt");
 }
 
 bool MainProgram::ValidateOptions() {
@@ -761,6 +765,9 @@ void MainProgram::ExtractOptions() {
     double v{0};
     opt_.get("--newton-ceil")->getDouble(v);
     config_.mutable_newton_ceil().set_from_command_line(v);
+  }
+  if (opt_.isSet("--obbt")) {
+    config_.mutable_use_obbt().set_from_command_line(true);
   }
 }
 

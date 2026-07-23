@@ -262,6 +262,16 @@ optional<Contractor> TheorySolver::BuildContractor(
     nl_ctcs.push_back(make_contractor_ibex_newton(assertions, box, config_));
   }
 
+  if (config_.use_obbt()) {
+    // Add the OBBT contractor: 2n certified LPs (min/max each variable) over
+    // one X-Taylor linearization of the assertion system, intersecting only
+    // Neumaier-Shcherbina-certified bounds. A COMPLETENESS lever (stronger
+    // contraction = fewer search nodes); uncertified LP results are never
+    // trusted for contraction, so LP round-off can never cause a false
+    // `unsat` (SOUNDNESS).
+    nl_ctcs.push_back(make_contractor_ibex_obbt(assertions, box, config_));
+  }
+
 
   // ODEs
   vector<Contractor> ode_fwd_ctcs;

@@ -30,6 +30,8 @@
 #include "dreal/contractor/contractor_ibex_fwdbwd_mt.h"
 #include "dreal/contractor/contractor_ibex_newton.h"
 #include "dreal/contractor/contractor_ibex_newton_mt.h"
+#include "dreal/contractor/contractor_ibex_obbt.h"
+#include "dreal/contractor/contractor_ibex_obbt_mt.h"
 #include "dreal/contractor/contractor_ibex_polytope.h"
 #include "dreal/contractor/contractor_ibex_polytope_mt.h"
 #include "dreal/contractor/contractor_id.h"
@@ -250,6 +252,30 @@ Contractor make_contractor_ibex_newton(vector<Formula> formulas, const Box& box,
   }
   const auto ctc =
       make_shared<ContractorIbexNewton>(std::move(formulas), box, config);
+  if (ctc->is_dummy()) {
+    return make_contractor_id(config);
+  } else {
+    return Contractor{ctc};
+  }
+}
+
+Contractor make_contractor_ibex_obbt(vector<Formula> formulas, const Box& box,
+                                     const Config& config) {
+  // The base ContractorIbexObbt owns a single mutable ibex::LPSolver (soplex
+  // instance) and LinearizerXTaylor, so a single cell cannot be shared across
+  // parallel ICP workers; the Mt variant builds one ContractorIbexObbt per
+  // worker thread (mirrors make_contractor_ibex_polytope).
+  if (config.number_of_jobs() > 1) {
+    const auto ctc =
+        make_shared<ContractorIbexObbtMt>(std::move(formulas), box, config);
+    if (ctc->is_dummy()) {
+      return make_contractor_id(config);
+    } else {
+      return Contractor{ctc};
+    }
+  }
+  const auto ctc =
+      make_shared<ContractorIbexObbt>(std::move(formulas), box, config);
   if (ctc->is_dummy()) {
     return make_contractor_id(config);
   } else {
