@@ -366,6 +366,19 @@ void MainProgram::AddOptions() {
            "smearsumrel, smearsum, smearmax, smearmaxrel. Omit the flag to use "
            "largest-first.\n",
            "--smear", smear_validator);
+  auto* const branch_validator =
+      new ez::ezOptionValidator("t", "in", "largest,abs,absdiam", false);
+  opt_.add("largest", false, 1, 0,
+           "Branch-variable heuristic: largest (largest-first, default), abs "
+           "(activity / diameter), absdiam (activity * diameter). abs/absdiam "
+           "score variables by Prune-shrink activity (our continuous "
+           "adaptation of ABS). Mutually exclusive with --smear.\n",
+           "--branch", branch_validator);
+  opt_.add(fmt::format("{}", Config::kDefaultBranchDecay).c_str(), false, 1, 0,
+           fmt::format("Per-node activity decay for --branch abs|absdiam, in "
+                       "(0, 1]. (default = {})",
+                       Config::kDefaultBranchDecay).c_str(),
+           "--branch-decay", positive_double_option_validator);
   // Seed-and-verify pre-pass (off-center NRA SAT instances). Speculative,
   // completeness-only: multi-start COBYLA proposes candidate points and a small
   // sound box around each is verified first by the existing prune+EvaluateBox.
@@ -688,6 +701,24 @@ void MainProgram::ExtractOptions() {
                                      ? SmearVariant::kMaxRel
                                      : SmearVariant::kSumRel;
     config_.mutable_smear_variant().set_from_command_line(variant);
+  }
+  if (opt_.isSet("--branch")) {
+    string v;
+    opt_.get("--branch")->getString(v);
+    const BrancherVariant variant = (v == "abs") ? BrancherVariant::kAbs
+                                    : (v == "absdiam")
+                                        ? BrancherVariant::kAbsDiam
+                                        : BrancherVariant::kLargest;
+    config_.mutable_brancher_variant().set_from_command_line(variant);
+  }
+  if (opt_.isSet("--branch-decay")) {
+    double v{0};
+    opt_.get("--branch-decay")->getDouble(v);
+    if (!(v > 0.0 && v <= 1.0)) {
+      throw DREAL_RUNTIME_ERROR("--branch-decay must be in (0, 1]; got {}.",
+                                v);
+    }
+    config_.mutable_branch_decay().set_from_command_line(v);
   }
   if (opt_.isSet("--seed-samples")) {
     int v{0};

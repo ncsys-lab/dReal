@@ -48,6 +48,19 @@ enum class SmearVariant {
   kMaxRel,  ///< SmearMaxRelative: max_i (|J_ij|·w_j / NC_i)
 };
 
+/// Activity-based ("ABS") branch-variable heuristic — our continuous
+/// adaptation of Michel & Van Hentenryck's finite-domain activity-based
+/// search (CPAIOR'12); the continuous scores and the decay default are ours,
+/// not the paper's (see brancher_abs.h). Per-variable activity A_i is bumped
+/// when a Prune strictly shrinks dim i and decays (--branch-decay) once per
+/// search node. Variable choice is a completeness/perf lever only, never a
+/// soundness concern. kLargest = the default largest-first brancher (ABS off).
+enum class BrancherVariant {
+  kLargest,  ///< off: use the configured largest-first brancher
+  kAbs,      ///< score_i = A_i / diam_i (degenerates to smallest-diam-first)
+  kAbsDiam,  ///< score_i = A_i * diam_i (degenerates to largest-first)
+};
+
 
 class Config {
  public:
@@ -159,6 +172,16 @@ class Config {
   SmearVariant smear_variant() const;
   /// Returns a mutable OptionValue for `smear_variant`.
   OptionValue<SmearVariant>& mutable_smear_variant();
+
+  /// Returns the ABS branch-variable heuristic variant (kLargest = off).
+  BrancherVariant brancher_variant() const;
+  /// Returns a mutable OptionValue for `brancher_variant`.
+  OptionValue<BrancherVariant>& mutable_brancher_variant();
+
+  /// Returns the per-node activity decay for --branch abs|absdiam.
+  double branch_decay() const;
+  /// Returns a mutable OptionValue for `branch_decay`.
+  OptionValue<double>& mutable_branch_decay();
 
   /// Returns the seed-and-verify candidate budget: the COBYLA multi-start count,
   /// and the on/off switch — `> 0` enables the `--seed-samples` pre-pass, `0`
@@ -330,6 +353,12 @@ class Config {
   static constexpr int kDefaultAcidS3b{10};
   static constexpr double kDefaultAcidCtRatio{0.002};
 
+  // --branch-decay default for --branch abs|absdiam: per-node multiplicative
+  // activity aging, in (0, 1]. 0.999 (a slow ~693-node half-life) is our
+  // choice, not a value from the ABS paper (the paper's rule is
+  // finite-domain; see brancher_abs.h).
+  static constexpr double kDefaultBranchDecay{0.999};
+
  private:
   // NOTE: Make sure to match the default values specified here with the ones
   // specified in dreal/dreal_main.cc.
@@ -429,6 +458,12 @@ class Config {
   // Smear constraint-aware branching variant (default kNone = off; see
   // brancher_smear.cc). Picks the split variable, not the split point.
   OptionValue<SmearVariant> smear_variant_{SmearVariant::kNone};
+
+  // Activity-based ABS branching variant (default kLargest = off; see
+  // brancher_abs.cc). Picks the split variable, not the split point.
+  OptionValue<BrancherVariant> brancher_variant_{BrancherVariant::kLargest};
+  // Per-node activity decay for --branch abs|absdiam.
+  OptionValue<double> branch_decay_{kDefaultBranchDecay};
 
   // Seed-and-verify pre-pass: speculative, COMPLETENESS-only, gated to
   // pure-relational (NRA) calls (AllRelational). The count is also the on/off

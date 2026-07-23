@@ -21,6 +21,7 @@
 #include <utility>
 
 #include "dreal/solver/brancher.h"
+#include "dreal/solver/brancher_abs.h"
 #include "dreal/solver/brancher_smear.h"
 #include "dreal/solver/icp_stat.h"
 #include "dreal/solver/seed/seed.h"
@@ -40,20 +41,30 @@ namespace dreal {
 namespace {
 
 bool ParallelBranch(const SmearBrancher* const smear_brancher,
+                    const BrancherAbs* const abs_brancher,
+                    const Config::Brancher& fallback_brancher,
                     const DynamicBitset& bitset,
                     const bool stack_left_box_first, Box* const box,
                     int* const branching_point,
                     Stack<pair<Box, int>>* const global_stack,
                     atomic<int>* const number_of_boxes,
                     const UpwardRounding& ur) {
-  // Constraint-aware smear (when enabled for this worker) vs largest-first;
-  // both share the brancher interface (dimension + left/right out-params).
+  // Constraint-aware smear / activity-based ABS (when enabled for this
+  // worker) vs the configured fallback brancher; all three share the brancher
+  // interface (dimension + left/right out-params). At most one of smear/abs
+  // is non-null (the Icp base ctor rejects a Config with both set). R2 parity
+  // fix: the fallback is config.brancher() — the Config slot, matching
+  // IcpSeq's dispatch (parity gap G2). Its default IS BranchLargestFirst, so
+  // default behavior is unchanged; a custom Config::mutable_brancher() now
+  // reaches the parallel path too.
   Box box_left;
   Box box_right;
   const int branching_dim{
       smear_brancher
           ? (*smear_brancher)(*box, bitset, &box_left, &box_right, ur)
-          : BranchLargestFirst(*box, bitset, &box_left, &box_right, ur)};
+      : abs_brancher
+          ? (*abs_brancher)(*box, bitset, &box_left, &box_right, ur)
+          : fallback_brancher(*box, bitset, &box_left, &box_right, ur)};
   if (branching_dim < 0) {
     // Fail to find a branching point.
     return false;
@@ -74,7 +85,8 @@ bool ParallelBranch(const SmearBrancher* const smear_brancher,
 
 void Worker(const Contractor& contractor, const Config& config,
             const vector<FormulaEvaluator>& formula_evaluators,
-            const SmearBrancher* const smear_brancher, const int id,
+            const SmearBrancher* const smear_brancher,
+            BrancherAbs* const abs_brancher, const int id,
             const bool main_thread,
             Stack<pair<Box, int>>* const global_stack,
             ContractorStatus* const cs, atomic<int>* const found_delta_sat,
@@ -137,6 +149,13 @@ void Worker(const Contractor& contractor, const Config& config,
     }
     need_to_pop = true;
 
+    if (abs_brancher != nullptr) {
+      // ABS hook (per-worker activity): age once per search node, then
+      // snapshot the pre-Prune diameters the post-Prune bump diffs against.
+      abs_brancher->Decay();
+      abs_brancher->SnapshotDiams(current_box, ur);
+    }
+
     // 2. Prune the current box. GUARD (pure identity — no contraction): the
     // kAlreadyPrunedTag root was pruned once on the main thread before being
     // pushed; see icp.h.
@@ -153,6 +172,12 @@ void Worker(const Contractor& contractor, const Config& config,
       // 3.1. The box is empty after pruning.
       number_of_boxes->fetch_sub(1, std::memory_order_acq_rel);
       continue;
+    }
+
+    if (abs_brancher != nullptr) {
+      // ABS hook: bump every dim Prune strictly shrank (the emptied-box case
+      // exited above; its snapshot is overwritten next node).
+      abs_brancher->BumpShrunk(current_box, ur);
     }
 
     // 3.2. The box is non-empty. Check if the box is still feasible
@@ -181,8 +206,9 @@ void Worker(const Contractor& contractor, const Config& config,
 
     // 3.2.3. This box is bigger than delta. Need branching.
     branch_timer_guard.resume();
-    if (!ParallelBranch(smear_brancher, *evaluation_result, stack_left_box_first,
-                        &current_box, &current_branching_point, global_stack,
+    if (!ParallelBranch(smear_brancher, abs_brancher, config.brancher(),
+                        *evaluation_result, stack_left_box_first, &current_box,
+                        &current_branching_point, global_stack,
                         number_of_boxes, ur)) {
       DREAL_LOG_DEBUG(
           "IcpParallel::Worker() Found that the current box is not "
@@ -282,6 +308,25 @@ bool IcpParallel::CheckSat(const Contractor& contractor,
     return smear_branchers.empty() ? nullptr : smear_branchers[i].get();
   };
 
+  // Activity-based ABS branching (--branch abs|absdiam): each worker owns its
+  // own BrancherAbs because Decay/SnapshotDiams/BumpShrunk mutate its
+  // activity state — the same per-worker-instance discipline as the
+  // SmearBrancher above. Activity is therefore per-worker (sharing would need
+  // synchronization on every node); the initial main-thread Prune above
+  // predates the branchers, so that one node's shrink goes unrecorded —
+  // heuristic bookkeeping only, no verdict impact. Empty (nullptr passed)
+  // when --branch is largest -> the configured fallback brancher.
+  vector<unique_ptr<BrancherAbs>> abs_branchers;
+  if (config().brancher_variant() != BrancherVariant::kLargest) {
+    for (int i = 0; i < number_of_jobs; ++i) {
+      abs_branchers.push_back(make_unique<BrancherAbs>(
+          cs->box(), config().brancher_variant(), config().branch_decay()));
+    }
+  }
+  const auto abs_brancher_for = [&abs_branchers](const int i) {
+    return abs_branchers.empty() ? nullptr : abs_branchers[i].get();
+  };
+
   // Total number of boxes that are either 1) under processing in a worker or 2)
   // waiting for a worker in the stack. This number goes zero when there is no
   // more work to do.
@@ -303,15 +348,16 @@ bool IcpParallel::CheckSat(const Contractor& contractor,
 
   for (int i = 0; i < number_of_jobs - 1; ++i) {
     results_.push_back(pool_.enqueue(
-        Worker, contractor, config(), formula_evaluators, brancher_for(i), i,
-        false /* not main thread */, &global_stack, &status_vector_[i],
-        &found_delta_sat, &number_of_boxes));
+        Worker, contractor, config(), formula_evaluators, brancher_for(i),
+        abs_brancher_for(i), i, false /* not main thread */, &global_stack,
+        &status_vector_[i], &found_delta_sat, &number_of_boxes));
   }
 
   const int last_index{number_of_jobs - 1};
   Worker(contractor, config(), formula_evaluators, brancher_for(last_index),
-         last_index, true /* main thread */, &global_stack,
-         &status_vector_[last_index], &found_delta_sat, &number_of_boxes);
+         abs_brancher_for(last_index), last_index, true /* main thread */,
+         &global_stack, &status_vector_[last_index], &found_delta_sat,
+         &number_of_boxes);
 
   // barrier.
   for (auto&& result : results_) {

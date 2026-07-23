@@ -20,6 +20,7 @@
 #include <utility>
 
 #include "dreal/solver/brancher.h"
+#include "dreal/solver/brancher_abs.h"
 #include "dreal/solver/brancher_smear.h"
 #include "dreal/solver/icp_stat.h"
 #include "dreal/solver/seed/seed.h"
@@ -141,6 +142,21 @@ bool IcpSeq::CheckSat(const Contractor& contractor,
                            config().smear_variant());
   }
 
+  // Activity-based ABS branching (--branch abs|absdiam): per-variable
+  // activity accumulated from Prune shrink events; this loop owns the hook
+  // points (Decay after pop, SnapshotDiams before Prune, BumpShrunk after a
+  // non-emptying Prune). The snapshot is a per-dim diameter vector reused
+  // inside the functor across iterations — NOT a Box copy per node (a Box
+  // copy would clone the variable vector and interval storage just to read
+  // back diameters). Mutually exclusive with --smear (the Icp base ctor
+  // rejects a Config with both set, on every entry path).
+  // Sound either way: variable choice never changes a verdict.
+  std::optional<BrancherAbs> abs_brancher;
+  if (config().brancher_variant() != BrancherVariant::kLargest) {
+    abs_brancher.emplace(cs->box(), config().brancher_variant(),
+                         config().branch_decay());
+  }
+
   while (!stack.empty()) {
     DREAL_LOG_DEBUG("IcpSeq::CheckSat() Loop Head");
 
@@ -162,6 +178,13 @@ bool IcpSeq::CheckSat(const Contractor& contractor,
     // or a valid dimension).
     current_branching_point = already_pruned ? -1 : entry_tag;
 
+    if (abs_brancher) {
+      // ABS hook: age all activities once per search node, then snapshot the
+      // pre-Prune diameters the post-Prune bump diffs against.
+      abs_brancher->Decay();
+      abs_brancher->SnapshotDiams(current_box, ur);
+    }
+
     // 2. Prune the current box. GUARD (pure identity — no contraction): the
     // kAlreadyPrunedTag root was pruned once before being pushed; see icp.h.
     if (!already_pruned) {
@@ -178,6 +201,12 @@ bool IcpSeq::CheckSat(const Contractor& contractor,
       // 3.1. The box is empty after pruning.
       DREAL_LOG_DEBUG("IcpSeq::CheckSat() Box is empty after pruning");
       continue;
+    }
+    if (abs_brancher) {
+      // ABS hook: bump every dim Prune strictly shrank. The emptied-box case
+      // exited above (an empty box has no meaningful diameters); its
+      // snapshot is simply overwritten by the next node's SnapshotDiams.
+      abs_brancher->BumpShrunk(current_box, ur);
     }
     // 3.2. The box is non-empty. Check if the box is still feasible
     // under evaluation and it's small enough.
@@ -209,6 +238,9 @@ bool IcpSeq::CheckSat(const Contractor& contractor,
         smear_brancher
             ? (*smear_brancher)(current_box, *evaluation_result, &box_left,
                                 &box_right, ur)
+        : abs_brancher
+            ? (*abs_brancher)(current_box, *evaluation_result, &box_left,
+                              &box_right, ur)
             : config().brancher()(current_box, *evaluation_result, &box_left,
                                   &box_right, ur);
     if (branching_dim >= 0) {

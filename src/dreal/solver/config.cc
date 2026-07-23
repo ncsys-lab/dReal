@@ -121,6 +121,16 @@ OptionValue<SmearVariant>& Config::mutable_smear_variant() {
   return smear_variant_;
 }
 
+BrancherVariant Config::brancher_variant() const {
+  return brancher_variant_.get();
+}
+OptionValue<BrancherVariant>& Config::mutable_brancher_variant() {
+  return brancher_variant_;
+}
+
+double Config::branch_decay() const { return branch_decay_.get(); }
+OptionValue<double>& Config::mutable_branch_decay() { return branch_decay_; }
+
 int Config::seed_samples() const { return seed_samples_.get(); }
 OptionValue<int>& Config::mutable_seed_samples() { return seed_samples_; }
 

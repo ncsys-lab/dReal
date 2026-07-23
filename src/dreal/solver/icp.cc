@@ -20,6 +20,7 @@
 #include <tuple>
 #include <utility>
 
+#include "dreal/util/exception.h"
 #include "dreal/util/logging.h"
 #include "dreal/util/rounded_interval.h"
 #include "dreal/util/rounding.h"
@@ -28,7 +29,19 @@ using std::vector;
 
 namespace dreal {
 
-Icp::Icp(const Config& config) : config_{config} {}
+Icp::Icp(const Config& config) : config_{config} {
+  // The --branch/--smear mutual exclusion, enforced at the one construction
+  // point every entry path funnels through (CLI flags and library callers
+  // both land here via TheorySolver -> IcpSeq/IcpParallel). Without it, a
+  // Config with both slots set would silently prefer smear in the three-way
+  // dispatch and drop abs.
+  if (config_.brancher_variant() != BrancherVariant::kLargest &&
+      config_.smear_variant() != SmearVariant::kNone) {
+    throw DREAL_RUNTIME_ERROR(
+        "--branch abs|absdiam and --smear are mutually exclusive; this "
+        "Config sets both.");
+  }
+}
 
 void WarnDegenerateDeltaSat(const std::string& reason, const Box& box) {
   // Decimal formatting must run under FE_TONEAREST (docs/rounding.md). The
