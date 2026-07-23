@@ -49,10 +49,19 @@ using std::vector;
 
 TheorySolver::TheorySolver(const Config& config)
     : config_{config}, icp_{nullptr} {
-  if (config_.number_of_jobs() > 1) {
+  // --icp-force-parallel routes jobs = 1 through IcpParallel (zero pool
+  // workers; the main thread runs the single Worker, deterministically) —
+  // experiment-scoped scaffolding for the seq/parallel parity measurement
+  // (icp_parity_gaps.md R3/G4); it dies with the R4 consolidation. The
+  // dispatch is frozen HERE, at construction (Blocks 21-22 rely on that:
+  // the nested CE Context must clear the flag before constructing this);
+  // the logs make the choice observable under --verbose.
+  if (config_.number_of_jobs() > 1 || config_.use_icp_force_parallel()) {
     icp_ = make_unique<IcpParallel>(config_);
+    DREAL_LOG_DEBUG("TheorySolver::TheorySolver() dispatch = IcpParallel");
   } else {
     icp_ = make_unique<IcpSeq>(config_);
+    DREAL_LOG_DEBUG("TheorySolver::TheorySolver() dispatch = IcpSeq");
   }
 }
 

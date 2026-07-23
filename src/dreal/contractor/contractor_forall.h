@@ -87,7 +87,7 @@ class ContractorForall : public ContractorCell {
                                                 quantified_variables_, epsilon),
             true)},
         contractor_{config /* This one will be updated anyway. */},
-        context_for_counterexample_{config} {
+        context_for_counterexample_{MakeCounterexampleConfig(config)} {
     DREAL_ASSERT(epsilon > 0.0);
     DREAL_ASSERT(inner_delta > 0.0);
     DREAL_ASSERT(config.precision() > epsilon);
@@ -251,6 +251,29 @@ class ContractorForall : public ContractorCell {
       box.Add(v);
     }
     return box;
+  }
+
+  // Config for the nested counterexample Context: a copy of `config` with
+  // --icp-force-parallel cleared. The nested CE solve keeps the IcpSeq
+  // dispatch even when the outer solve is forced onto IcpParallel: the flag
+  // is top-level parity-measurement scaffolding (icp_parity_gaps.md R3), and
+  // recursing it here would both unisolate that A/B and prematurely exercise
+  // the nested-CDS surface deferred to R4 (G6). Dispatch choice never moves
+  // a verdict (both loops are sound; jobs = 1 IcpParallel is deterministic),
+  // so this is experiment isolation — neither SOUNDNESS (false unsat) nor
+  // COMPLETENESS (missed refutation) is at stake.
+  //
+  // The clear MUST happen here, before the Context is constructed — a
+  // mutable_config() write in the constructor body is too late: Context
+  // eagerly builds its Impl, whose member-init list constructs the
+  // TheorySolver, whose constructor consumes use_icp_force_parallel() and
+  // freezes the ICP dispatch then and there (Block 15). The body's
+  // precision / use_polytope writes work only because those options are read
+  // lazily at CheckSat time through TheorySolver's `const Config&` member.
+  static Config MakeCounterexampleConfig(const Config& config) {
+    Config counterexample_config{config};
+    counterexample_config.mutable_use_icp_force_parallel() = false;
+    return counterexample_config;
   }
 
   const Formula f_;                             // ∀X.φ

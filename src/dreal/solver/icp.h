@@ -63,6 +63,35 @@ class Icp {
   const Config& config_;
 };
 
+/// Tag carried beside each Box in an ICP DFS stack entry `(Box, tag)`:
+///
+///   >= 0              — the dimension branched on to create this box.
+///                       Written into ContractorStatus::branching_point before
+///                       the box's Prune, so ContractorWorklistFixpoint seeds
+///                       only the contractors whose inputs depend on that
+///                       dimension (the incremental-repruning optimization).
+///   -1                — no branching information (the --seed-samples seed
+///                       boxes); the worklist fixpoint full-seeds.
+///   kAlreadyPrunedTag — the ROOT box, pruned once before being pushed. Both
+///                       loops prune the root up front (an empty root returns
+///                       unsat immediately, and every box is pruned exactly
+///                       once per pop; the --seed-samples pre-pass proposes
+///                       from an UN-PRUNED root snapshot — see the seed-input
+///                       comment in icp_seq.cc for why the R3 draft's
+///                       pruned-box input was rejected); the pop that sees
+///                       this tag skips the redundant re-prune.
+///                       The skip is a pure identity guard (no contraction):
+///                       the box only stays (weakly) wider than a re-prune
+///                       would leave it, which can never narrow past a true
+///                       model — never SOUNDNESS (a false unsat requires
+///                       narrowing past a T-model) — and delta-sat acceptance
+///                       still passes through the unchanged EvaluateBox
+///                       arbiter.
+///
+/// The tag itself never enters ContractorStatus::mutable_branching_point()
+/// (whose domain is -1 or a valid dimension); the loops translate it to -1.
+constexpr int kAlreadyPrunedTag{-2};
+
 /// Evaluates each formula with @p box using interval
 /// arithmetic. There are three possible outcomes:
 ///

@@ -17,6 +17,8 @@
 
 #include <atomic>
 #include <memory>
+#include <optional>
+#include <utility>
 
 #include "dreal/solver/brancher.h"
 #include "dreal/solver/brancher_smear.h"
@@ -29,6 +31,7 @@
 
 using std::atomic;
 using std::make_unique;
+using std::pair;
 using std::unique_ptr;
 using std::vector;
 
@@ -39,7 +42,8 @@ namespace {
 bool ParallelBranch(const SmearBrancher* const smear_brancher,
                     const DynamicBitset& bitset,
                     const bool stack_left_box_first, Box* const box,
-                    Stack<Box>* const global_stack,
+                    int* const branching_point,
+                    Stack<pair<Box, int>>* const global_stack,
                     atomic<int>* const number_of_boxes,
                     const UpwardRounding& ur) {
   // Constraint-aware smear (when enabled for this worker) vs largest-first;
@@ -57,15 +61,22 @@ bool ParallelBranch(const SmearBrancher* const smear_brancher,
   const Box& to_stack{stack_left_box_first ? box_left : box_right};
   const Box& to_keep{stack_left_box_first ? box_right : box_left};
   number_of_boxes->fetch_add(1, std::memory_order_relaxed);
-  global_stack->push(to_stack);
+  // Both children carry the branched dimension — the pushed child inside its
+  // stack entry (read back on pop), the kept child through *branching_point
+  // (the ContractorStatus field the next Prune reads) — so
+  // ContractorWorklistFixpoint seeds only the dependent contractors, exactly
+  // as IcpSeq does (icp_parity_gaps.md G1/R1).
+  global_stack->emplace(to_stack, branching_dim);
   *box = to_keep;
+  *branching_point = branching_dim;
   return true;
 }
 
 void Worker(const Contractor& contractor, const Config& config,
             const vector<FormulaEvaluator>& formula_evaluators,
             const SmearBrancher* const smear_brancher, const int id,
-            const bool main_thread, Stack<Box>* const global_stack,
+            const bool main_thread,
+            Stack<pair<Box, int>>* const global_stack,
             ContractorStatus* const cs, atomic<int>* const found_delta_sat,
             atomic<int>* const number_of_boxes) {
   thread_local IcpStat stat{DREAL_LOG_INFO_ENABLED, id};
@@ -83,6 +94,9 @@ void Worker(const Contractor& contractor, const Config& config,
   // `current_box` always points to the box in the contractor status
   // as a mutable reference.
   Box& current_box{cs->mutable_box()};
+  // `current_branching_point` always points to the branching_point in
+  // the contractor status as a mutable reference.
+  int& current_branching_point{cs->mutable_branching_point()};
 
   // When this flag is true, we need to pop a box from the stack. Otherwise, it
   // indicates that we can work with the box inside of the ContractorStatus.
@@ -106,20 +120,33 @@ void Worker(const Contractor& contractor, const Config& config,
     }
 #endif
 
-    // 1. Pick a box from the global stack if needed.
+    // 1. Pick a box from the global stack if needed. A kept child
+    // (need_to_pop == false) skips this: ParallelBranch already wrote its box
+    // and branched dimension into the contractor status.
+    bool already_pruned{false};
     if (need_to_pop) {
-      if (!global_stack->pop(current_box)) {
+      pair<Box, int> entry;
+      if (!global_stack->pop(entry)) {
         continue;
       }
+      current_box = std::move(entry.first);
+      already_pruned = entry.second == kAlreadyPrunedTag;
+      // The tag never enters ContractorStatus (its branching_point domain is
+      // -1 or a valid dimension).
+      current_branching_point = already_pruned ? -1 : entry.second;
     }
     need_to_pop = true;
 
-    // 2. Prune the current box.
-    prune_timer_guard.resume();
-    contractor.Prune(cs, ur);
-    prune_timer_guard.pause();
-    if (stat.enabled()) {
-      stat.num_prune_++;
+    // 2. Prune the current box. GUARD (pure identity — no contraction): the
+    // kAlreadyPrunedTag root was pruned once on the main thread before being
+    // pushed; see icp.h.
+    if (!already_pruned) {
+      prune_timer_guard.resume();
+      contractor.Prune(cs, ur);
+      prune_timer_guard.pause();
+      if (stat.enabled()) {
+        stat.num_prune_++;
+      }
     }
 
     if (current_box.empty()) {
@@ -155,7 +182,8 @@ void Worker(const Contractor& contractor, const Config& config,
     // 3.2.3. This box is bigger than delta. Need branching.
     branch_timer_guard.resume();
     if (!ParallelBranch(smear_brancher, *evaluation_result, stack_left_box_first,
-                        &current_box, global_stack, number_of_boxes, ur)) {
+                        &current_box, &current_branching_point, global_stack,
+                        number_of_boxes, ur)) {
       DREAL_LOG_DEBUG(
           "IcpParallel::Worker() Found that the current box is not "
           "satisfying "
@@ -201,13 +229,24 @@ bool IcpParallel::CheckSat(const Contractor& contractor,
   vector<Box> seed_boxes;
 
   // Initial Prune (main thread) — establish the FE_UPWARD phase here too.
+  // branching_point = -1: full worklist seed for the root prune, stated
+  // explicitly rather than inherited from the caller's ContractorStatus
+  // (IcpSeq states it identically). Seeds are proposed from the UN-PRUNED
+  // root snapshot — the canonical seed input shared with IcpSeq (see the
+  // seed-input comment there: the pruned-box input regressed the ∃∀ Minimize
+  // path into a hang) — but only after a non-empty root prune (an empty root
+  // is unsat; every seed box is a sub-box of the infeasible root).
   {
     const UpwardRoundingScope phase_scope;
     const UpwardRounding ur{phase_scope.token()};
+    std::optional<Box> seed_input;
+    if (config().seed_samples() > 0 && AllRelational(formula_evaluators)) {
+      seed_input.emplace(cs->box());
+    }
+    cs->mutable_branching_point() = -1;
     contractor.Prune(cs, ur);
-    if (!cs->box().empty() && config().seed_samples() > 0 &&
-        AllRelational(formula_evaluators)) {
-      seed_boxes = SeedBoxes(formula_evaluators, cs->box(), config(), ur);
+    if (!cs->box().empty() && seed_input) {
+      seed_boxes = SeedBoxes(formula_evaluators, *seed_input, config(), ur);
     }
   }
   if (cs->box().empty()) {
@@ -222,7 +261,7 @@ bool IcpParallel::CheckSat(const Contractor& contractor,
   atomic<int> found_delta_sat{-1};
   static CdsInit cds_init{
       true /* main thread is using lock-free containers. */};
-  Stack<Box> global_stack;
+  Stack<pair<Box, int>> global_stack;
 
   const int number_of_jobs = config().number_of_jobs();
 
@@ -248,10 +287,13 @@ bool IcpParallel::CheckSat(const Contractor& contractor,
   // more work to do.
   atomic<int> number_of_boxes{0};
 
-  global_stack.push(cs->box());
+  // Root pushed tagged kAlreadyPrunedTag (pruned above; the first pop skips
+  // the redundant re-prune — see icp.h), seeds tagged -1 (full worklist
+  // seed). Push order unchanged: root first, seeds on top (LIFO).
+  global_stack.emplace(cs->box(), kAlreadyPrunedTag);
   ++number_of_boxes;
-  for (const Box& seed_box : seed_boxes) {
-    global_stack.push(seed_box);
+  for (Box& seed_box : seed_boxes) {
+    global_stack.emplace(std::move(seed_box), -1);
     ++number_of_boxes;
   }
 

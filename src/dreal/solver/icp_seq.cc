@@ -56,12 +56,9 @@ bool IcpSeq::CheckSat(const Contractor& contractor,
   bool explore_left_first{!config().stack_left_box_first()};
   static IcpStat stat{DREAL_LOG_INFO_ENABLED};
   DREAL_LOG_DEBUG("IcpSeq::CheckSat()");
-  // Stack of Box x BranchingPoint.
+  // Stack of Box x tag (a branched dimension, -1, or kAlreadyPrunedTag — see
+  // icp.h). The root box is pushed after the pre-loop root prune below.
   vector<pair<Box, int>> stack;
-  stack.emplace_back(
-      cs->box(),
-      // -1 indicates that the very first box does not come from a branching.
-      -1);
 
   // `current_box` always points to the box in the contractor status
   // as a mutable reference.
@@ -85,16 +82,51 @@ bool IcpSeq::CheckSat(const Contractor& contractor,
   const UpwardRoundingScope phase_scope;
   const UpwardRounding ur{phase_scope.token()};
 
-  // --seed-samples seed-and-verify pre-pass. For pure-relational (NRA) theory
-  // calls, propose candidate points (LHS sampling or COBYLA) and push a small
-  // SOUND box around each so they are explored FIRST (LIFO; the root box stays
-  // at the bottom). This is a COMPLETENESS-only speed optimization atop the
-  // complete search — the cache/recompute carve-out shape, NOT a fallback: the
-  // unchanged Prune+EvaluateBox loop is the SOLE arbiter of delta-SAT, so a poor
-  // candidate cannot cause a false delta-sat, and the root box below guarantees
-  // no subspace is dropped (completeness preserved).
+  // Seed-input snapshot: the --seed-samples pre-pass below proposes from the
+  // UN-PRUNED root box (IcpSeq's historical seed input, now the canonical one
+  // for BOTH loops), so the copy is taken before the root prune. The R3 draft
+  // canonicalized on the PRUNED box instead (icp_parity_gaps.md G3) and that
+  // regressed a previously-green ∃∀ path catastrophically
+  // (MinimizeEqualityElimination.Issue320UnrelatedEqualityHang: <1 s -> >120 s
+  // hang at delta=1e-16; isolated 2026-07-22 by varying only this input —
+  // nested-CE seeding from the HC4-contracted CE box returns counterexamples
+  // that stall the outer CE-guided contraction). COMPLETENESS/termination
+  // only — seed choice never moves a verdict.
+  std::optional<Box> seed_input;
   if (config().seed_samples() > 0 && AllRelational(formula_evaluators)) {
-    for (Box& seed_box : SeedBoxes(formula_evaluators, cs->box(), config(), ur)) {
+    seed_input.emplace(cs->box());
+  }
+
+  // Root prune — the canonical shape shared with IcpParallel::CheckSat: prune
+  // the root box ONCE up front (branching_point = -1: full worklist seed,
+  // stated explicitly rather than inherited from the caller's
+  // ContractorStatus), so an empty root returns unsat without touching the
+  // stack (skipping the seed exploration: every seed box is a sub-box of the
+  // infeasible root). The root is then pushed tagged kAlreadyPrunedTag so its
+  // pop skips the redundant re-prune (see icp.h).
+  current_branching_point = -1;
+  prune_timer_guard.resume();
+  contractor.Prune(cs, ur);
+  prune_timer_guard.pause();
+  stat.num_prune_++;
+  if (current_box.empty()) {
+    DREAL_LOG_DEBUG("IcpSeq::CheckSat() Root box is empty after pruning");
+    return false;
+  }
+  stack.emplace_back(current_box, kAlreadyPrunedTag);
+
+  // --seed-samples seed-and-verify pre-pass. For pure-relational (NRA) theory
+  // calls, propose candidate points (LHS sampling or COBYLA) from the
+  // un-pruned root snapshot and push a small SOUND box around each so they
+  // are explored FIRST (LIFO; the root box stays at the stack bottom). This
+  // is a COMPLETENESS-only speed optimization atop the complete search — the
+  // cache/recompute carve-out shape, NOT a fallback: the unchanged
+  // Prune+EvaluateBox loop is the SOLE arbiter of delta-SAT, so a poor
+  // candidate cannot cause a false delta-sat, and the root box at the stack
+  // bottom guarantees no subspace is dropped (completeness preserved).
+  if (seed_input) {
+    for (Box& seed_box :
+         SeedBoxes(formula_evaluators, *seed_input, config(), ur)) {
       stack.emplace_back(std::move(seed_box), -1);
     }
   }
@@ -122,17 +154,25 @@ bool IcpSeq::CheckSat(const Contractor& contractor,
 #endif
 
     // 1. Pop the current box from the stack
-    tie(current_box, current_branching_point) = stack.back();
+    int entry_tag{};
+    tie(current_box, entry_tag) = stack.back();
     stack.pop_back();
+    const bool already_pruned{entry_tag == kAlreadyPrunedTag};
+    // The tag never enters ContractorStatus (its branching_point domain is -1
+    // or a valid dimension).
+    current_branching_point = already_pruned ? -1 : entry_tag;
 
-    // 2. Prune the current box.
-    DREAL_LOG_TRACE("IcpSeq::CheckSat() Current Box:\n{}", current_box);
-    prune_timer_guard.resume();
-    contractor.Prune(cs, ur);
-    prune_timer_guard.pause();
-    stat.num_prune_++;
-    DREAL_LOG_TRACE("IcpSeq::CheckSat() After pruning, the current box =\n{}",
-                    current_box);
+    // 2. Prune the current box. GUARD (pure identity — no contraction): the
+    // kAlreadyPrunedTag root was pruned once before being pushed; see icp.h.
+    if (!already_pruned) {
+      DREAL_LOG_TRACE("IcpSeq::CheckSat() Current Box:\n{}", current_box);
+      prune_timer_guard.resume();
+      contractor.Prune(cs, ur);
+      prune_timer_guard.pause();
+      stat.num_prune_++;
+      DREAL_LOG_TRACE("IcpSeq::CheckSat() After pruning, the current box =\n{}",
+                      current_box);
+    }
 
     if (current_box.empty()) {
       // 3.1. The box is empty after pruning.
