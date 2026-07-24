@@ -16,8 +16,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `docs/forall-semantics.md` — ∃∀ fragment: syntax, CE-guided contractor, nested-forall crash, QE limits, nested-quantifier project guide
 - `exists_forall_perf.md` (repo-root **worklog**, not docs) — ∃∀ machinery notes: the durable solver findings (`--forall-pre-prune` is sound but its speedup is **encoding-fragile** and doesn't address the existential-isolation wall; `--forall-polytope` needs SoPlex and can *hurt*; CE-domain fix; lemma-PM is ground-only) plus a **correction header** — the odeexpr_v2 family was regenerated 2026-07-01 — a second same-day regen now (25 `forall/` + 25 `exists_forall/`, δ pinned **0.01**), so the older δ=0.0005 / "SAT-by-construction" body is superseded: only `sign_agreement` admits the zero witness, while the strict-margin `average_descends`/`both_descend` files are genuine UNSAT/separation targets; the symbolic-rewrite avenue (SymPy-verified `sig2tanh`/`factor`/`simplify` of the descent body) was tested & **rejected 2026-07-02** — UNSAT-null, `factor`/`simplify` only an N1-delta-sat artifact (net-negative + `simplify` hangs on N2), so don't re-try it (§2026-07-02)
 - `odeexpr_v2_forall_perf.md` (repo-root **worklog**, not docs) — odeexpr_v2 `forall/` n2 intractability diagnosis: the affine-transformed descent bodies contract so poorly under ICP that the tractable-dimension threshold collapses (~6 free vars vs the 11–18 carried); singularity ruled out, no NRA flag helps; COMPLETENESS (missed refutation within budget on a true-`unsat` goal — never a false `unsat`)
-- `upstream_gap_audit.md` (repo-root **worklog**, not docs) — 2026-07-21 audit of soonhokong/dreal4's unmerged fixes + all open dreal/dreal4 issues vs. this fork: only two port candidates (minimize equality-elimination `e7ab1ff8a`, timer-test flake fix); pow under/overflow + #323/#324/#315 already covered here; live neither-fork defects found, worst first: #258 arctan2 false unsat (SOUNDNESS), #264/#284 large-Int false unsat, #280/#265/#68 completeness, crashes #176/#86/#80
-- `icp_parity_gaps.md` (repo-root **worklog**, not docs) — 2026-07-22 audit of residual IcpSeq↔IcpParallel divergences after the T5 parity campaign (none soundness): worklist-fixpoint `branching_point` seeding is seq-only, `config().brancher()` ignored in parallel, seed-input/root-double-prune asymmetry, unmeasured jobs=1 overhead, stats plumbing, nested forall-CE pins IcpSeq — plus the deferred consolidation plan (close gaps → A/B jobs=1-parallel vs seq → delete IcpSeq)
+- `upstream_gap_audit.md` (repo-root **worklog**, not docs) — 2026-07-21 audit of soonhokong/dreal4's unmerged fixes + all open dreal/dreal4 issues vs. this fork, **discharged 2026-07-22** (correction header cites the fix shas): both port candidates landed; #258 arctan2 false unsat (SOUNDNESS) fixed fork-side, #264/#284 false unsat + #280 missed refutation (COMPLETENESS) fixed here, #68/#265 now warn loudly. Remaining live set: crashes #176/#86/#80, #223, and the #265 unbounded-interval design limit (COMPLETENESS — missed refutation)
+- `icp_parity_gaps.md` (repo-root **worklog**, not docs) — 2026-07-22 audit of residual IcpSeq↔IcpParallel divergences after the T5 parity campaign (none soundness). **Status 2026-07-24:** G1–G3 closed (`0c5e9a753`/`e8cdb7525`; canonical seed input = un-pruned root snapshot in both loops — the pruned-box variant hung nested-CE COBYLA), G4 measured via the sweep's `par1` arm (zero verdict diffs, PAR2 1.001× — gate PASS) ⇒ R4/R5 consolidation (delete IcpSeq) GO, pending execution; G5/G6 fold into R4
 - `docs/seeding.md` — seed-and-verify (`--seed-samples`): the `AllRelational` gate, the CSE/COBYLA/NNF/outward-box pipeline, COMPLETENESS-only framing
 - `docs/constraint-order-explanation-soundness.md` — **FIXED SOUNDNESS bug** (2026-06-29): a stiff ODE `integral` logically responsible for a conflict was dropped from `used_constraints_` (CAPD diverges → `contractor_ode_lohner::Prune` returned at its inconclusive exit without recording), so the learned theory clause was built from the satisfiable relational remainder → false `unsat` (triggered by `--constraint-order desc`). Fix: the inconclusive exits call `ContractorStatus::AddInconclusiveOde`, and `GenerateExplanation` splices the ODE in as a non-expanding leaf keyed on the emptying `unsat_witness` (minimal-relevant; witness not the broad closure, which regressed a c2e2 SAT instance to TIM). Validated by no-flip + auditor (2819 lemmas, 0 invalid) + corpus A/B (1.01× PAR2). Adversarial tests: `test/dreal/solver/test/constraint_order_soundness_test.cc`
 - `docs/papers/` — foundational Gao et al. literature: companion summaries (δ-decidability/δ-complete/dReal-tool/∃∀) cross-referenced into the docs above, with paper↔code drift flagged (e.g. opensmt+realpaver → CaDiCaL+IBEX+CAPD)
@@ -145,6 +145,29 @@ moves the pinned δ=0.0005** — measured record, the SAT-by-construction findin
 combine-with-polytope-hurts result: `exists_forall_perf.md`. Mechanism + IBEX-lever
 audit: `ibex_docs/AUDIT-QUANTIFIERS.md` Q1. Code:
 `src/dreal/contractor/contractor_ibex_forall.{h,cc}`.
+
+**RELATED-WORK candidates (2026-07, all default off):** the `ibex_docs/RELATED-WORK.md` top
+five shipped as opt-in flags and were measured (11-arm × 270-job sweep + 4-arm ODE-family
+re-sweep — `OPTIMIZATION_LOG.md` §"RELATED-WORK candidate campaign";
+`benchmark/results/sweep_20260723_115956/ANALYSIS.md`). Family-conditional, no default
+changes: **`--mohc`** (CtcMohc monotonicity cell) is the only base-beater on the odeexpr
+families (115/151, PAR2 0.968×) and **`--polytope --polytope-linearizer affine`** (vendored
+affine plugin) wins odeexpr_v1 (0.804×) — enable per-project for odeexpr only (the `--smear
+smearsum` precedent); both are strongly net-negative on the ODE families (keep base flags
+there). `--drpm-max-size 4` shows a real github lemma-PM signal (PAR2 0.688×, up to 28×
+single-file) but has one undiagnosed tacas 9 s→TIM pathology — diagnose before recommending.
+**Measured dead, kept for record:** `--newton`/`--newton-ceil` (zero unique solves, 11
+OOMs), `--branch abs|absdiam`/`--branch-decay` (ABS degeneracy confirmed — both variants
+lose everywhere), `--obbt` (≈polytope). **BUG-014** (`docs/dreal-bugs.md`): X-Taylor LP rows
+trigger an OOB write in vendored SoPlex presolve — latent SOUNDNESS risk (a corrupted box
+narrowed past a true model would assert φ T-unsatisfiable on a T-satisfiable φ — false
+unsat; none observed) — avoid `--obbt`/bare `--polytope`/`--polytope-linearizer both`;
+affine and mohc are immune. The system cells skip `forall_t`/`integral` atoms
+(`FilterIbexConvertible`, COMPLETENESS-only, `f6d735254`). Headline: the system-cell arms
+scored the **first machine-verified UNSAT on the odeexpr_v2 `forall/` wall** (aed75881 —
+a COMPLETENESS win for those arms; base's delta-sat is the legal δ-artifact).
+`--icp-force-parallel` (parity scaffold): R3 gate PASSED (zero flips, 1.001×) ⇒ IcpSeq
+consolidation GO (`icp_parity_gaps.md` R4/R5).
 
 **CAPD ODE tuning:** `--ode-taylor-order` (default 12), `--ode-hull-grid` (4 — per-step sub-slice
 count; lower widens enclosures (never a false-`unsat`). Since the 2026-06 centered-in-time tube
