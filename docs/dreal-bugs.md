@@ -98,4 +98,122 @@ keeping the default `--ode-backward true` restores the refutation on this instan
 
 ---
 
+## BUG-014 — X-Taylor LP arms (`--obbt` / `--polytope` / `--polytope-linearizer both`) die on silent signals inside vendored SoPlex 4.0.2 `SPxMainSM::duplicateCols` (OOB write in presolve; heap corruption; latent SOUNDNESS risk, no wrong verdict observed)
+
+**Symptom / Description**
+
+The Phase-7 sweep (`benchmark/results/sweep_20260723_115956/ANALYSIS.md` §New crash class)
+recorded 8 jobs on pure QF-NRA odeexpr files dying on SIGBUS/SIGSEGV/SIGTRAP/abort with zero
+diagnostics (no verdict, empty or stats-only stderr), confined to the three arms that
+exercise the X-Taylor LP path; the affine-linearizer and mohc arms were clean on the same
+files. Reproduced solo: **6 of 8 combos crash 3/3 deterministically**, one 1/3, one 0/3
+(sweep crash was at that run's finish line). Signals flip across identical invocations
+(poly×F6: 138,139,138) — same defect, different landing spot.
+
+All four signal flavors collapse to **one defect**: an out-of-bounds indexed *write* inside
+`soplex::SPxMainSM::duplicateCols` (the Bixby–Wagner duplicate-column presolve of the
+vendored SoPlex 4.0.2, `ibex-fork/lp_lib_wrapper/soplex/3rd/soplex-4.0.2.tar`), reached via
+`ibex::LPSolver::minimize`. When the wild write hits unmapped memory → immediate
+SIGBUS/SIGSEGV in `duplicateCols`; when it lands in mapped heap → corruption detected later
+(SIGTRAP = libmalloc xzone freelist trap on `duplicateCols`'s own next `spx_alloc<int*>`;
+SIGABRT = `malloc_vreport → abort()`) — or **not detected at all: the same combos sometimes
+run to completion and print a verdict** (obbt×F5: delta-sat 2/3, SIGBUS 1/3).
+
+**Reproducer(s)** (no minimized file committed — read-only investigation; corpus paths are
+stable). F6 = `~/Documents/new_dreal/ode_expressivity_energy/benchmarks/forall/kuramoto_sat_N2__kuramoto_ideal_N2__both_descend__k0__dh1__GNone__gradient__forall__fbd0a7b3__a85c192e.smt2`,
+F4 = sibling `kuramoto_ideal_N2…d96326f1__a85c192e.smt2`, F5 = `kuramoto_ideal_N3…804a1e71__9471f6d6.smt2`,
+F1–F3 = `~/Documents/new_dreal/ode_expressivity/benchmarks/tanh_coupling/decrease_{d_i,exact,slope}__tau0.0015__*.smt2`.
+Exit codes: 138=SIGBUS, 139=SIGSEGV, 133=SIGTRAP, 134=SIGABRT.
+
+Solo repro, sweep binary (`gcc_build/dreal4` stamp `f51f78b8e <dirty>` = sweep's `60fca6f69`,
+built 2026-07-23 07:20), `timeout 300`, 3 runs each — verified outputs:
+
+| combo (sweep signal) | r1 / r2 / r3 |
+|---|---|
+| `--obbt` F5 (138) | 0 delta-sat / **138** / 0 delta-sat |
+| `--obbt` F6 (138) | **133 / 133 / 133** (~15 s; under lldb: completed `unsat`) |
+| `--polytope` F1 (134 @39.9 s) | 0 / 0 / 0 — delta-sat @38 s (sweep crash at finish line) |
+| `--polytope` F4 (138) | **138 / 138 / 138** (~9 s) |
+| `--polytope` F6 (139) | **138 / 139 / 138** (~8 s) |
+| `…-linearizer both` F2 (138) | **138 / 138 / 138** (~8 s) |
+| `…-linearizer both` F3 (139) | **139 / 139 / 139** (instant) |
+| `…-linearizer both` F5 (133) | **133 / 133 / 138** (~4 s) |
+
+**Stack** (lldb, identical shape for poly×F4, poly×F6, hyb×F5, hyb×F3; ~20 CrashReporter
+`.ips` files corroborate, incl. the SIGTRAP/SIGABRT flavors):
+
+```
+frame #0 soplex::SPxMainSM::duplicateCols(soplex::SPxLPBase<double>&, bool&) + 800   ← faulting RMW store
+frame #1 soplex::SPxMainSM::simplify(...) + 3452
+frame #2 soplex::SoPlex::_preprocessAndSolveReal(bool) + 684
+frame #3 soplex::SoPlex::_optimizeReal() + 340
+frame #4 soplex::SoPlex::optimize() + 628
+frame #5 ibex::LPSolver::minimize() + 64
+frame #6 ibex::CtcPolytopeHull::optimizer(ibex::IntervalVector&) + 288    (obbt arm: dreal::ContractorIbexObbt::Prune's own 2n-LP loop instead)
+frame #9 dreal::ContractorIbexPolytope::Prune(...)  ← IcpSeq, main thread
+```
+
+Disassembly→source: `+796/+800/+808` = `spxmainsm.cpp:4607-4608`
+(`pClass[m_classSetCols[k].index(l)] = classIdx; ++classSize[classIdx];`); a second observed
+PC `+448` = `:4572` (`scale[j]` load, garbage `j` from an already-corrupted row SVector).
+Register proof at the fault: `classIdx` (w10) = `0xdcc715c0` — the low 32 bits of a heap
+pointer (live pointers `0x8dcd8xxxx`) — i.e. `++classSize[<pointer fragment>]`.
+
+**Isolation matrix** (one axis varied per row, off the crashing default; ESTABLISHED level):
+
+| axis varied | result | reading |
+|---|---|---|
+| linearizer → `affine`, same file/cell/binary (F4, F6) | **0/6 crash**, clean `unsat` | X-Taylor linearizer required — affine drives the *same* CtcPolytopeHull→LPSolver→SoPlex chain cleanly |
+| linearizer → explicit `xtaylor` (F6) | 3/3 crash (138,138,134) | confirms default = xtaylor = crash |
+| `--jobs 2` (poly F6) | 2/3 crash (133,138), 1/3 `unsat` | not thread-dependent; crashes in single-threaded IcpSeq and in parallel alike |
+| binary → `cmake-build-release/dreal4` @ `fc4c3da04` (2026-07-01, fork pin `d9930909`, pre-campaign; `--polytope` only) (F4, F6) | **6/6 crash** (138/139) | **predates the campaign** — `--polytope`+XTaylor+soplex was already affected; the campaign's obbt/hybrid arms only added more routes into the same path |
+| binary → `cmake-build-debug/dreal4` (Debug dReal, F6) | 2/2 crash (138,139) | dReal-side asserts don't catch it — defect is inside soplex, which the ExternalProject builds Release regardless |
+
+**Established vs hypothesis**
+
+- ESTABLISHED: crash site + character — OOB garbage-index write inside SoPlex 4.0.2
+  `SPxMainSM::duplicateCols` (5 lldb stacks at 2 PCs, register-level pointer-fragment index,
+  CrashReporter set covering all four signals).
+- ESTABLISHED (flag level, single-variable swap): the trigger requires the X-Taylor
+  linearizer's LPs; affine LPs through the identical solve chain never trigger it.
+- HYPOTHESIS (not isolated): *why* — candidate chain: X-Taylor cut rows with degenerate
+  (parallel / non-finite) coefficients exhaust `duplicateCols`' parallel-class index pool
+  (`idxSet` underflow) → garbage `classIdx` → wild writes. No source-level (assert-enabled
+  soplex) confirmation; no NaN observed in a cut row.
+- Upstream status UNVERIFIED: scipopt/soplex master CHANGELOG has **no** post-4.0.2 entry
+  matching this defect (the duplicate-column fixes listed are 2011-era postsolve issues), so
+  "fixed upstream" cannot be assumed; whether newer SoPlex still crashes is untested.
+
+**Classification**
+
+Memory corruption in a contraction path. Today the failure is loud (8/8 sweep deaths, no
+verdict printed) — but the SIGTRAP/SIGABRT flavors prove execution *continues between
+corruption and detection*, and the same combos sometimes complete with a verdict, so a
+silent-corruption-then-verdict run is possible in principle: a corrupted LP bound/box could
+narrow past a true model → **latent SOUNDNESS risk (would assert φ T-unsatisfiable on a
+T-satisfiable φ — false unsat)**. No wrong verdict observed: the sweep's flip audit found
+zero unexplained disagreements, and every completed verdict on the six files agrees across
+arms (F4/F6 `unsat`, F5 sat, F1 delta-sat). Every lost run is otherwise COMPLETENESS-shaped
+(budget lost to a crash).
+
+**Workaround**
+
+Prefer `--polytope --polytope-linearizer affine` (sweep: solve-set strict superset of
+polytope's, 0 crashes) or `--mohc`. Treat `--obbt`, bare `--polytope` (= xtaylor), and
+`--polytope-linearizer both` as crash-exposed until fixed. Candidate fixes, both untested:
+disable the SoPlex simplifier in the fork wrapper (`ibex_LPLibWrapper.cpp` never sets
+`SoPlex::SIMPLIFIER`, so presolve runs at default-on; `setIntParam(SIMPLIFIER,
+SIMPLIFIER_OFF)` would bypass `SPxMainSM` entirely at some LP-solve cost) or bump the
+vendored soplex-4.0.2 tarball.
+
+**Binary**
+
+Sweep binary copy `dreal4_60fca6f69` (= `gcc_build/dreal4`, stamp `f51f78b8e <dirty>`, built
+2026-07-23 07:20, IBEX fork @ `b5e7a212`); cross-checked against `cmake-build-release/dreal4`
+@ `fc4c3da04` (fork @ `d9930909`) and `cmake-build-debug/dreal4`. Repro artifacts (24-run
+matrix, isolation battery, lldb logs): `/private/tmp/claude-501/…/tmp/{repro1,isolate,lldb_*.txt}`
+(ephemeral).
+
+---
+
 *Add new entries above this line.*
