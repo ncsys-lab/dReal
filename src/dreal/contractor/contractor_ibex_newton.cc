@@ -68,7 +68,7 @@ class ContractorIbexNewtonStat : public Stat {
 // Keeps only the positive equality atoms of @p formulas. Interval Newton is
 // defined for square systems f(x) = 0, so inequalities are out of scope;
 // ∃∀ `forall`s and ODE atoms cannot be converted by IbexConverter (mirrors
-// the is_forall skip in contractor_ibex_polytope.cc — for those kinds
+// FilterIbexConvertible in contractor_ibex_polytope.cc — for those kinds
 // is_equal_to is already false, so the extra checks are belt-and-braces).
 // This is a pure filter (never a contraction): skipping a formula only
 // weakens this optional cell, never a verdict.

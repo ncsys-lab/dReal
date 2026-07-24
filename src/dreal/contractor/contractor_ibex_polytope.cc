@@ -67,6 +67,17 @@ class ContractorIbexPolytopeStat : public Stat {
 };
 }  // namespace
 
+// Shared by the system-wide cells; contract in contractor_ibex_polytope.h.
+vector<Formula> FilterIbexConvertible(vector<Formula> formulas) {
+  vector<Formula> convertible;
+  for (Formula& f : formulas) {
+    if (!is_forall(f) && !f.include_ode()) {
+      convertible.push_back(std::move(f));
+    }
+  }
+  return convertible;
+}
+
 //---------------------------------------
 // Implementation of ContractorIbexPolytope
 //---------------------------------------
@@ -75,7 +86,7 @@ ContractorIbexPolytope::ContractorIbexPolytope(vector<Formula> formulas,
                                                const Config& config)
     : ContractorCell{Contractor::Kind::IBEX_POLYTOPE,
                      DynamicBitset(box.size()), config},
-      formulas_{std::move(formulas)},
+      formulas_{FilterIbexConvertible(std::move(formulas))},
       ibex_converter_{box} {
   DREAL_LOG_DEBUG("ContractorIbexPolytope::ContractorIbexPolytope");
 
@@ -83,15 +94,13 @@ ContractorIbexPolytope::ContractorIbexPolytope(vector<Formula> formulas,
   system_factory_ = make_unique<ibex::SystemFactory>();
   system_factory_->add_var(ibex_converter_.variables());
   for (const Formula& f : formulas_) {
-    if (!is_forall(f)) {
-      unique_ptr<const ibex::ExprCtr, ExprCtrDeleter> expr_ctr{
-          ibex_converter_.Convert(f)};
-      if (expr_ctr) {
-        system_factory_->add_ctr(*expr_ctr);
-        // We need to postpone the destruction of expr_ctr as it is
-        // still used inside of system_factory_.
-        expr_ctrs_.push_back(std::move(expr_ctr));
-      }
+    unique_ptr<const ibex::ExprCtr, ExprCtrDeleter> expr_ctr{
+        ibex_converter_.Convert(f)};
+    if (expr_ctr) {
+      system_factory_->add_ctr(*expr_ctr);
+      // We need to postpone the destruction of expr_ctr as it is
+      // still used inside of system_factory_.
+      expr_ctrs_.push_back(std::move(expr_ctr));
     }
   }
   ibex_converter_.set_need_to_delete_variables(true);

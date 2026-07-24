@@ -53,12 +53,13 @@
 // ignored seeds, so the seed cells here are parity regression guards (seeding
 // is a COMPLETENESS-only speed lever and never moves a verdict).
 //
-// Excluded cell: acid x ODE. --acid on an assertion set containing an
-// `integral` throws "IbexConverter: integral constraint is not supported."
-// (ibex_converter.cc VisitIntegral) at ANY job count — theory_solver passes
-// the assertions wholesale to make_contractor_ibex_acid — so there is no
-// working jobs=1 baseline to compare against. Pre-existing, jobs-independent;
-// not a parallel-parity gap.
+// acid x ODE: formerly excluded — --acid on an `integral`-bearing assertion
+// set threw "IbexConverter: integral constraint is not supported." at any
+// job count (theory_solver passes the assertions wholesale to
+// make_contractor_ibex_acid). Fixed: the system-wide cells now pre-filter
+// ODE atoms out of their systems (FilterIbexConvertible,
+// contractor_ibex_polytope.h; contractor_system_cells_ode_skip_test.cc), so
+// these cells run as ordinary parity checks.
 //
 // Forall (∃∀) parity lives in forall_parallel_matrix_test.cc; not duplicated
 // here.
@@ -86,7 +87,6 @@ struct ParityCase {
   std::string name;
   Formula formula;
   bool expect_sat;
-  bool is_ode;
 };
 
 vector<ParityCase> BuildCorpus() {
@@ -101,38 +101,38 @@ vector<ParityCase> BuildCorpus() {
   cases.push_back({"nra_circle_hyperbola_sat",
                    0 <= x && x <= 10 && 0 <= y && y <= 10 &&
                        x * x + y * y == 25 && x * y >= 6,
-                   true, false});
+                   true});
   // UNSAT: radius-1 circle cannot meet x+y >= 5.
   cases.push_back({"nra_circle_line_unsat",
                    0 <= x && x <= 10 && 0 <= y && y <= 10 &&
                        x * x + y * y == 1 && x + y >= 5,
-                   false, false});
+                   false});
   // Disjunctive delta-SAT: only the x <= -3 branch admits y >= x on the circle.
   cases.push_back({"nra_disjunctive_sat",
                    -5 <= x && x <= 5 && -5 <= y && y <= 5 &&
                        (x <= -3 || x >= 3) && x * x + y * y == 10 && y >= x,
-                   true, false});
+                   true});
   // Disjunctive UNSAT: x*x == 25 needs x = 5, excluded by both disjuncts.
   cases.push_back({"nra_disjunctive_unsat",
                    0 <= x && x <= 10 && (x <= 1 || x >= 9) && x * x == 25,
-                   false, false});
+                   false});
   // Equality-heavy delta-SAT: x = y = 2, z = 4.
   cases.push_back({"nra_equality_sat",
                    0 <= x && x <= 5 && 0 <= y && y <= 5 && 0 <= z && z <= 5 &&
                        x + y == z && x * y == z && x == y && z >= 1,
-                   true, false});
+                   true});
   // Equality-heavy UNSAT: (x+y)^2 = 12.25 but x^2+y^2+2xy = 4+8 = 12.
   cases.push_back({"nra_equality_unsat",
                    0 <= x && x <= 5 && 0 <= y && y <= 5 &&
                        x * x + y * y == 4 && x + y == 3.5 && x * y == 4,
-                   false, false});
+                   false});
   // Unbounded-above variable, delta-SAT at x = 2.
-  cases.push_back({"nra_unbounded_sat", x >= 0 && x * x == 4, true, false});
+  cases.push_back({"nra_unbounded_sat", x >= 0 && x * x == 4, true});
   // Unbounded-above variable, UNSAT: x*x == 4 forces x <= 2 < 3.
-  cases.push_back({"nra_unbounded_unsat", x >= 3 && x * x == 4, false, false});
+  cases.push_back({"nra_unbounded_unsat", x >= 3 && x * x == 4, false});
   // Transcendental delta-SAT: sin(x) = 0.5 has roots in [0, 3.2].
   cases.push_back({"nra_transcendental_sat",
-                   0 <= x && x <= 3.2 && sin(x) == 0.5, true, false});
+                   0 <= x && x <= 3.2 && sin(x) == 0.5, true});
 
   // --- ODE (QF_NRA_ODE, CAPD Lohner contractor) ----------------------------
   // Trivial flow dx/dt = 0: integral reduces to X_0 ∩ X_t.
@@ -149,7 +149,7 @@ vector<ParityCase> BuildCorpus() {
                      0 <= px0 && px0 <= 1 && 0.4 <= pxt && pxt <= 0.6 &&
                          0 <= pt && pt <= 1 &&
                          integral(0.0, pt, {px0}, {pxt}, flow),
-                     true, true});
+                     true});
   }
   // Linear decay dx/dt = -x, closed form x(t) = x_0 * e^{-t}, t in [0,1].
   {
@@ -164,13 +164,13 @@ vector<ParityCase> BuildCorpus() {
                      1 <= px0 && px0 <= 2 && 0.3 <= pxt && pxt <= 0.8 &&
                          0 <= pt && pt <= 1 &&
                          integral(0.0, pt, {px0}, {pxt}, flow),
-                     true, true});
+                     true});
     // UNSAT: x(t) <= x_0 <= 1 for t >= 0, disjoint from X_t = [2,3] (gap 1).
     cases.push_back({"ode_decay_unsat",
                      0 <= px0 && px0 <= 1 && 2 <= pxt && pxt <= 3 &&
                          0 <= pt && pt <= 1 &&
                          integral(0.0, pt, {px0}, {pxt}, flow),
-                     false, true});
+                     false});
   }
   return cases;
 }
@@ -227,11 +227,6 @@ class IcpParallelParityTest
 TEST_P(IcpParallelParityTest, VerdictAndWitnessParity) {
   const auto& [case_index, jobs, mode] = GetParam();
   const ParityCase& c = Corpus()[case_index];
-  if (c.is_ode && mode == Mode::kAcid) {
-    GTEST_SKIP() << "--acid on an integral-bearing assertion set throws in "
-                    "IbexConverter::VisitIntegral at any job count "
-                    "(pre-existing, jobs-independent; no seq baseline).";
-  }
 
   // jobs=1 sequential baseline of the same formula+mode.
   const Config seq_config{MakeConfig(1, mode)};

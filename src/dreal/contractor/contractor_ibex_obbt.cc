@@ -74,23 +74,21 @@ ContractorIbexObbt::ContractorIbexObbt(vector<Formula> formulas, const Box& box,
                                        const Config& config)
     : ContractorCell{Contractor::Kind::IBEX_OBBT, DynamicBitset(box.size()),
                      config},
-      formulas_{std::move(formulas)},
+      formulas_{FilterIbexConvertible(std::move(formulas))},
       ibex_converter_{box} {
   DREAL_LOG_DEBUG("ContractorIbexObbt::ContractorIbexObbt");
 
-  // Build SystemFactory: all box variables, then the (non-forall) constraints.
-  // Identical to ContractorIbexPolytope's assembly.
+  // Build SystemFactory: all box variables, then the pre-filtered (non-forall,
+  // non-ODE) constraints. Identical to ContractorIbexPolytope's assembly.
   system_factory_ = make_unique<ibex::SystemFactory>();
   system_factory_->add_var(ibex_converter_.variables());
   for (const Formula& f : formulas_) {
-    if (!is_forall(f)) {
-      unique_ptr<const ibex::ExprCtr, ExprCtrDeleter> expr_ctr{
-          ibex_converter_.Convert(f)};
-      if (expr_ctr) {
-        system_factory_->add_ctr(*expr_ctr);
-        // Postpone destruction of expr_ctr; still used inside system_factory_.
-        expr_ctrs_.push_back(std::move(expr_ctr));
-      }
+    unique_ptr<const ibex::ExprCtr, ExprCtrDeleter> expr_ctr{
+        ibex_converter_.Convert(f)};
+    if (expr_ctr) {
+      system_factory_->add_ctr(*expr_ctr);
+      // Postpone destruction of expr_ctr; still used inside system_factory_.
+      expr_ctrs_.push_back(std::move(expr_ctr));
     }
   }
   ibex_converter_.set_need_to_delete_variables(true);
@@ -163,12 +161,11 @@ void ContractorIbexObbt::Prune(ContractorStatus* cs,
   // Input-restricted snapshot of the pre-contraction intervals (mirrors the
   // polytope contractor). Skipping the NON-input dims is exact, not an
   // approximation: a variable absent from every cut meets the LP only through
-  // its own bound row, so its LP min/max IS its current bound. Note input()
-  // is a SUPERSET of the system's constraint vars, not equal to them: the
-  // ctor builds it over all formulas_, while the system assembly skips
-  // forall formulas — on an ∃∀ instance a forall-only free var costs 2
-  // guaranteed-no-op LPs per Prune here (ibex::CtcPolytopeHull's own 2n loop
-  // is broader still: it visits every box variable).
+  // its own bound row, so its LP min/max IS its current bound. input() is
+  // exactly the system's constraint vars — the ctor builds it over formulas_,
+  // pre-filtered by FilterIbexConvertible to the same (non-forall, non-ODE)
+  // set the system assembly converted (ibex::CtcPolytopeHull's own 2n loop
+  // is broader: it visits every box variable).
   thread_local std::vector<std::pair<int, ibex::Interval>> saved_inputs;
   saved_inputs.clear();
   {

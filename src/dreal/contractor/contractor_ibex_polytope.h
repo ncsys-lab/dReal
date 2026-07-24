@@ -42,6 +42,20 @@ struct ExprCtrDeleter {
   }
 };
 
+// Keeps only the formulas IbexConverter can convert: drops ∃∀ `forall`s and
+// ODE atoms (`integral`/`forall_t` — include_ode()), which the converter
+// rejects with a throw. Shared by the system-wide cells (polytope, acid,
+// mohc, obbt; mirrors the FilterEqualities precedent in
+// contractor_ibex_newton.cc): each cell contracts the relational remainder —
+// the ODE atoms belong to the Lohner contractor, which keeps enforcing them
+// as today. This is a pure filter (never a contraction): skipping a formula
+// only removes constraints from the cell's over-approximating system, so the
+// cell contracts less — sound by inclusion, and COMPLETENESS-neutral for the
+// solver. Because the result seeds each cell's formulas_, used-constraint
+// reporting (AddUsedConstraint) names only formulas the cell actually
+// converted.
+std::vector<Formula> FilterIbexConvertible(std::vector<Formula> formulas);
+
 class ContractorIbexPolytope : public ContractorCell {
  public:
   /// Constructs IbexPolytope contractor using @p f and @p vars.

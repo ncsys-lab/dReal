@@ -72,23 +72,21 @@ ContractorIbexAcid::ContractorIbexAcid(vector<Formula> formulas, const Box& box,
                                        const Config& config)
     : ContractorCell{Contractor::Kind::IBEX_ACID, DynamicBitset(box.size()),
                      config},
-      formulas_{std::move(formulas)},
+      formulas_{FilterIbexConvertible(std::move(formulas))},
       ibex_converter_{box} {
   DREAL_LOG_DEBUG("ContractorIbexAcid::ContractorIbexAcid");
 
-  // Build SystemFactory: all box variables, then the (non-forall) constraints.
-  // Identical to ContractorIbexPolytope's assembly.
+  // Build SystemFactory: all box variables, then the pre-filtered (non-forall,
+  // non-ODE) constraints. Identical to ContractorIbexPolytope's assembly.
   system_factory_ = make_unique<ibex::SystemFactory>();
   system_factory_->add_var(ibex_converter_.variables());
   for (const Formula& f : formulas_) {
-    if (!is_forall(f)) {
-      unique_ptr<const ibex::ExprCtr, ExprCtrDeleter> expr_ctr{
-          ibex_converter_.Convert(f)};
-      if (expr_ctr) {
-        system_factory_->add_ctr(*expr_ctr);
-        // Postpone destruction of expr_ctr; still used inside system_factory_.
-        expr_ctrs_.push_back(std::move(expr_ctr));
-      }
+    unique_ptr<const ibex::ExprCtr, ExprCtrDeleter> expr_ctr{
+        ibex_converter_.Convert(f)};
+    if (expr_ctr) {
+      system_factory_->add_ctr(*expr_ctr);
+      // Postpone destruction of expr_ctr; still used inside system_factory_.
+      expr_ctrs_.push_back(std::move(expr_ctr));
     }
   }
   ibex_converter_.set_need_to_delete_variables(true);
