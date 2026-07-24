@@ -87,7 +87,13 @@ class ContractorForall : public ContractorCell {
                                                 quantified_variables_, epsilon),
             true)},
         contractor_{config /* This one will be updated anyway. */},
-        context_for_counterexample_{MakeCounterexampleConfig(config)} {
+        // The nested CE Context copies @p config, whose number_of_jobs is 1
+        // on both entry paths (make_contractor_forall constructs this class
+        // directly only at jobs = 1; ContractorForallMt::GetCtcOrCreate pins
+        // jobs = 1 in its per-worker copy), so the CE sub-solve runs the
+        // unified IcpParallel loop with zero pool workers, on the calling
+        // (possibly outer-pool-worker) thread — icp_parity_gaps.md G6.
+        context_for_counterexample_{config} {
     DREAL_ASSERT(epsilon > 0.0);
     DREAL_ASSERT(inner_delta > 0.0);
     DREAL_ASSERT(config.precision() > epsilon);
@@ -253,29 +259,6 @@ class ContractorForall : public ContractorCell {
     return box;
   }
 
-  // Config for the nested counterexample Context: a copy of `config` with
-  // --icp-force-parallel cleared. The nested CE solve keeps the IcpSeq
-  // dispatch even when the outer solve is forced onto IcpParallel: the flag
-  // is top-level parity-measurement scaffolding (icp_parity_gaps.md R3), and
-  // recursing it here would both unisolate that A/B and prematurely exercise
-  // the nested-CDS surface deferred to R4 (G6). Dispatch choice never moves
-  // a verdict (both loops are sound; jobs = 1 IcpParallel is deterministic),
-  // so this is experiment isolation — neither SOUNDNESS (false unsat) nor
-  // COMPLETENESS (missed refutation) is at stake.
-  //
-  // The clear MUST happen here, before the Context is constructed — a
-  // mutable_config() write in the constructor body is too late: Context
-  // eagerly builds its Impl, whose member-init list constructs the
-  // TheorySolver, whose constructor consumes use_icp_force_parallel() and
-  // freezes the ICP dispatch then and there (Block 15). The body's
-  // precision / use_polytope writes work only because those options are read
-  // lazily at CheckSat time through TheorySolver's `const Config&` member.
-  static Config MakeCounterexampleConfig(const Config& config) {
-    Config counterexample_config{config};
-    counterexample_config.mutable_use_icp_force_parallel() = false;
-    return counterexample_config;
-  }
-
   const Formula f_;                             // ∀X.φ
   const Variables quantified_variables_;        // X
   const Formula strengthend_negated_nested_f_;  // (¬φ)⁻ᵟ¹
@@ -335,8 +318,12 @@ class ContractorForallMt : public ContractorCell {
  private:
   ContractorForall<ContextType>* GetCtcOrCreate(const Box& box) const {
     return &ctcs_.GetOrCreate([&]() {
+      // Pin the nested CE solve to jobs = 1: the per-worker ContractorForall
+      // must not fan out a second thread pool from inside an outer worker.
+      // Its IcpParallel therefore runs with zero pool workers, single-threaded
+      // on this worker thread.
       Config inner_config{config()};
-      inner_config.mutable_number_of_jobs() = 1;  // FORCE SEQ ICP in INNER LOOP
+      inner_config.mutable_number_of_jobs() = 1;
       return std::make_unique<ContractorForall<ContextType>>(
           f_, box, epsilon_, inner_delta_, inner_config);
     });

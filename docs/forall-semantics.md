@@ -194,8 +194,8 @@ components that pick *different* values inside this ordering:
 | **`ForallFormulaEvaluator`** (§5) | `0.99 * delta` | `0.99 * epsilon` (= `0.9801·delta`) | in-loop **δ-SAT accept + branch** test (the `EvaluateBox` step) | `theory_solver.cc:320–322` |
 
 **Both run *inside* the ICP branch-and-prune loop, on every box** — the contractor in the
-`Prune` step (`icp_seq.cc:131`), the evaluator in the `EvaluateBox` step immediately after
-(`icp_seq.cc:146` / `icp_parallel.cc:134`). Neither is a pre-solve or a post-solve /
+`Prune` step, the evaluator in the `EvaluateBox` step immediately after (both in
+`icp_parallel.cc` `Worker`). Neither is a pre-solve or a post-solve /
 pre-print phase; the evaluator is *not* a final model re-check — the box it first accepts
 *is* the returned δ-SAT model (§5).
 
@@ -367,7 +367,7 @@ across jobs × pre-prune × polytope) and `tsan_gate.sh` (ThreadSanitizer over f
 
 `ForallFormulaEvaluator` (`forall_formula_evaluator.cc`) is the ICP loop's **δ-SAT
 acceptance + branching** test — run on *every* box the loop pops, right after pruning
-(`icp_seq.cc:146` / `icp_parallel.cc:134` → `EvaluateBox`, `icp.cc:31`). It runs the same
+(`icp_parallel.cc` `Worker` → `EvaluateBox`, `icp.cc`). It runs the same
 CE search as the contractor and returns a `FormulaEvaluationResult`
 (`forall_formula_evaluator.cc:98–132`):
 
@@ -381,7 +381,8 @@ It **never** returns `UNSAT` — a found CE means "not yet decided, measure/bran
 "infeasible" (an `UNSAT` from an evaluator empties the box, `icp.cc:39–47`; only the
 relational leaf evaluators do that). When every constraint's evaluator returns `VALID` or a
 sub-`δ` `UNKNOWN` so that no branching candidate remains, the loop **accepts the current box
-as the δ-SAT model** and returns (`icp_seq.cc:157–161`). That acceptance step is where the
+as the δ-SAT model** and returns (the `evaluation_result->none()` exit in
+`icp_parallel.cc` `Worker`). That acceptance step is where the
 evaluator's leniency (§4.1, `ε = 0.99δ`) matters: it declares `∀y. φ` satisfied on the box
 unless a near-full-`δ` counterexample survives the strengthened search.
 

@@ -98,5 +98,46 @@ TEST_F(ForallParallelMatrixTest, MultiExistentialSat) {
   ExpectInvariantVerdict(f, /*expect_sat=*/true);
 }
 
+// icp_parity_gaps.md G6 (R4 consolidation): with IcpSeq deleted, the CEGIS
+// counterexample sub-solve (ContractorForall's context_for_counterexample_
+// and ForallFormulaEvaluator's per-thread CE context, both jobs = 1) runs
+// IcpParallel::CheckSat NESTED inside the outer IcpParallel::CheckSat — at
+// outer jobs > 1, on a POOL-WORKER thread. New surface: the nested call
+// constructs a lock-free Stack and re-enters Worker on a thread already
+// attached to libcds. Safe as-is, verified two ways: (a) Worker's
+// CdsScopeGuard is a block-scope thread_local, initialized only on the
+// thread's FIRST pass through the declaration, so the nested pass creates no
+// second attach/detach; (b) even a hypothetical re-attach is refcounted in
+// libcds (ThreadData::init() bumps m_nAttachCount and only attaches at
+// 0 -> 1; detach only at 1 -> 0 — vendored libcds/src/thread_data.cpp).
+// Red-first is NOT constructible for this pin: pre-R4 the nested solve
+// dispatched to IcpSeq (no nested CDS use at all — trivially green), and
+// post-R4 the surface is safe with no code change (no defective
+// intermediate state exists to catch). The cases below are the tripwire for
+// future regressions on this surface — a mis-scoped guard would detach a
+// live worker's hazard-pointer record and crash or hang here. The circle
+// equality forces sustained outer existential branching, so pool workers
+// (not just the main thread) run nested CE solves; reps + both verdict
+// polarities come from ExpectInvariantVerdict's {jobs 1,2,4} matrix.
+//
+// δ-SAT: ∃a,b (a²+b²=0.5) ∀t∈[0,1]. a·t + b ≥ 0. Witness a=0.1, b≈0.7.
+TEST_F(ForallParallelMatrixTest, NestedCeOnWorkerThreadsCdsSurfaceSat) {
+  const Formula f{(-1.0 <= a_) && (a_ <= 1.0) && (-1.0 <= b_) && (b_ <= 1.0) &&
+                  (a_ * a_ + b_ * b_ == 0.5) &&
+                  forall({t_}, imply((t_ >= 0.0) && (t_ <= 1.0),
+                                     a_ * t_ + b_ >= 0.0))};
+  ExpectInvariantVerdict(f, /*expect_sat=*/true);
+}
+
+// UNSAT: on a²+b²=0.5, a·t+b at t=0 is b ≥ -1/√2 ≈ -0.707, so the body
+// a·t + b ≤ -1.2 fails at t=0 for every (a,b) — margin ≈ 0.49 >> δ = 0.001.
+TEST_F(ForallParallelMatrixTest, NestedCeOnWorkerThreadsCdsSurfaceUnsat) {
+  const Formula f{(-1.0 <= a_) && (a_ <= 1.0) && (-1.0 <= b_) && (b_ <= 1.0) &&
+                  (a_ * a_ + b_ * b_ == 0.5) &&
+                  forall({t_}, imply((t_ >= 0.0) && (t_ <= 1.0),
+                                     a_ * t_ + b_ <= -1.2))};
+  ExpectInvariantVerdict(f, /*expect_sat=*/false);
+}
+
 }  // namespace
 }  // namespace dreal

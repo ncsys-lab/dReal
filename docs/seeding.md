@@ -8,8 +8,8 @@ prune+evaluate loop verify them first.
 
 - **Why this design, and the A/B that adopted it:** `docs/decisions.md` §"Seed-and-verify".
 - **Full investigation / experiment tables:** `benchmark/optsearch/SEARCH_LOG.md` §"Seed-and-verify".
-- **Code:** `src/dreal/solver/seed/seed.{h,cc}`; hooked in `src/dreal/solver/icp_seq.cc`
-  (`IcpSeq::CheckSat`). Tests: `test/dreal/solver/seed/test/seed_test.cc`.
+- **Code:** `src/dreal/solver/seed/seed.{h,cc}`; hooked in `src/dreal/solver/icp_parallel.cc`
+  (`IcpParallel::CheckSat`). Tests: `test/dreal/solver/seed/test/seed_test.cc`.
 
 ## Soundness and completeness
 
@@ -70,5 +70,5 @@ For a gated `CheckSat`, `SeedBoxes` runs:
 
 `--seed-samples N` is both the candidate budget (the COBYLA multi-start count) and the
 on/off switch: `N > 0` enables seeding, `N = 0` disables it. Default `64`. Reproducible via
-`--random-seed`. It is IcpSeq-only — combining `--seed-samples > 0` with `--jobs > 1` is
-rejected at startup.
+`--random-seed` at `--jobs 1` (seeds are proposed once, single-threaded, before any worker
+starts; above jobs=1 the search order after the seed pre-pass is nondeterministic).

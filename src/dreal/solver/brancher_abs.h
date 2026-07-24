@@ -52,8 +52,7 @@ namespace dreal {
 /// SOUNDNESS: variable choice can only change how fast the search converges
 /// (node count), never a verdict — a completeness/perf lever, never soundness.
 /// Stateful (Decay/SnapshotDiams/BumpShrunk mutate the activity), so not
-/// shareable across threads: IcpSeq holds one; IcpParallel builds one per
-/// worker.
+/// shareable across threads: IcpParallel builds one per worker.
 class BrancherAbs {
  public:
   /// Sizes the activity vector to @p box (the ICP variable set is fixed for a

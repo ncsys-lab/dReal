@@ -72,12 +72,12 @@ class Icp {
 ///                       dimension (the incremental-repruning optimization).
 ///   -1                — no branching information (the --seed-samples seed
 ///                       boxes); the worklist fixpoint full-seeds.
-///   kAlreadyPrunedTag — the ROOT box, pruned once before being pushed. Both
-///                       loops prune the root up front (an empty root returns
+///   kAlreadyPrunedTag — the ROOT box, pruned once before being pushed. The
+///                       loop prunes the root up front (an empty root returns
 ///                       unsat immediately, and every box is pruned exactly
 ///                       once per pop; the --seed-samples pre-pass proposes
 ///                       from an UN-PRUNED root snapshot — see the seed-input
-///                       comment in icp_seq.cc for why the R3 draft's
+///                       comment in icp_parallel.cc for why the R3 draft's
 ///                       pruned-box input was rejected); the pop that sees
 ///                       this tag skips the redundant re-prune.
 ///                       The skip is a pure identity guard (no contraction):
@@ -132,8 +132,8 @@ optional<DynamicBitset> EvaluateBox(
 /// callers' reasons:
 ///   "non-bisectable box below delta"      — upstream dreal/dreal4#68: the box
 ///       still violates the delta-condition but its endpoints are adjacent
-///       floats, so ICP cannot bisect further and returns delta-sat (both the
-///       IcpSeq and IcpParallel::Worker exits).
+///       floats, so ICP cannot bisect further and returns delta-sat (the
+///       IcpParallel::Worker exit).
 ///   "witness box has unbounded endpoints" — upstream dreal/dreal4#265: an
 ///       unbounded variable interval admits a +-inf witness endpoint; the
 ///       mitigation is giving every real finite bounds (checked once where the

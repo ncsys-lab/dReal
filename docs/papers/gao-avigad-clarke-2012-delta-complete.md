@@ -55,7 +55,7 @@ Propagation inside DPLL(T)) is $\delta$-complete.
 
 | Paper concept | Where it lives in this project |
 |---|---|
-| DPLL(ICP) = ICP as the theory solver in DPLL(T) | `docs/architecture.md` (SAT layer + Theory layer + ICP loop); `src/dreal/solver/theory_solver.cc`, `icp.h` / `icp_seq.cc` |
+| DPLL(ICP) = ICP as the theory solver in DPLL(T) | `docs/architecture.md` (SAT layer + Theory layer + ICP loop); `src/dreal/solver/theory_solver.cc`, `icp.h` / `icp_parallel.cc` |
 | Branch-and-prune $\mathrm{ICP}_\varepsilon$ (Alg. 1) | The ICP loop in `docs/architecture.md` §"ICP Loop"; `Icp` implementations |
 | **(W3)** pruning never discards a real solution | **The soundness invariant** in `docs/soundness-vs-completeness.md`: a contractor is an outward over-approximation, so a looser enclosure can never cause a false `unsat`. (W3) *is* this argument, formalized. |
 | **(W1)/(W2)** contraction + zero-containment | `docs/contractors.md` — what every contractor must guarantee; the IBEX HC4 forward/backward operators |

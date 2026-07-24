@@ -108,7 +108,7 @@ Five families, classified by name prefix (`odeexpr.family_of`):
 - `github` — prefix `github_oct5_`
 - `tacas` — prefix `tacas_c2e2_`
 - `odeexpr_v1` — prefix `odeexpr_v1_<bench_id>` (**high-priority**; NRA-only — no ODEs, runs the
-  `IcpSeq → Fixpoint[IbexFwdbwd, Integer]` path)
+  `Fixpoint[IbexFwdbwd, Integer]` ICP path)
 - `odeexpr_v2` — prefix `odeexpr_v2_<bench_id>` (**newest, highest-priority**; ∀/∃∀
   MLP-expressivity queries — exercises the `ContractorForall` CE-guided path, coverage no other
   family provides)

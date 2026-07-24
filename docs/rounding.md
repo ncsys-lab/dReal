@@ -58,8 +58,8 @@ live-based restore.
 `FE_UPWARD` is established **once per ICP phase**, not per contractor call — calling `fesetround`
 on every `Prune` invocation in the ICP hot loop is expensive (pipeline-serializing). Entry points:
 
-- `IcpSeq::CheckSat` — one `UpwardRoundingScope` before the loop
-- Each `IcpParallel` worker — FPU mode is thread-local, so every worker mints its own
+- `IcpParallel::CheckSat` — one `UpwardRoundingScope` around the root prune + seed proposal
+- Each `IcpParallel` worker (including the jobs=1 main-thread worker) — FPU mode is thread-local, so every worker mints its own
 
 The `UpwardRounding` token is threaded as a parameter through `Contractor::Prune(ContractorStatus*,
 const UpwardRounding&)` and every override/combinator, AND through `safe_mid`/`safe_diam`,

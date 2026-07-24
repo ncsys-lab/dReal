@@ -96,13 +96,6 @@ OptionValue<bool>& Config::mutable_dump_theory_literals() {
 int Config::number_of_jobs() const { return number_of_jobs_.get(); }
 OptionValue<int>& Config::mutable_number_of_jobs() { return number_of_jobs_; }
 
-bool Config::use_icp_force_parallel() const {
-  return use_icp_force_parallel_.get();
-}
-OptionValue<bool>& Config::mutable_use_icp_force_parallel() {
-  return use_icp_force_parallel_;
-}
-
 bool Config::stack_left_box_first() const {
   return stack_left_box_first_.get();
 }

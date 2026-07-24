@@ -167,15 +167,6 @@ class Config {
   /// Returns a mutable OptionValue for 'number_of_jobs'.
   OptionValue<int>& mutable_number_of_jobs();
 
-  /// Returns whether ICP runs through IcpParallel even at jobs = 1
-  /// (--icp-force-parallel). Experiment-scoped scaffolding for the
-  /// seq/parallel parity measurement (icp_parity_gaps.md R3/G4); dies with
-  /// the R4 consolidation.
-  bool use_icp_force_parallel() const;
-
-  /// Returns a mutable OptionValue for 'use_icp_force_parallel'.
-  OptionValue<bool>& mutable_use_icp_force_parallel();
-
   /// Returns whether the ICP algorithm stacks the left box first
   /// after branching.
   bool stack_left_box_first() const;
@@ -431,8 +422,6 @@ class Config {
   OptionValue<bool> use_local_optimization_{false};
   OptionValue<bool> dump_theory_literals_{false};
   OptionValue<int> number_of_jobs_{1};
-  // --icp-force-parallel (parity-experiment scaffolding; see the getter).
-  OptionValue<bool> use_icp_force_parallel_{false};
   OptionValue<bool> stack_left_box_first_{false};
   OptionValue<bool> smtlib2_compliant_{false};
 

@@ -98,7 +98,7 @@ Caches are keyed by formula identity (`std::unordered_map<Formula, Contractor>`)
 
 ## ICP Loop
 
-**Files:** `src/dreal/solver/icp.h`, `icp_seq.cc`, `icp_parallel.cc`
+**Files:** `src/dreal/solver/icp.h`, `icp_parallel.cc`
 
 Interval Constraint Propagation is a branch-and-prune search:
 
@@ -121,7 +121,7 @@ procedure ICP(box B, contractor C, formula_evaluators FE):
 - **Some(∅)**: all formulas are either valid or within δ — delta-SAT.
 - **Some(Vars)**: some formula is undecided and its variables must be branched.
 
-The sequential implementation (`icp_seq.cc`) uses a simple stack. The parallel implementation (`icp_parallel.cc`) distributes boxes across threads via a concurrent work queue.
+One implementation (`icp_parallel.cc`) serves every `--jobs`: workers share a lock-free stack of boxes; `--jobs 1` spawns zero pool workers, so the calling thread runs the single worker deterministically (the separate sequential loop `icp_seq.cc` was deleted in the 2026-07 R4 consolidation after a measured-parity gate — `icp_parity_gaps.md`).
 
 ---
 
@@ -140,7 +140,7 @@ When the ICP loop cannot determine satisfiability, it picks a dimension to bisec
 | `smearmax` | `argmax_j max_i |J_ij|·diam_j` (Kearfott) |
 | `smearmaxrel` | `argmax_j max_i (|J_ij|·diam_j / NC_i)` |
 
-(IBEX's fifth smear bisector, `LSmear`, is optimization-only — it reweights constraints by the LP dual of an objective — so it is inapplicable to dReal's feasibility queries.) When the Jacobian is uninformative (no relational constraints, all-zero or infinite entries) it falls back to largest-first, matching IBEX. **Soundness:** the split-variable choice only changes how fast the search converges (node count), never a verdict — a completeness/perf lever. `IcpSeq` only (single-threaded); `--jobs > 1` is rejected at the CLI. On the odeexpr families `smearsum` is the strongest variant (on the ∃∀ `exists_forall` subfamily `smearsum`≈`smearsumrel`, both > the max variants); see `OPTIMIZATION_LOG.md` §odeexpr.
+(IBEX's fifth smear bisector, `LSmear`, is optimization-only — it reweights constraints by the LP dual of an objective — so it is inapplicable to dReal's feasibility queries.) When the Jacobian is uninformative (no relational constraints, all-zero or infinite entries) it falls back to largest-first, matching IBEX. **Soundness:** the split-variable choice only changes how fast the search converges (node count), never a verdict — a completeness/perf lever. Works at every `--jobs` (one `SmearBrancher` per worker — the brancher is not thread-safe to share). On the odeexpr families `smearsum` is the strongest variant (on the ∃∀ `exists_forall` subfamily `smearsum`≈`smearsumrel`, both > the max variants); see `OPTIMIZATION_LOG.md` §odeexpr.
 
 ---
 

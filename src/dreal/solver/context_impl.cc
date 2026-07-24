@@ -553,7 +553,7 @@ optional<Box> Context::Impl::CheckSat() {
     // interval arithmetic). COMPLETENESS hazard (may assert phi^delta
     // T-satisfiable on a T-unsatisfiable phi — missed refutation); an
     // upstream-acknowledged design limit, mitigated by bounding every real.
-    // One check on the final model box covers IcpSeq and IcpParallel alike;
+    // One check on the final model box covers every job count;
     // warn loudly on stderr, verdict unchanged.
     for (int i = 0; i < model_.size(); ++i) {
       if (std::isinf(model_[i].lb()) || std::isinf(model_[i].ub())) {

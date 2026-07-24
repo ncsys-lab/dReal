@@ -224,16 +224,6 @@ void MainProgram::AddOptions() {
            0 /* Delimiter if expecting multiple args. */, "Number of jobs.\n",
            "--jobs", "-j");
 
-  opt_.add("false" /* Default */, false /* Required? */,
-           0 /* Number of args expected. */,
-           0 /* Delimiter if expecting multiple args. */,
-           "Route ICP through the parallel loop (IcpParallel) even at --jobs "
-           "1 (zero pool workers; the main thread does the work). EXPERIMENT: "
-           "scaffolding for the sequential/parallel parity measurement "
-           "(icp_parity_gaps.md R3/G4); removed when the two loops are "
-           "consolidated (R4).\n",
-           "--icp-force-parallel");
-
   const string kDefaultNloptFtolRel{
       fmt::format("{}", Config::kDefaultNloptFtolRel)};
   opt_.add(kDefaultNloptFtolRel.c_str() /* Default */, false /* Required? */,
@@ -545,13 +535,6 @@ void MainProgram::ExtractOptions() {
     config_.mutable_number_of_jobs().set_from_command_line(jobs);
     DREAL_LOG_DEBUG("MainProgram::ExtractOptions() --jobs = {}",
                     config_.number_of_jobs());
-  }
-
-  // --icp-force-parallel
-  if (opt_.isSet("--icp-force-parallel")) {
-    config_.mutable_use_icp_force_parallel().set_from_command_line(true);
-    DREAL_LOG_DEBUG("MainProgram::ExtractOptions() --icp-force-parallel = {}",
-                    config_.use_icp_force_parallel());
   }
 
   // --forall-polytope

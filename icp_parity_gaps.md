@@ -22,8 +22,19 @@ perf/behavioral divergences; at worst COMPLETENESS-shaped (slower to a verdict w
 > G4 **MEASURED, gate PASS**: the sweep's `par1` arm (jobs-1-through-`IcpParallel`) showed
 > zero per-file verdict diffs vs base over all 270 files, PAR2 **1.001×** overall (≤1.006
 > every family), median per-file CPU ratio 1.002
-> (`benchmark/results/sweep_20260723_115956/ANALYSIS.md` §"R3 gate"). **R4/R5 = GO, pending
-> execution** (consolidate, delete `IcpSeq`; G5/G6 fold into R4 as planned below).
+> (`benchmark/results/sweep_20260723_115956/ANALYSIS.md` §"R3 gate"). **R4 EXECUTED
+> (2026-07-24):** `icp_seq.{h,cc}` deleted, the `theory_solver.cc` dispatch collapsed to
+> `IcpParallel` at every `--jobs` (1 = zero pool workers, main-thread-only, deterministic),
+> `--icp-force-parallel` removed end-to-end, and the nested forall-CE solve (G6) runs through
+> the unified loop — VERIFIED SAFE as-is: no double libcds attach occurs (Worker's
+> `CdsScopeGuard` is a block-scope `thread_local`, initialized once per thread), and even a
+> re-attach is refcounted (`ThreadData::init()` bumps `m_nAttachCount`, vendored
+> `libcds/src/thread_data.cpp`); tripwire tests `NestedCeOnWorkerThreadsCdsSurface*` in
+> `forall_parallel_matrix_test.cc`. G5 resolved by the deletion (the cross-instance
+> function-local `static IcpStat` died with `icp_seq.cc`; the per-worker `thread_local`
+> stays). Seq tests ported, not deleted (`icp_parallel_worklist_seeding_test.cc` → jobs=1
+> determinism identity + jobs=1-vs-2 verdict parity). **R5 pending:** local ctest/gates done;
+> the families-level jobs=4-vs-1 verdict diff remains.
 
 ## Gaps
 

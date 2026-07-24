@@ -72,8 +72,9 @@ GTEST_TEST(Config, CustomBrancher) {
   ASSERT_TRUE(result);
 
   // Exact branch trajectory of the custom (widest-dim, midpoint) brancher.
-  // Re-pinned 2026-06: per-branch alternation reinstated in IcpSeq (commit
-  // 418c7d1) restores 42 branches and a regular y,z,x,y,z,x,... cycle.
+  // Re-pinned 2026-06: per-branch alternation reinstated (commit 418c7d1,
+  // then in IcpSeq) restores 42 branches and a regular y,z,x,y,z,x,... cycle;
+  // the R4-unified jobs=1 IcpParallel loop must reproduce it exactly.
   // The brancher is still the sole driver of which variable is split.
   EXPECT_EQ(g_branch_variables.size(), 42);
   EXPECT_EQ(g_branch_variables[0], y);

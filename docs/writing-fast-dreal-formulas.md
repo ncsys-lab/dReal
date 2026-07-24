@@ -228,7 +228,7 @@ never runs") that are **wrong** for the current tree — the facts here come fro
 
 | Claim | Source |
 |---|---|
-| Contract-then-bisect loop; contraction cheap, bisection exponential | `src/dreal/solver/icp_seq.cc`; `docs/architecture.md` |
+| Contract-then-bisect loop; contraction cheap, bisection exponential | `src/dreal/solver/icp_parallel.cc`; `docs/architecture.md` |
 | Forward/backward tree walk; optimal at one occurrence, degrades with repeats | IBEX docs `ibex-fork/doc/contractor.rst`, `ibex-fork/doc/function.rst`; `ibex-fork/src/contractor/ibex_CtcFwdBwd.cpp` |
 | `x*x → pow(x,2)`; local folds but no expand/factor/Horner/CSE | `src/third_party/…/drake/dreal/symbolic/symbolic_expression.cc`; no simplify pass in `src/dreal/` solve path |
 | `let` / aux reifies to a new dimension + defining equality; `let` var unbounded | `src/dreal/smt2/parser.yy` (`let_binding_list`), `src/dreal/smt2/driver.cc` |

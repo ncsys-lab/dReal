@@ -24,38 +24,37 @@
 #include "dreal/symbolic/symbolic.h"
 #include "dreal/util/box.h"
 
-// IcpSeq vs jobs=1 IcpParallel identity harness for the parity campaign
-// (icp_parity_gaps.md R1 worklist seeding, R3 canonical seed input +
-// double-root-prune drop, and the G4 arm's correctness precondition for the
-// --icp-force-parallel measurement flag).
+// Worklist-seeding (--worklist-fixpoint) and seed-and-verify (--seed-samples)
+// harness for the unified ICP loop (icp_parity_gaps.md R4: IcpParallel is the
+// only implementation; --jobs 1 = zero pool workers, main thread only,
+// deterministic).
 //
-// Both arms run at jobs=1 and are deterministic (IcpSeq trivially;
-// IcpParallel at jobs=1 spawns zero pool workers — only the main thread runs
-// Worker), so the strongest assertion available from the public API surface
-// is verdict EQUALITY plus, on delta-sat, witness-Box EQUALITY. Prune counts
-// are not exposed (IcpStat is write-only console output; ContractorStatus
-// carries no counter), so the R1 mechanism — branching_point-driven
-// incremental worklist seeding reaching the parallel loop — is pinned only
-// through its observable shadow: identical traversal implies identical
-// verdicts and identical terminating boxes. Observing the seeding DIRECTLY
-// would require exposing ContractorWorklistFixpoint's per-Prune
-// seeded-contractor count (e.g. an IcpStat field or a test hook); noted, not
-// built — the indirect assertion suffices for the parity gate.
+// History: this file was born as the IcpSeq vs jobs=1-IcpParallel identity
+// harness for the parity campaign (R1 worklist branching_point seeding, R3
+// canonical seed input + double-root-prune drop, and the G4 arm's correctness
+// precondition for the --icp-force-parallel measurement flag). The R4
+// consolidation deleted IcpSeq and the flag, so the old cross-implementation
+// arms are ported here — not deleted — in the two forms that survive:
+//   - the witness-identity assertion becomes a jobs=1 DETERMINISM pin (two
+//     runs must agree byte-for-byte on verdict and witness Box), and
+//   - the cross-arm verdict assertion becomes jobs=1 vs jobs=2 within the one
+//     implementation.
+// R4 red-first record: after the flag deletion this file's old form failed to
+// COMPILE (`Config` has no member `mutable_use_icp_force_parallel`) — the
+// mirror image of its original R1 red state, which was the same compile error
+// for the flag's absence before the wiring landed.
 //
-// Red-first record (TDD): the first expected failure is a COMPILE error —
-// `Config` has no member `mutable_use_icp_force_parallel` — naming the new
-// flag this test wires in. The behavioral assertions can only run after the
-// wiring spec lands; whether any cell is behaviorally red against a
-// flag-only/partial wiring depends on how far the seq and parallel
-// traversals happen to diverge on this corpus and is not guaranteed in
-// advance (that unpredictability is exactly why prune counts would be the
-// sharper observable).
+// Prune counts are not exposed (IcpStat is write-only console output;
+// ContractorStatus carries no counter), so the R1 mechanism —
+// branching_point-driven incremental worklist seeding — is pinned only
+// through its observable shadow: deterministic traversal implies identical
+// verdicts and identical terminating boxes across runs.
 //
-// Verdict-split labeling convention (CLAUDE.md mandate): parallel unsat vs
-// seq delta-sat would be SOUNDNESS-suspect (asserts phi T-unsatisfiable on a
-// T-satisfiable phi — false unsat); parallel delta-sat vs seq unsat would be
-// COMPLETENESS-suspect (asserts phi^delta T-satisfiable on a T-unsatisfiable
-// phi — missed refutation).
+// Verdict-split labeling convention (CLAUDE.md mandate): jobs=2 unsat vs
+// jobs=1 delta-sat would be SOUNDNESS-suspect (asserts phi T-unsatisfiable on
+// a T-satisfiable phi — false unsat); jobs=2 delta-sat vs jobs=1 unsat would
+// be COMPLETENESS-suspect (asserts phi^delta T-satisfiable on a
+// T-unsatisfiable phi — missed refutation).
 //
 // Corpus note: the chain_* cases are the worklist-relevant ones — three
 // constraints with partially-disjoint variable supports (x,y | y,z | z,w),
@@ -64,9 +63,8 @@
 // full-seed.
 //
 // The jobs>1 worklist cells (second suite) guard the concurrent
-// Stack<pair<Box,int>> path R1 rewires; no other test runs
-// --worklist-fixpoint above jobs=1 (icp_parallel_parity_test.cc's mode axis
-// is {default, acid, seed}).
+// Stack<pair<Box,int>> path; no other test runs --worklist-fixpoint above
+// jobs=1 (icp_parallel_parity_test.cc's mode axis is {default, acid, seed}).
 
 namespace dreal {
 namespace {
@@ -122,68 +120,70 @@ const vector<SeedingCase>& Corpus() {
   return corpus;
 }
 
-Config MakeConfig(const int jobs, const bool force_parallel,
-                  const bool worklist, const bool seed) {
+Config MakeConfig(const int jobs, const bool worklist, const bool seed) {
   Config config;
   config.mutable_precision() = 0.001;
   config.mutable_number_of_jobs() = jobs;
-  config.mutable_use_icp_force_parallel() = force_parallel;
   config.mutable_use_worklist_fixpoint() = worklist;
   // Explicit either way (the Config default is ON = 64).
   config.mutable_seed_samples() = seed ? 64 : 0;
   return config;
 }
 
-// --- Suite 1: seq vs forced-parallel identity at jobs=1 ----------------------
+// --- Suite 1: jobs=1 determinism + jobs=2 verdict parity ---------------------
 //
-// Every cell is the G4-arm correctness precondition (--icp-force-parallel at
-// jobs=1 must be a pure scheduling identity); the worklist=true cells are
-// additionally the R1 arm (branching_point seeding must reach the parallel
-// loop) and the seed=true cells the R3 arm (both loops must propose seeds
-// from the same, pruned, root box).
+// Every cell pins (a) the jobs=1 ground-truth verdict, (b) jobs=1 determinism
+// — zero pool workers means run-to-run IDENTITY, not mere agreement: verdict
+// plus, on delta-sat, the witness Box byte-for-byte — and (c) the jobs=2
+// verdict against jobs=1. The worklist=true cells guard the R1 arm
+// (branching_point seeding through the parallel stack) and the seed=true
+// cells the R3 arm (seeds proposed from the canonical un-pruned root
+// snapshot).
 class IcpParallelWorklistSeedingTest
     : public ::testing::TestWithParam<
           std::tuple<int /* corpus index */, bool /* worklist */,
                      bool /* seed */>> {};
 
-TEST_P(IcpParallelWorklistSeedingTest, SeqVsForcedParallelJobs1Identity) {
+TEST_P(IcpParallelWorklistSeedingTest, Jobs1DeterminismAndJobs2Verdict) {
   const auto& [case_index, worklist, seed] = GetParam();
   const SeedingCase& c = Corpus()[case_index];
 
-  // IcpSeq arm: jobs=1, flag off — today's default dispatch.
-  const Config seq_config{MakeConfig(1, false, worklist, seed)};
-  Box seq_box{};
-  const bool seq_sat{CheckSatisfiability(c.formula, seq_config, &seq_box)};
-  ASSERT_EQ(seq_sat, c.expect_sat)
-      << c.name << ": IcpSeq baseline disagrees with ground truth";
+  // jobs=1 baseline (run A).
+  const Config config_1{MakeConfig(1, worklist, seed)};
+  Box box_a{};
+  const bool sat_a{CheckSatisfiability(c.formula, config_1, &box_a)};
+  ASSERT_EQ(sat_a, c.expect_sat)
+      << c.name << ": jobs=1 baseline disagrees with ground truth";
 
-  // IcpParallel arm at jobs=1 (--icp-force-parallel): deterministic (zero
-  // pool workers), so identity — not mere agreement — is the contract.
-  const Config par_config{MakeConfig(1, true, worklist, seed)};
-  Box par_box{};
-  const bool par_sat{CheckSatisfiability(c.formula, par_config, &par_box)};
-  ASSERT_EQ(par_sat, seq_sat)
-      << c.name << ": verdict split at jobs=1, worklist=" << worklist
-      << " seed=" << seed
-      << (par_sat ? " — forced-parallel delta-sat vs seq unsat: COMPLETENESS "
-                    "(asserts phi^delta T-satisfiable on a T-unsatisfiable "
-                    "phi) suspect"
-                  : " — forced-parallel unsat vs seq delta-sat: SOUNDNESS "
-                    "(asserts phi T-unsatisfiable on a T-satisfiable phi) "
-                    "suspect");
-  // INTEGRATION-VERIFY: bit-identical witness across IcpSeq and jobs=1
-  // IcpParallel post-R1/R3 — derived from reading both loops (same LIFO pop
-  // order, same left/right alternation policy, same canonical
-  // root-prune-then-tagged-push shape, shared SeedBoxes/EvaluateBox/brancher
-  // code); if a cell diverges, chase the residual parity gap
-  // (icp_parity_gaps.md) — do not weaken this to verdict-only.
-  if (seq_sat) {
-    EXPECT_EQ(seq_box, par_box)
-        << c.name << ": witness boxes differ at jobs=1 (worklist=" << worklist
-        << " seed=" << seed << ")\nseq:\n"
-        << seq_box << "\nforced-parallel:\n"
-        << par_box;
+  // jobs=1 determinism (run B): identity — not mere agreement — is the
+  // contract (single thread, LIFO stack, no races).
+  Box box_b{};
+  const bool sat_b{CheckSatisfiability(c.formula, config_1, &box_b)};
+  ASSERT_EQ(sat_b, sat_a) << c.name
+                          << ": jobs=1 verdict is nondeterministic (worklist="
+                          << worklist << " seed=" << seed << ")";
+  if (sat_a) {
+    EXPECT_EQ(box_a, box_b)
+        << c.name << ": jobs=1 witness boxes differ across runs (worklist="
+        << worklist << " seed=" << seed << ")\nrun A:\n"
+        << box_a << "\nrun B:\n"
+        << box_b;
   }
+
+  // jobs=2 verdict parity (branch order is nondeterministic above jobs=1, so
+  // witness identity does not apply).
+  const Config config_2{MakeConfig(2, worklist, seed)};
+  Box box_2{};
+  const bool sat_2{CheckSatisfiability(c.formula, config_2, &box_2)};
+  ASSERT_EQ(sat_2, sat_a)
+      << c.name << ": verdict split at jobs=2, worklist=" << worklist
+      << " seed=" << seed
+      << (sat_2 ? " — jobs=2 delta-sat vs jobs=1 unsat: COMPLETENESS "
+                  "(asserts phi^delta T-satisfiable on a T-unsatisfiable "
+                  "phi) suspect"
+                : " — jobs=2 unsat vs jobs=1 delta-sat: SOUNDNESS "
+                  "(asserts phi T-unsatisfiable on a T-satisfiable phi) "
+                  "suspect");
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -200,17 +200,17 @@ INSTANTIATE_TEST_SUITE_P(
 
 // --- Suite 2: worklist under real concurrency --------------------------------
 //
-// R1 replaces the concurrent global stack's element type
-// (Stack<Box> -> Stack<pair<Box, int>>); no existing test runs
-// --worklist-fixpoint at jobs>1. Verdicts only — parallel branch order is
-// nondeterministic, so witness identity does not apply; repeated to shake
-// out races (same discipline as icp_parallel_parity_test.cc).
+// The concurrent global stack carries (Box, branched dim) pairs
+// (Stack<pair<Box, int>>); no other test runs --worklist-fixpoint at jobs>1.
+// Verdicts only — parallel branch order is nondeterministic, so witness
+// identity does not apply; repeated to shake out races (same discipline as
+// icp_parallel_parity_test.cc).
 class IcpParallelWorklistJobs2Test
     : public ::testing::TestWithParam<int /* corpus index */> {};
 
 TEST_P(IcpParallelWorklistJobs2Test, VerdictParity) {
   const SeedingCase& c = Corpus()[GetParam()];
-  const Config config{MakeConfig(2, false, true /* worklist */, false)};
+  const Config config{MakeConfig(2, true /* worklist */, false)};
   for (int rep = 0; rep < 5; ++rep) {
     Box box{};
     const bool sat{CheckSatisfiability(c.formula, config, &box)};

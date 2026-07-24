@@ -67,7 +67,10 @@ vector<RelationalFormulaEvaluator> BuildFormulaEvaluators(const Formula& f) {
 
 Context& ForallFormulaEvaluator::GetContext() const {
   return contexts_.GetOrCreate([this]() {
-    Config config;  // number_of_jobs defaults to 1: the nested CE solve is IcpSeq.
+    // number_of_jobs defaults to 1: the nested CE solve runs the unified
+    // IcpParallel loop with zero pool workers, single-threaded on the
+    // calling (possibly outer-pool-worker) thread.
+    Config config;
     config.mutable_precision() = delta_;
     auto context = std::make_unique<Context>(config);
     for (const Variable& exist_var : formula().GetFreeVariables()) {
@@ -134,7 +137,7 @@ FormulaEvaluationResult ForallFormulaEvaluator::operator()(
     // disjunct is UNSAT there, the body is false at p* for EVERY x in the
     // box, so the forall holds nowhere in the box: report UNSAT (EvaluateBox
     // then discards the box). Previously this case fell through to UNKNOWN;
-    // IcpSeq would branch, an all-Int existential box collapses to
+    // ICP would branch, an all-Int existential box collapses to
     // non-bisectable points, and the non-bisectable exit ACCEPTED the
     // violated box — COMPLETENESS (asserts phi^delta T-satisfiable on a
     // T-unsatisfiable phi — missed refutation). Midpoint, not the raw CE

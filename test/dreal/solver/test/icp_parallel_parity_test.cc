@@ -30,7 +30,10 @@
 #include "dreal/util/box.h"
 #include "dreal/util/rounding.h"
 
-// IcpParallel (--jobs > 1) feature-parity harness vs IcpSeq (jobs = 1).
+// Jobs-parity harness for the unified ICP loop: --jobs N vs --jobs 1 within
+// the one implementation, IcpParallel (icp_parity_gaps.md R4 — the parity
+// PRINCIPLE survives the IcpSeq deletion: --jobs must be a pure scheduling
+// choice, same features honored, same verdicts).
 //
 // For every (corpus formula, jobs in {2,4}, mode in {default, acid, seed}) we
 // assert (i) verdict EQUALITY against the jobs=1 run of the same formula+mode
@@ -39,19 +42,20 @@
 // delta-sat, witness validity: the returned Box must survive EvaluateBox (a
 // nullopt there means an evaluator refuted the witness outright — an invalid
 // delta-sat, COMPLETENESS (asserts phi^delta T-satisfiable on a T-unsatisfiable
-// phi)). A seq/parallel verdict split where parallel says unsat on a
-// delta-satisfiable phi would be SOUNDNESS (asserts phi T-unsatisfiable on a
-// T-satisfiable phi — false unsat).
+// phi)). A jobs-split where jobs>1 says unsat on a delta-satisfiable phi would
+// be SOUNDNESS (asserts phi T-unsatisfiable on a T-satisfiable phi — false
+// unsat).
 //
 // Red-first record (pre-fix, gaps 1-2): the ODE corpus cases at jobs>1 threw
 // "Parallel ODE solving is unsupported. todo: fix." (contractor.cc) and the
 // acid-mode cases at jobs>1 threw "The ACID/3BCID contractor (--acid/--3bcid)
 // is not implemented for parallel ICP (--jobs > 1)." — both conservative
-// guards, deleted by this change. Gap 3 (--seed-samples) is CLI-red only: the
-// binary threw "--seed-samples > 0 (seed-and-verify) is IcpSeq-only; not used
-// with --jobs > 1." (dreal_main.cc); at the API level IcpParallel silently
-// ignored seeds, so the seed cells here are parity regression guards (seeding
-// is a COMPLETENESS-only speed lever and never moves a verdict).
+// guards, deleted by this change. Gap 3 (--seed-samples) was CLI-red only:
+// the binary threw "--seed-samples > 0 (seed-and-verify) is IcpSeq-only; not
+// used with --jobs > 1." (dreal_main.cc, pre-consolidation); at the API level
+// the parallel loop silently ignored seeds, so the seed cells here are parity
+// regression guards (seeding is a COMPLETENESS-only speed lever and never
+// moves a verdict).
 //
 // acid x ODE: formerly excluded — --acid on an `integral`-bearing assertion
 // set threw "IbexConverter: integral constraint is not supported." at any

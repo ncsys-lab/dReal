@@ -41,7 +41,8 @@ class IcpParallelAbsTest : public ::testing::Test {
   const Variable x_{"x", Variable::Type::CONTINUOUS};
   const Variable y_{"y", Variable::Type::CONTINUOUS};
 
-  // jobs = 1 -> IcpSeq; jobs > 1 -> IcpParallel. kAbs active on both.
+  // One loop, IcpParallel: jobs = 1 is main-thread-only, jobs > 1 pools.
+  // kAbs active at every job count.
   Config AbsConfig(const int jobs) const {
     Config config;
     config.mutable_precision() = 0.001;
@@ -87,8 +88,8 @@ TEST_F(IcpParallelAbsTest, UnsatMatchesSequentialUnderRepeat) {
 // dispatch (the three-way chain would silently prefer smear and drop abs).
 // The shared Icp base ctor rejects it, so the guard is entry-path-independent:
 // this test exercises the library/API path, which never passes through
-// dreal_main's flag parsing, on both loops (jobs = 1 -> IcpSeq, 2 ->
-// IcpParallel). The throw fires at Context construction — before any solving
+// dreal_main's flag parsing, at both job counts (1 = main-thread-only, 2 =
+// pooled). The throw fires at Context construction — before any solving
 // — and propagates uncaught through CheckSatisfiability (no catch anywhere in
 // api.cc / context.cc / context_impl.cc).
 TEST_F(IcpParallelAbsTest, ThrowsWhenBothAbsAndSmearAreSet) {

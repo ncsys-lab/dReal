@@ -112,7 +112,7 @@ TEST_F(FormulaEvaluatorTest, Neq) {
 // forall-equality of the upstream reproducer at the invalid model's point box
 // (c, e, f) = (1, -27, 22): forall p in [-0.1, 1.1]. f + p e + c p^2 = 1 is
 // off by 21 at p = 0 — for EVERY point of the box. Returning UNKNOWN made
-// IcpSeq branch; an all-Int existential box collapses to non-bisectable
+// ICP branch; an all-Int existential box collapses to non-bisectable
 // points, and the non-bisectable exit then ACCEPTED the violated box —
 // COMPLETENESS (asserts phi^delta T-satisfiable on a T-unsatisfiable phi —
 // missed refutation). (Continuous variables here: the evaluator defect is

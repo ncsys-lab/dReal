@@ -1,5 +1,16 @@
 # Volume-trace measurement (ICP frontier volume vs wall-clock)
 
+> **Re-homing note (2026-07-24, R4 consolidation):** the recipe below targets
+> `IcpSeq::CheckSat`'s iterable `vector<pair<Box,int>> stack`, and `IcpSeq` has been deleted —
+> the only loop is now `IcpParallel` (`icp_parallel.cc`), whose `global_stack` is a lock-free
+> `TreiberStack` with **no iteration**, at every `--jobs` including 1. To reuse the recipe,
+> the throwaway build must also maintain a shadow frontier: at `-j1` (single worker, no
+> races) keep a plain `std::multiset<double>` of per-box log-volumes beside the real stack —
+> insert in `ParallelBranch` for the pushed child and on seed/root pushes, erase on pop/kept
+> child — and run the sampling block at the top of `Worker`'s loop. CSV format, gating, and
+> plotting below are unchanged. The code snippet is kept verbatim as the historical artifact
+> of the 2026-06 `aim_tanh_n3` capture.
+
 A throwaway diagnostic for **"why is this theory call slow?"** on a single, long-running
 `CheckSat` (one SAT/theory call, no DPLL(T) ping-pong — e.g. the odeexpr_v2 QF `forall`
 timeouts). It samples the total remaining search volume of the ICP branch-and-prune frontier

@@ -32,7 +32,7 @@ namespace dreal {
 Icp::Icp(const Config& config) : config_{config} {
   // The --branch/--smear mutual exclusion, enforced at the one construction
   // point every entry path funnels through (CLI flags and library callers
-  // both land here via TheorySolver -> IcpSeq/IcpParallel). Without it, a
+  // both land here via TheorySolver -> IcpParallel). Without it, a
   // Config with both slots set would silently prefer smear in the three-way
   // dispatch and drop abs.
   if (config_.brancher_variant() != BrancherVariant::kLargest &&

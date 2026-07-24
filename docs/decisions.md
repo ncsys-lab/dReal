@@ -370,7 +370,8 @@ here: **depth-parity** toggle — tried, perf-neutral-to-worse, not adopted (bra
 **best-first** search — trades the ordering question for unbounded memory (DFS is memory-bounded);
 **informed first-side** (steer toward a sampled candidate) — this is precisely what seed-and-verify
 already does for NRA, and blind alternation is the residual robust default for the ODE/forall
-families it cannot reach. Code + intuition: `src/dreal/solver/icp_seq.cc` (`explore_left_first`).
+families it cannot reach. Code + intuition: `src/dreal/solver/icp_parallel.cc` (the `stack_left_box_first`
+alternation comment in `Worker`).
 
 ---
 

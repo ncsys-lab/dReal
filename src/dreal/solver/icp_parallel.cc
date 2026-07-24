@@ -52,11 +52,10 @@ bool ParallelBranch(const SmearBrancher* const smear_brancher,
   // Constraint-aware smear / activity-based ABS (when enabled for this
   // worker) vs the configured fallback brancher; all three share the brancher
   // interface (dimension + left/right out-params). At most one of smear/abs
-  // is non-null (the Icp base ctor rejects a Config with both set). R2 parity
-  // fix: the fallback is config.brancher() — the Config slot, matching
-  // IcpSeq's dispatch (parity gap G2). Its default IS BranchLargestFirst, so
-  // default behavior is unchanged; a custom Config::mutable_brancher() now
-  // reaches the parallel path too.
+  // is non-null (the Icp base ctor rejects a Config with both set). The
+  // fallback is config.brancher() — the API-settable Config slot (parity gap
+  // G2, icp_parity_gaps.md R2). Its default IS BranchLargestFirst; a custom
+  // Config::mutable_brancher() is honored at every job count.
   Box box_left;
   Box box_right;
   const int branching_dim{
@@ -75,8 +74,9 @@ bool ParallelBranch(const SmearBrancher* const smear_brancher,
   // Both children carry the branched dimension — the pushed child inside its
   // stack entry (read back on pop), the kept child through *branching_point
   // (the ContractorStatus field the next Prune reads) — so
-  // ContractorWorklistFixpoint seeds only the dependent contractors, exactly
-  // as IcpSeq does (icp_parity_gaps.md G1/R1).
+  // ContractorWorklistFixpoint seeds only the contractors whose inputs
+  // depend on the branched dimension: the incremental-repruning
+  // optimization (icp_parity_gaps.md G1/R1).
   global_stack->emplace(to_stack, branching_dim);
   *box = to_keep;
   *branching_point = branching_dim;
@@ -99,8 +99,34 @@ void Worker(const Contractor& contractor, const Config& config,
   TimerGuard branch_timer_guard(&stat.timer_branch_, stat.enabled(),
                                 false /* start_timer */);
 
+  // libcds attach for the lock-free global_stack. Pool workers attach here;
+  // the main thread is attached by CheckSat's static CdsInit. Nested-CE
+  // safety (icp_parity_gaps.md G6): a nested CheckSat on this thread re-runs
+  // Worker, but a block-scope thread_local is initialized only on the FIRST
+  // pass per thread, so no second guard (and no double attach/detach) is
+  // created. Even a hypothetical re-attach would be safe: libcds refcounts
+  // attachThread (ThreadData::init() bumps m_nAttachCount and only attaches
+  // at 0 -> 1; detachThread only detaches at 1 -> 0 — vendored
+  // libcds/src/thread_data.cpp).
   thread_local CdsScopeGuard cds_scope_guard(!main_thread);
 
+  // Which child to keep in hand (explored first) vs push. ALTERNATES every
+  // branch (toggled below) — a parameter-free DFS diversification that is the
+  // years-long default. Why it is load-bearing: DFS commits fully to the
+  // first child's whole subtree before backtracking, so a FIXED first-side
+  // hugs one wall of the branch tree and can exhaustively grind a
+  // witness-free region; BMC unrollings are DEEP, so that region is
+  // astronomically large. Alternating zig-zags to diverse deep leaves fast —
+  // decisive on SAT, where we stop at the first witness (it only reorders
+  // leaf visits, so it can never change soundness or the UNSAT verdict).
+  // Removing it blows up deep ODE-BMC SAT like bouncing ball — <1s with,
+  // >60s without (~70x). seed-and-verify (--seed-samples) is the robust
+  // replacement for branch-order tricks, but it is GATED OFF for ODE/forall,
+  // so alternation is the only diversification those families get. It is a
+  // parity flip, not a tuned constant (cf. the removed 0.56 split-ratio): no
+  // knob to overfit. Rationale: docs/decisions.md §"Per-branch alternation".
+  // The forall contractor seeds the starting side via
+  // config.stack_left_box_first().
   bool stack_left_box_first{config.stack_left_box_first()};
 
   // `current_box` always points to the box in the contractor status
@@ -215,12 +241,12 @@ void Worker(const Contractor& contractor, const Config& config,
           "satisfying "
           "delta-condition but it's not bisectable.:\n{}",
           current_box);
-      // Upstream dreal/dreal4#68, parallel twin of the IcpSeq exit: this
-      // delta-sat is degenerate — the box still violates the delta-condition
-      // but cannot be bisected further. COMPLETENESS hazard (may assert
-      // phi^delta T-satisfiable on a T-unsatisfiable phi — missed
-      // refutation); warn loudly on stderr, verdict unchanged. Racing
-      // workers may each warn once; duplicates are benign.
+      // Upstream dreal/dreal4#68: this delta-sat is degenerate — the box
+      // still violates the delta-condition but cannot be bisected further.
+      // COMPLETENESS hazard (may assert phi^delta T-satisfiable on a
+      // T-unsatisfiable phi — missed refutation); warn loudly on stderr,
+      // verdict unchanged. Racing workers may each warn once; duplicates
+      // are benign.
       WarnDegenerateDeltaSat("non-bisectable box below delta", current_box);
       *found_delta_sat = id;
       return;
@@ -246,22 +272,32 @@ IcpParallel::IcpParallel(const Config& config)
 bool IcpParallel::CheckSat(const Contractor& contractor,
                            const vector<FormulaEvaluator>& formula_evaluators,
                            ContractorStatus* const cs) {
-  // --seed-samples seed-and-verify pre-pass boxes (see icp_seq.cc for the
-  // full rationale). Proposed single-threaded here on the main thread before
-  // any worker spawns, and pushed onto the global stack AFTER the root box
-  // below so workers pop them first (LIFO); the root box stays behind them,
-  // so no subspace is dropped (COMPLETENESS preserved) and the unchanged
-  // Prune+EvaluateBox loop remains the sole arbiter of delta-SAT.
+  // --seed-samples seed-and-verify pre-pass boxes. For pure-relational (NRA)
+  // theory calls, propose candidate points (LHS sampling or COBYLA) and push
+  // a small SOUND box around each so they are explored FIRST. Proposed
+  // single-threaded here on the calling thread before any worker spawns, and
+  // pushed onto the global stack AFTER the root box below so workers pop
+  // them first (LIFO); the root box stays behind them, so no subspace is
+  // dropped (COMPLETENESS preserved) and the unchanged Prune+EvaluateBox
+  // loop remains the sole arbiter of delta-SAT — the cache/recompute
+  // carve-out shape, NOT a fallback: a poor candidate cannot cause a false
+  // delta-sat.
   vector<Box> seed_boxes;
 
-  // Initial Prune (main thread) — establish the FE_UPWARD phase here too.
+  // Initial Prune (calling thread) — establish the FE_UPWARD phase here too.
   // branching_point = -1: full worklist seed for the root prune, stated
-  // explicitly rather than inherited from the caller's ContractorStatus
-  // (IcpSeq states it identically). Seeds are proposed from the UN-PRUNED
-  // root snapshot — the canonical seed input shared with IcpSeq (see the
-  // seed-input comment there: the pruned-box input regressed the ∃∀ Minimize
-  // path into a hang) — but only after a non-empty root prune (an empty root
-  // is unsat; every seed box is a sub-box of the infeasible root).
+  // explicitly rather than inherited from the caller's ContractorStatus.
+  // Seed-input snapshot: seeds are proposed from the UN-PRUNED root box, the
+  // canonical seed input, so the copy is taken before the root prune — but
+  // seeds are only computed after a non-empty root prune (an empty root is
+  // unsat; every seed box is a sub-box of the infeasible root). The R3 draft
+  // canonicalized on the PRUNED box instead (icp_parity_gaps.md G3) and that
+  // regressed a previously-green ∃∀ path catastrophically
+  // (MinimizeEqualityElimination.Issue320UnrelatedEqualityHang: <1 s -> >120 s
+  // hang at delta=1e-16; isolated 2026-07-22 by varying only this input —
+  // nested-CE seeding from the HC4-contracted CE box returns counterexamples
+  // that stall the outer CE-guided contraction). COMPLETENESS/termination
+  // only — seed choice never moves a verdict.
   {
     const UpwardRoundingScope phase_scope;
     const UpwardRounding ur{phase_scope.token()};
@@ -285,8 +321,18 @@ bool IcpParallel::CheckSat(const Contractor& contractor,
   // -1 indicates that the process does not find a solution yet. i >= 0
   // indicates that the i-th worker already found a solution.
   atomic<int> found_delta_sat{-1};
+  // Process-wide libcds init (cds::Initialize + HP GC singleton), attaching
+  // the constructing thread. Function-local static: initialized exactly once,
+  // by the FIRST thread ever to reach this line — the top-level solve's
+  // calling thread (a nested forall-CE CheckSat triggered by the initial
+  // Prune above initializes it on that same thread; pool workers only exist
+  // after their spawning CheckSat passed this line). Nested CheckSat calls
+  // (the forall-CE sub-solve at jobs = 1, possibly on an outer pool-worker
+  // thread — icp_parity_gaps.md G6) skip it and rely on the caller's attach:
+  // CdsInit's for the first thread, Worker's thread_local CdsScopeGuard for
+  // pool workers.
   static CdsInit cds_init{
-      true /* main thread is using lock-free containers. */};
+      true /* the constructing thread is using lock-free containers. */};
   Stack<pair<Box, int>> global_stack;
 
   const int number_of_jobs = config().number_of_jobs();

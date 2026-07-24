@@ -22,9 +22,13 @@
 
 namespace dreal {
 
-/// A class to show statistics information at destruction. We have a
-/// static instance in Icp::CheckSat() to keep track of the numbers of
-/// branching and pruning operations.
+/// A class to show statistics information at destruction. IcpParallel's
+/// Worker keeps one thread_local instance per worker thread (tagged with the
+/// worker id it was first constructed under) to count branching and pruning
+/// operations; each prints at its thread's exit — the calling thread's at
+/// process exit, a pool worker's when its pool is destroyed. thread_local,
+/// not a function-local static: per-thread counters need no synchronization
+/// beyond the atomics, and no state is shared across instances or threads.
 class IcpStat : public Stat {
  public:
   explicit IcpStat(const bool enabled, int id = 0)

@@ -28,7 +28,10 @@
 
 namespace dreal {
 
-/// Class for Parallel ICP (Interval Constraint Propagation) algorithm.
+/// The ICP (Interval Constraint Propagation) algorithm — the one loop for
+/// every --jobs (icp_parity_gaps.md R4 consolidation). The pool holds
+/// jobs - 1 workers; the calling thread runs the last Worker itself, so
+/// --jobs 1 spawns zero pool workers and is deterministic.
 class IcpParallel : public Icp {
  public:
   /// Constructs an IcpParallel based on @p config.

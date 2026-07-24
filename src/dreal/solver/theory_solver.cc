@@ -31,7 +31,6 @@
 #include "dreal/solver/filter_assertion.h"
 #include "dreal/solver/formula_evaluator.h"
 #include "dreal/solver/icp_parallel.h"
-#include "dreal/solver/icp_seq.h"
 #include "dreal/util/assert.h"
 #include "dreal/util/logging.h"
 #include "dreal/util/rounded_interval.h"
@@ -48,22 +47,11 @@ using std::set;
 using std::vector;
 
 TheorySolver::TheorySolver(const Config& config)
-    : config_{config}, icp_{nullptr} {
-  // --icp-force-parallel routes jobs = 1 through IcpParallel (zero pool
-  // workers; the main thread runs the single Worker, deterministically) —
-  // experiment-scoped scaffolding for the seq/parallel parity measurement
-  // (icp_parity_gaps.md R3/G4); it dies with the R4 consolidation. The
-  // dispatch is frozen HERE, at construction (Blocks 21-22 rely on that:
-  // the nested CE Context must clear the flag before constructing this);
-  // the logs make the choice observable under --verbose.
-  if (config_.number_of_jobs() > 1 || config_.use_icp_force_parallel()) {
-    icp_ = make_unique<IcpParallel>(config_);
-    DREAL_LOG_DEBUG("TheorySolver::TheorySolver() dispatch = IcpParallel");
-  } else {
-    icp_ = make_unique<IcpSeq>(config_);
-    DREAL_LOG_DEBUG("TheorySolver::TheorySolver() dispatch = IcpSeq");
-  }
-}
+    // The one ICP loop (icp_parity_gaps.md R4 consolidation; IcpSeq deleted
+    // after the R3 gate measured jobs-1-through-IcpParallel at PAR2 1.001x
+    // with zero verdict diffs). --jobs 1 spawns zero pool workers — the
+    // calling thread runs the single Worker, deterministically.
+    : config_{config}, icp_{make_unique<IcpParallel>(config)} {}
 
 namespace {
 bool DefaultTerminationCondition(const Box::IntervalVector& old_iv,

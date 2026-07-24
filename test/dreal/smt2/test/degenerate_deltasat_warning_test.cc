@@ -10,7 +10,7 @@
 //          bisected further (endpoints are adjacent floats at large
 //          magnitude) is returned as delta-sat from the ICP loop with only
 //          a DREAL_LOG_DEBUG note, invisible at default verbosity. Both the
-//          sequential (icp_seq.cc) and parallel (icp_parallel.cc Worker)
+//          single-threaded and pooled (icp_parallel.cc Worker)
 //          exits are exercised below.
 //   #265 — unbounded variable intervals admit +-inf endpoints in the
 //          delta-sat witness (extended-real interval arithmetic "satisfies"
@@ -87,10 +87,10 @@ constexpr const char* kIssue68Smt2 =
     "(check-sat)\n"
     "(exit)\n";
 
-// #68, sequential path (default jobs = 1 -> IcpSeq): the non-bisectable
-// delta-violating exit must warn on stderr; the delta-sat verdict must be
-// unchanged. COMPLETENESS (asserts phi^delta T-satisfiable on a
-// T-unsatisfiable phi — missed refutation).
+// #68, single-threaded path (default jobs = 1 — the main-thread-only
+// Worker): the non-bisectable delta-violating exit must warn on stderr; the
+// delta-sat verdict must be unchanged. COMPLETENESS (asserts phi^delta
+// T-satisfiable on a T-unsatisfiable phi — missed refutation).
 TEST(DegenerateDeltaSatWarning, Issue68NonBisectableSeqWarns) {
   const CapturedRun run{RunSmt2String(kIssue68Smt2)};
   EXPECT_NE(run.out.find("delta-sat"), std::string::npos)
@@ -99,9 +99,8 @@ TEST(DegenerateDeltaSatWarning, Issue68NonBisectableSeqWarns) {
       << "stderr: " << run.err;
 }
 
-// #68, parallel path (jobs = 4 -> IcpParallel::Worker): the symmetric
-// non-bisectable exit in the worker must warn too. Same COMPLETENESS
-// characterization as above.
+// #68, pooled path (jobs = 4): the same non-bisectable Worker exit must
+// warn from pool workers too. Same COMPLETENESS characterization as above.
 TEST(DegenerateDeltaSatWarning, Issue68NonBisectableParallelJobs4Warns) {
   Config config;
   config.mutable_number_of_jobs() = 4;
