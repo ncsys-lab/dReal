@@ -13,9 +13,21 @@ None of these is a SOUNDNESS hazard (a false `unsat` requires narrowing past a t
 search order, over-seeding a worklist, and ignored branch heuristics cannot do that). All are
 perf/behavioral divergences; at worst COMPLETENESS-shaped (slower to a verdict within budget).
 
+> **STATUS UPDATE (2026-07-23/24):** G1/G2/G3 **CLOSED** — `0c5e9a753` (worklist
+> `branching_point` seeding through the parallel stack + canonical root-prune, plus the
+> `--icp-force-parallel` measurement scaffold) and `e8cdb7525` (`Config::Brancher` honored in
+> `ParallelBranch`). **R3-align deviation note:** the canonical seed input became the
+> **un-pruned root snapshot in both loops** — not the pruned box §G3 argued for — because the
+> pruned-box variant hung the nested-CE COBYLA; recorded so the deviation isn't re-litigated.
+> G4 **MEASURED, gate PASS**: the sweep's `par1` arm (jobs-1-through-`IcpParallel`) showed
+> zero per-file verdict diffs vs base over all 270 files, PAR2 **1.001×** overall (≤1.006
+> every family), median per-file CPU ratio 1.002
+> (`benchmark/results/sweep_20260723_115956/ANALYSIS.md` §"R3 gate"). **R4/R5 = GO, pending
+> execution** (consolidate, delete `IcpSeq`; G5/G6 fold into R4 as planned below).
+
 ## Gaps
 
-### G1 — `branching_point` incremental worklist seeding is sequential-only
+### G1 — `branching_point` incremental worklist seeding is sequential-only — CLOSED (`0c5e9a753`)
 
 `IcpSeq`'s stack holds `(Box, branching_dim)` pairs and writes the dim into
 `ContractorStatus::mutable_branching_point()` on every pop (`icp_seq.cc:60,125`).
@@ -29,7 +41,7 @@ Scope: only under `--worklist-fixpoint` (default off, `config.h:334`; `theory_so
 Flag-gated paths are first-class — "off by default" does not excuse the gap. Effect is
 perf-only; full seeding is the conservative direction (over-pruning, never under-).
 
-### G2 — `config().brancher()` honored sequentially, hardcoded in parallel
+### G2 — `config().brancher()` honored sequentially, hardcoded in parallel — CLOSED (`e8cdb7525`)
 
 `IcpSeq` branches via `config().brancher()` (`icp_seq.cc:172`, an API-settable
 `std::function`, `Config::mutable_brancher()`); `ParallelBranch` hardcodes
@@ -40,7 +52,7 @@ Scope: default is `BranchLargestFirst` (`config.h:434`) and the only current set
 `test/dreal/solver/test/config_test.cc:63`, so no production caller diverges today; the gap is
 API-surface truth, not observed behavior.
 
-### G3 — seed-and-verify proposes from different boxes
+### G3 — seed-and-verify proposes from different boxes — CLOSED (`0c5e9a753`; deviation note above)
 
 `IcpSeq` computes `SeedBoxes` from the **un-pruned** root box, before the loop's first Prune
 (`icp_seq.cc:96-100`). `IcpParallel` runs an initial main-thread Prune first and seeds from
@@ -53,7 +65,7 @@ first pop) — pure redundant work, cheap because fixpoint-idempotent, but asymm
 Seeding from the pruned box is arguably the *better* semantics (candidates inside the
 contracted region); remediation should pick one canonically, not preserve both.
 
-### G4 — jobs=1 overhead of the parallel machinery
+### G4 — jobs=1 overhead of the parallel machinery — MEASURED, gate PASS (1.001×; header above)
 
 What `--jobs 1` through `IcpParallel` pays that `IcpSeq` doesn't: libcds lock-free
 `Stack<Box>` + `CdsInit`/`CdsScopeGuard` (`icp_parallel.cc:79,223-225`), atomic
@@ -89,33 +101,33 @@ exercises.
   `icp_parallel.cc:170` — T8).
 - **FE_UPWARD phase hoist, interrupt check, EvaluateBox arbiter**: symmetric.
 
-## Remediation plan (deferred; end-state = consolidate, delete `IcpSeq`)
+## Remediation plan (R1–R3 DONE 2026-07-23/24; R4/R5 GO — end-state = consolidate, delete `IcpSeq`)
 
 The end-state under minimize-logic is **one ICP loop**: `IcpParallel` with the gaps closed
 supersedes `IcpSeq` (`--jobs 1` = zero pool workers, main thread only, deterministic), and the
 `theory_solver.cc:53-55` dispatch collapses. Ordered steps, each gated before the next:
 
-1. **R1 — close G1**: make `global_stack` a `Stack<std::pair<Box, int>>` (or a small struct);
+1. **R1 — close G1** (DONE, `0c5e9a753`): make `global_stack` a `Stack<std::pair<Box, int>>` (or a small struct);
    `ParallelBranch` records the dim with the pushed child and keeps it for the in-hand child;
    `Worker` writes it into `mutable_branching_point()` before each Prune. Test: a
    `--worklist-fixpoint` case in the parity harness asserting jobs=1-parallel prune counts /
    verdicts match seq (red first: today the parallel side full-seeds).
-2. **R2 — close G2**: thread `config().brancher()` into `ParallelBranch` in place of the
+2. **R2 — close G2** (DONE, `e8cdb7525`): thread `config().brancher()` into `ParallelBranch` in place of the
    hardcoded `BranchLargestFirst` (smear branch unchanged). Test: port
    `config_test.cc`'s `MyBrancher` into a jobs=2 solve asserting the custom brancher runs.
-3. **R3 — measure G4 and align G3**: pick the canonical seed input (pruned box, and delete
+3. **R3 — measure G4 and align G3** (DONE — gate PASS; seed-input deviation per the status header): pick the canonical seed input (pruned box, and delete
    seq's variant with it — or justify otherwise), drop the double root-prune, then A/B
    jobs=1-parallel vs `IcpSeq` across the benchmark families (`do_ab.sh`, CPU-time, one pool
    at a time). Gate: zero verdict flips AND PAR2 within the 1.5× regression threshold —
    ideally ~1.0×. If overhead measures real, THAT is the one honest reason to keep both files;
    stop and surface the numbers rather than consolidating anyway.
-4. **R4 — consolidate**: delete `icp_seq.{h,cc}`, collapse the `theory_solver.cc` dispatch,
+4. **R4 — consolidate** (GO, pending): delete `icp_seq.{h,cc}`, collapse the `theory_solver.cc` dispatch,
    let the nested forall-CE solve (G6) run through the unified loop, and extend the parity
    harness with a nested-forall + jobs>1 case (CDS nesting surface). Unify stats plumbing
    (G5) as part of the move — per-instance or thread-local tagged, not function-local static.
    `preserve-tests`: the seq-specific tests get ported to the unified entry point, not
    deleted.
-5. **R5 — re-verify**: full ctest + `rounding_debug_gate.sh`, the 72-instance parity suite
+5. **R5 — re-verify** (GO, pending): full ctest + `rounding_debug_gate.sh`, the 72-instance parity suite
    (now jobs=N vs jobs=1 within one implementation), and a families-level jobs=4-vs-1 verdict
    diff.
 

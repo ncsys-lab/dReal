@@ -161,6 +161,30 @@ stands. Note a dReal-side symbolic pre-pass would also inherit the *build-side* 
 sibling `ode_expressivity` project already documents (`docs/optimize_lazy_expand.md`,
 `docs/sympy-notes.md`).
 
+### 2026-07-24 — RELATED-WORK sweep addendum: lemma-PM measured; the `forall/` wall breached
+
+Two campaign results land here (full record: `OPTIMIZATION_LOG.md` §"RELATED-WORK candidate
+campaign"; `benchmark/results/sweep_20260723_115956/ANALYSIS.md`):
+
+- **Lemma-PM measured on-pin** (closing the §"Lemma pattern-matching + quantifiers"
+  measure-first item): the `--drpm-max-size 4` arm is exactly base on odeexpr (114/151
+  solved, PAR2 1.000× — v1 1.002, v2 0.999), so the constant-factor ceiling predicted there
+  is real and buys nothing against the ∃∀ wall. The signal lives elsewhere: github PAR2
+  **0.688×** (repetitive BMC unrollings — car-3 k128 541.8→19.1 s, up to 28× single-file),
+  plus one tacas single-file pathology (9.2 s → TIM) to diagnose before recommending.
+  Family-conditional candidate only.
+- **First UNSAT on the odeexpr_v2 `forall/` wall** (the QF subfamily; the ∃∀
+  `exists_forall/` wall is intact across all 11 arms — ANALYSIS.md §E): the five
+  system-cell arms (obbt/mohc/polytope/affine/hybrid) all refuted
+  `sign_agreement …aed75881`, and the instance is machine-verified truly-UNSAT (grid margin
+  max −4.0e-06 < 0; J-bound 0.49 < the tanh contraction threshold ½). The refutation is a
+  **COMPLETENESS win** for those arms (they refute a T-unsatisfiable φ); base's `delta-sat`
+  at δ=0.01 is the legal δ-artifact, not a violation. Cheapest refutation: `--mohc` at
+  1.71 s. That the breach came from stronger contraction cells (monotonicity / linear
+  relaxation — avenue #2's territory), not from branching or compute, is consistent with
+  the enclosure-looseness diagnosis above. (`--mohc` also cracked one base-TIM ∃∀ file
+  into SAT — e95d4844, 427.4 s — but no arm moved any ∃∀ verdict toward UNSAT.)
+
 ---
 
 ## Solver mechanism & soundness (encoding-independent — still current)

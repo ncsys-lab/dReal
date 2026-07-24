@@ -1,5 +1,33 @@
 # Upstream gap audit — soonhokong/dreal4 fork + dreal/dreal4 open issues
 
+> **CORRECTION HEADER (2026-07-22): the audit below is discharged.** The 2026-07-21/22
+> tech-debt campaign closed both "Bottom line" port candidates and every reproducing
+> defect except the crash class:
+>
+> - **#320 minimize equality-elimination** ported (`8a68a5f57`); **timer-test flake**
+>   fixed (`597b9be21`).
+> - **#258 arctan2 false unsat** — SOUNDNESS (asserted φ T-unsatisfiable on a
+>   T-satisfiable φ — false unsat) — fixed in the ibex-fork (`a507cd10`, carried in the
+>   `e054af7b` pin bump `664f3cac1`).
+> - **#264 large-integer fold false unsat** (SOUNDNESS) — exact constant folding of
+>   additions, no silent rounding (`27ae0db34`).
+> - **#284 Int ≥ 2^31 false unsat** (SOUNDNESS-class) — Int domain is the full
+>   double-exact ±2^53, not int32 (`b0794292f` + `1b814b046`).
+> - **#280 Int-∀ invalid delta-sat** — COMPLETENESS (asserted φ^δ T-satisfiable on a
+>   T-unsatisfiable φ — missed refutation) — forall evaluator now emits an UNSAT
+>   refutation certificate (`908c22981`).
+> - **#68 / #265 degenerate delta-sat** now warned loudly on stderr (`2c36dd086`) —
+>   the silent-at-default-verbosity part of both findings is closed.
+> - Behaviors this fork already got right (#324/#323/#302/#315) pinned by tests
+>   (`35e41ca18`); the 87456f2ef gcc dangling-reference false positive silenced
+>   (`3cf24b011`).
+>
+> **Remaining live set:** crashes **#176/#86/#80** (uncaught exceptions), **#223**
+> (errors abort the process instead of emitting SMT-LIB `(error ...)`), and the
+> **#265 unbounded-interval design limit** itself (COMPLETENESS — missed refutation;
+> upstream-acknowledged; mitigated by bounding every real, and now warned). The body
+> below is the historical 2026-07-21 snapshot — left un-rewritten.
+
 **Point-in-time snapshot, 2026-07-21.** Question: which bugs/fixes/features from
 soonho's unmerged fork work (github.com/soonhokong/dreal4) and the upstream issue
 tracker (github.com/dreal/dreal4/issues) is this fork missing?
