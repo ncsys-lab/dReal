@@ -24,7 +24,12 @@ Defined in `Contractor::Kind`:
 | `INTEGER` | `contractor_integer.cc` | Round integer-typed variables to integer bounds |
 | `SEQ` | `contractor_seq.cc` | Apply a list of contractors in sequence |
 | `IBEX_FWDBWD` | `contractor_ibex_fwdbwd.cc` | HC4 forward-backward propagation (main workhorse) |
-| `IBEX_POLYTOPE` | `contractor_ibex_polytope.cc` | Linear relaxation (polytope) contractor |
+| `IBEX_POLYTOPE` | `contractor_ibex_polytope.cc` | Linear relaxation (polytope) contractor — `--polytope`, linearizer selectable via `--polytope-linearizer` |
+| `IBEX_ACID` | `contractor_ibex_acid.cc` | ACID / 3BCID shaving over the HC4 path — `--acid` / `--3bcid` |
+| `IBEX_NEWTON` | `contractor_ibex_newton.cc` | Interval-Newton (Hansen–Sengupta) on the square equality subsystem — `--newton` |
+| `IBEX_OBBT` | `contractor_ibex_obbt.cc` | Optimization-based bound tightening: 2n certified LPs over the X-Taylor relaxation — `--obbt` |
+| `IBEX_MOHC` | `contractor_ibex_mohc.cc` | Mohc monotonic-occurrence propagation (occurrence-grouping monotone revise + BoxNarrow) — `--mohc` |
+| `IBEX_FORALL` | `contractor_ibex_forall.cc` | Sound `ibex::CtcForAll` pre-pruner beside the CEGIS `FORALL` — `--forall-pre-prune` (section below) |
 | `FIXPOINT` | `contractor_fixpoint.cc` | Run a contractor to fixpoint |
 | `WORKLIST_FIXPOINT` | `contractor_worklist_fixpoint.cc` | Fixpoint with dependency tracking |
 | `FORALL` | `contractor_forall.h` | ∃∀ `QF_NRA`: CE-guided pruning for `forall` clauses (CAV 2018) — *not* the ODE-time `forall_t` |
@@ -54,11 +59,25 @@ IBEX implements this as `ibex::CtcFwdBwd`. The dReal wrapper converts `dreal::Fo
 
 ## IBEX Polytope
 
-**File:** `src/dreal/contractor/contractor_ibex_polytope.cc`
+**File:** `src/dreal/contractor/contractor_ibex_polytope.cc` — opt-in via `--polytope` (and `--forall-polytope` for the ∃∀ context).
 
-Linearizes the constraint system and applies polytope (LP-based) contraction. More expensive than FWDBWD but can prune regions that interval arithmetic alone misses, especially for tightly coupled linear or near-linear constraints.
+Linearizes the constraint system and applies polytope (LP-based, `CtcPolytopeHull` over vendored SoPlex) contraction. More expensive than FWDBWD but can prune regions that interval arithmetic alone misses, especially for tightly coupled linear or near-linear constraints.
 
-Used selectively — `TheorySolver` chooses whether to include a polytope contractor based on formula structure.
+**Linearizer selector (`--polytope-linearizer xtaylor|affine|both`, default `xtaylor`):** `xtaylor` = the corner X-Taylor rows (`LinearizerXTaylor`); `affine` = affine-arithmetic rows from the fork-vendored `LinearizerAffine2` (fAF2 forms; rounding audit discharged as SOUND-WITH-SCOPE-WRAP, `ibex_docs/affine-rounding-audit.md`), which track first-order variable correlations and can prove a box infeasible outright; `both` = both row sets ANDed into one LP. Measured (2026-07 sweep): **prefer `affine`** — its solve set strictly contains xtaylor's on odeexpr (v1 PAR2 0.804×), `both` adds nothing, and **BUG-014** (`docs/dreal-bugs.md`) makes the xtaylor rows crash-exposed (OOB write in SoPlex 4.0.2 presolve — latent SOUNDNESS risk (a corrupted box narrowed past a true model would be a false unsat; none observed); affine rows through the same LP chain are clean).
+
+---
+
+## Opt-in IBEX system cells — Newton, OBBT, Mohc (2026-07)
+
+**Files:** `src/dreal/contractor/contractor_ibex_{newton,obbt,mohc}.{h,cc}` (+ per-worker `*_mt` cells for `--jobs>1`). All default-off, soundness-neutral COMPLETENESS levers (weaker/absent contraction risks only a missed refutation — asserts φ^δ T-satisfiable on a T-unsatisfiable φ — never a false unsat).
+
+- **`--newton` / `--newton-ceil` (default 0.01):** `ibex::CtcNewton` on the square equality subsystem of the assertions; the ceil gates it to boxes whose max diameter is small enough for Newton to bite.
+- **`--obbt`:** 2n LPs (min/max each variable) over the X-Taylor relaxation, certified bounds only (`Mode::Certified`, `OptimalProved`-only). Rides the same LP path as `--polytope` — BUG-014-exposed.
+- **`--mohc`:** the `CtcMohc` monotonicity contractor (fork port), optimal hull-consistency on monotone multi-occurrence constraints, no LP. Composable with `--acid`/`--3bcid`.
+
+**ODE/forall filtering (`FilterIbexConvertible`, `contractor_ibex_polytope.cc`):** every system-wide cell (polytope, ACID, OBBT, Mohc — and Newton's equality filter) converts only atoms that are neither `forall` nor ODE-carrying (`include_ode()`), since `IbexConverter` throws on `integral`/`forall_t`. Dropping formulas from a pure contraction cell is COMPLETENESS-only. Before this filter the cells aborted the process on ODE-family inputs (pre-existing converter-crash class, fixed `f6d735254`).
+
+**Measured verdicts (2026-07 sweep — family-conditional, no default changes):** `--mohc` is the only base-beater on the odeexpr families (115/151, PAR2 0.968×); `--polytope --polytope-linearizer affine` wins odeexpr_v1 (0.804×); both are **net-negative on the ODE families** (mohc 69/108 vs base 106/108) — keep base flags there. `--newton` and `--obbt` measured dead corpus-wide (kept for record). Full record: `OPTIMIZATION_LOG.md` §"RELATED-WORK candidate campaign"; `ibex_docs/RELATED-WORK.md` ranked-table stamps.
 
 ---
 

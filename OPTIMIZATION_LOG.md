@@ -654,18 +654,62 @@ non-bit-identical change for a permanent fork liability — **NO-GO**. The unhar
 bit-identical avenues A–D (ExpressionEvaluator ~5–7%, allocation ~5%) are the better next step;
 revisit msr-elimination only if A–D are exhausted and the densest instances remain msr-bound.
 
-## 2026-07-22 RELATED-WORK candidate campaign (IN PROGRESS)
+## 2026-07-22→24 RELATED-WORK candidate campaign (COMPLETE)
 
-Implements the five `ibex_docs/RELATED-WORK.md` top candidates as opt-in flags —
-`--newton` (CtcNewton square-equality cell), `--branch abs|absdiam` (ABS activity
-brancher), `--obbt` (certified 2n-LP bound tightening), `--polytope-linearizer
-xtaylor|affine|both` (vendored affine plugin; gated on the fAF2 rounding audit,
-`ibex_docs/affine-rounding-audit.md`), `--mohc` (CtcMohc port, timeboxed) — plus ICP
-parity R1/R2/R3 (`icp_parity_gaps.md`) and test-coverage hardening (DRPM, ODE/ACID
-knobs, determinism). One binary, then one pooled 11-arm × 270-job all-family sweep
-(arms incl. `par1` = jobs-1-through-IcpParallel for the R3/G4 overhead gate and
-`drpm` = `--drpm-max-size 4`). Plan: `~/.claude/plans/take-a-look-at-rustling-crayon.md`.
+Implemented the five `ibex_docs/RELATED-WORK.md` top candidates as opt-in flags —
+`--newton`/`--newton-ceil` (CtcNewton square-equality cell, `7a185c5c9`), `--branch
+abs|absdiam` + `--branch-decay` (ABS activity brancher, `e8cdb7525`), `--obbt`
+(certified 2n-LP bound tightening, `f669a6d68`), `--mohc` (CtcMohc fork port,
+`a93a47b57`), `--polytope-linearizer xtaylor|affine|both` (vendored affine plugin,
+`52d5c59ef`; fAF2 rounding audit discharged fork-side as SOUND-WITH-SCOPE-WRAP @
+`b5e7a212` — `ibex_docs/affine-rounding-audit.md`) — plus ICP parity R1–R3
+(`icp_parity_gaps.md`; `0c5e9a753`/`e8cdb7525` + `--icp-force-parallel`) and
+test-coverage hardening (DRPM, ODE/ACID knobs, determinism). Baseline (Phase 0):
+`f51f78b8e` + fork `e054af7b`, full ctest green (846 tests); local bench baseline
+`8b0299ce9`.
 
-**Baseline (Phase 0):** dreal4-cmake `f51f78b8e` + ibex-fork `e054af7b`, `gcc_build`
-incremental build clean, full ctest green exit 0, **846 tests** (known-intentional
-skips only). Local benchmark baseline: `8b0299ce9` re-freeze (181 rows).
+**Result dirs:** main sweep `benchmark/results/sweep_20260723_115956/` (ANALYSIS.md —
+11 arms × 270 jobs, binary `60fca6f69` / fork `b5e7a212`; 11 OOM instances
+blacklisted); ODE-family re-sweep after the include_ode fix
+`benchmark/results/sweep_20260724_120008/` (compare.txt — 4 arms × 108 jobs @
+`3d6617f62`, zero ERRs, zero verdict disagreements).
+
+| arm | verdict |
+|---|---|
+| `--mohc` | **Only base-beater on odeexpr** (115/151 solved, PAR2 0.968×; kuramoto N4 crack + one ∃∀ crack + cheapest aed75881 refutation, 1.71 s). ODE-family re-sweep: net-negative (69/108 vs base 106/108, 12 OOM) |
+| `--polytope --polytope-linearizer affine` | odeexpr_v1 **0.804×** (+2 base-TIM ~2 s cracks). **Araya-2024 complementarity REFUTED for dReal**: polytope's solve set ⊂ affine's (polytope-only = 0), hybrid `both` adds nothing (113 < affine 114). ODE-family re-sweep: 34/108 — net-negative |
+| `--drpm-max-size 4` | github PAR2 **0.688×** (car-3 k128 541.8→19.1 s; up to 28× single-file); saradc k90 TIM→UNSAT at-the-wire; one tacas single-file pathology (k12 NOR_ramp 9.2 s→TIM) to diagnose before recommending |
+| `--branch abs` / `absdiam` | **Dead — degeneracy CONFIRMED** (abs≪base ∧ absdiam≈base on v1/github; both collapse on v2 ⇒ non-uniform activity actively mis-guides). The pre-registered hypothesis test worked; no family where either beats base |
+| `--newton` | **REFUTED** — zero unique solves, github 2.75× worse, saradc 20→3 solved incl. 10 OOMs (~10.5 GB during cell build on the giant unrollings) |
+| `--obbt` | Dead — ≈ polytope (1.026× its PAR2), worse than base on both odeexpr families |
+| `par1` = `--icp-force-parallel` | **R3 gate PASS**: zero per-file verdict diffs vs base over all 270, PAR2 1.001× ⇒ **IcpSeq-consolidation GO** (Phase 8 = `icp_parity_gaps.md` R4/R5, pending) |
+
+**Headline:** all five system-cell arms scored the **first-ever refutation on the
+odeexpr_v2 `forall/` UNSAT wall** — `sign_agreement …aed75881` is machine-verified
+truly-UNSAT (grid margin max −4.0e-06 < 0; J-bound 0.49 < the tanh contraction
+threshold ½). A COMPLETENESS win for those arms (they refute a T-unsatisfiable φ);
+base's `delta-sat` at δ=0.01 is the legal δ-artifact, not a violation. Zero soundness
+signals sweep-wide (no arm returned UNSAT on any ground-truth-SAT file).
+
+**Bugs filed** (`docs/dreal-bugs.md`): **BUG-013** — `--ode-taylor-order` 16/20 and
+tols ≥1e-6 silently inert on interval-IC ODE instances (CAPD divergence →
+inconclusive skip; COMPLETENESS — missed refutation, external unsat→delta-sat repro;
+default `--ode-backward true` masks it there). **BUG-014** — vendored SoPlex 4.0.2
+`SPxMainSM::duplicateCols` OOB write, triggered by X-Taylor LP rows, pre-existing
+(reproduces @ `fc4c3da04`); latent SOUNDNESS risk (a corrupted box narrowed past a
+true model would assert φ T-unsatisfiable on a T-satisfiable φ — false unsat; none
+observed), affine/mohc immune; candidate fixes: SoPlex SIMPLIFIER-off or tarball bump.
+
+**include_ode fix** (`f6d735254`): system-wide IBEX cells (polytope/acid/mohc/obbt)
+now skip `forall_t`/`integral` atoms via shared `FilterIbexConvertible` — the main
+sweep's saradc/github/tacas ERR epidemic was this pre-existing converter-crash class
+(`--acid` reproduced it pre-campaign). COMPLETENESS-only (dropping formulas from a
+pure contraction cell only weakens contraction — worst case a missed refutation,
+never a false unsat).
+
+**Recommendations — family-conditional, no default changes:** `--mohc` or
+`--polytope --polytope-linearizer affine` on the odeexpr families only (the `--smear
+smearsum` per-project precedent); ODE families keep base flags (system cells strongly
+net-negative there — the smear collapse repeats); `--drpm-max-size 4` promising for
+github once the tacas pathology is diagnosed. Avoid `--obbt`, bare `--polytope`
+(=xtaylor), and `--polytope-linearizer both` until BUG-014 is fixed.

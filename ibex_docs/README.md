@@ -18,7 +18,7 @@ inferred from a name.
 
 | File | What it is |
 |---|---|
-| **[AUDIT.md](AUDIT.md)** | **The payoff** — the leverage audit, now framed **shipped-vs-still-open**: its headline (`CtcAcid` shaving on the HC4 path) and the polytope hull both **shipped** as opt-in `--acid`/`--3bcid`/`--polytope`; the sole still-open contractor is **Newton**. Each item cross-referenced to current usage and the nearest fork patch. |
+| **[AUDIT.md](AUDIT.md)** | **The payoff** — the leverage audit, framed **shipped-vs-still-open**: its headline (`CtcAcid` shaving) and the polytope hull shipped as opt-in `--acid`/`--3bcid`/`--polytope`, and the 2026-07 RELATED-WORK campaign shipped the rest (`--newton` — the last absent contractor, measured dead — plus `--obbt`/`--mohc`/`--polytope-linearizer`). Each item cross-referenced to current usage, the nearest fork patch, and its measured verdict. |
 | **[KNOBS.md](KNOBS.md)** | **The complete tuning surface** — every IBEX-side knob (build flags, HC4/propagation, shaving, Newton, polytope/linearizer, bisection), its option menu, IBEX default, and dReal status (with the `--acid`/`--3bcid`/`--polytope`/`--s3b`/`--acid-ct-ratio`/`--forall-pre-prune` flags that expose them). Start here to check nothing's left on the table. |
 | **[classes/contractors/COMPARISON.md](classes/contractors/COMPARISON.md)** | **The contractor catalog** — every IBEX contractor (all 23, by category) in one strengths/weaknesses table with defaults + ordered recommendations. The "single biggest lever" surface. |
 | **[ARCHITECTURE-COMPARISON.md](ARCHITECTURE-COMPARISON.md)** | **IbexSolve vs dReal's `CheckSat`/ICP**, side-by-side with file:line — answers "is dReal leaving performance on the table by reimplementing the search loop?" (verdict: no at the loop level; the lever is the atomic contractors, one level down). |
@@ -39,8 +39,10 @@ the ∃∀ layer — [AUDIT-QUANTIFIERS.md](AUDIT-QUANTIFIERS.md)). All ship a p
 `*Mt` cell so they run under `--jobs>1`. It **hand-rolls** its own fixpoint/compose/∃∀
 layer (inside DPLL(T)) and **ignores** IBEX's solver, optimizer, separators, sets,
 parser, and bisectors by design. The fork's patches (`../../ibex-fork/MIGRATION.md`)
-already spent the HC4 micro-optimization budget (rounding, exceptions, gradient). The
-one contractor IBEX ships and dReal has no path to is **Newton**. See [AUDIT.md](AUDIT.md).
+already spent the HC4 micro-optimization budget (rounding, exceptions, gradient). Since
+the 2026-07 campaign every contractor IBEX ships has a dReal path — `--newton`/`--obbt`/
+`--mohc`/`--polytope-linearizer` joined the opt-in set (Newton measured dead on this
+corpus; mohc/affine are odeexpr-only wins). See [AUDIT.md](AUDIT.md).
 
 ## The tree
 

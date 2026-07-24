@@ -4,9 +4,11 @@ The payoff of the crawl: header-grounded opportunities for dReal to use IBEX mor
 each cross-referenced to current usage
 ([`dreal-ibex-usage.md`](dreal-ibex-usage.md)) and the nearest fork patch. **Most of
 the original audit is now shipped** — the headline (`CtcAcid` shaving) and the
-polytope hull both landed as opt-in flags. This file is now organized shipped-first,
-with the still-open items (chiefly **Newton**) called out as such. Ground truth is
-source + `CMakeLists.txt`.
+polytope hull both landed as opt-in flags, and the 2026-07 RELATED-WORK campaign
+shipped **Newton** too (`--newton` — the last absent contractor, measured **dead on
+this corpus**; `../OPTIMIZATION_LOG.md` §"RELATED-WORK candidate campaign"). This
+file is organized shipped-first, with the still-open items called out as such.
+Ground truth is source + `CMakeLists.txt`.
 
 > **Companion deep-dives (second pass):** the full contractor catalog with
 > strengths/weaknesses is
@@ -31,8 +33,9 @@ source + `CMakeLists.txt`.
 > OBBT, monotonicity-based `CtcMohc`, DynIbex validated-RK ODE, and alt-integrators
 > are ranked by *(integration cost × completeness win)* with source-grounded
 > feasibility sketches in the companion **[`RELATED-WORK.md`](RELATED-WORK.md)**. This
-> AUDIT covers what IBEX *already ships* (the shipped contractors + the sole absent
-> mainline one, **Newton**); RELATED-WORK covers what would need porting.
+> AUDIT covers what IBEX *already ships*; RELATED-WORK covers what needed porting —
+> its top five (Newton/affine/ABS/OBBT/Mohc) all shipped and were measured in the
+> 2026-07 sweep (outcome stamps there; final record `../OPTIMIZATION_LOG.md`).
 
 **The one-paragraph framing (the crawl's main finding, now largely realized).** By
 default, dReal's *only active IBEX contractor is HC4* (`Function::backward`). The
@@ -44,9 +47,10 @@ strong atomic contractors IBEX ships and dReal didn't run — above all **ACID**
 IBEX's own solver enables by default). **That headline is now shipped** as opt-in
 `--acid`/`--3bcid` (`theory_solver.cc:244`), alongside the LP-relaxation polytope hull
 (`--polytope`, over `LP_LIB=soplex`) and the `--forall-pre-prune` CtcForAll pre-pruner.
-All three are default-off (soundness-neutral opt-ins) and run under `--jobs>1` via a
-per-worker `*Mt` cell. **Newton** is the sole contractor IBEX ships that dReal still
-has no path to.
+All default-off (soundness-neutral opt-ins), running under `--jobs>1` via a
+per-worker `*Mt` cell. **Newton** — formerly the sole contractor IBEX ships that dReal
+had no path to — shipped 2026-07 as `--newton`/`--newton-ceil` and was **measured dead**
+(zero unique solves, github 2.75× worse, 11 OOMs on giant unrollings; kept for record).
 
 > **Soundness framing (mandatory, per project `CLAUDE.md`):** every item here is a
 > **COMPLETENESS** lever (tighter contraction → fewer search nodes / more
@@ -66,9 +70,17 @@ has no path to.
 | `Ctc3BCid` (fixed-parameter sibling) | A | `--3bcid` (mut. excl. with `--acid`) | `theory_solver.cc:244`; `contractor_ibex_acid.cc:114` | `--s3b` (best 5–200) |
 | LP-relaxation **polytope hull** | D | `--polytope` / `--forall-polytope` | `theory_solver.cc:237`; `contractor_ibex_polytope.cc:108` | corners/slope hardcoded RANDOM_OPP/HANSEN (no flag) |
 | `CtcForAll` **pre-pruner** for ∃∀ | Q1 | `--forall-pre-prune` | `contractor_ibex_forall.cc` | `--forall-pre-prune-prec` (default 0.5) |
+| **`CtcNewton`** square-equality cell (2026-07; **measured dead** — REFUTED) | D | `--newton` | `contractor_ibex_newton.cc` | `--newton-ceil` (default 0.01) |
+| **OBBT** certified 2n-LP bound tightening (2026-07; **measured dead**, ≈polytope; BUG-014-exposed) | D | `--obbt` | `contractor_ibex_obbt.cc` | — |
+| **`CtcMohc`** monotonic propagation, fork port (2026-07; **measured odeexpr winner** 0.968×, ODE families net-negative) | D | `--mohc` | `contractor_ibex_mohc.cc` | composable with `--acid`/`--3bcid` |
+| polytope **linearizer selector** (2026-07; **prefer `affine`** — solve-set ⊃ xtaylor's, crash-free) | D | `--polytope-linearizer xtaylor\|affine\|both` | `contractor_ibex_polytope.cc` | requires `--polytope`/`--forall-polytope` |
 
-All default-off, soundness-neutral, `--jobs>1`-safe (per-worker `*Mt` cell). Next step
-for each is its "Validate with" column below — none has a committed A/B yet.
+All default-off, soundness-neutral, `--jobs>1`-safe (per-worker `*Mt` cell). The 2026-07
+RELATED-WORK sweep supplied the A/Bs for the new rows (final record:
+`../OPTIMIZATION_LOG.md`; analysis `../benchmark/results/sweep_20260723_115956/ANALYSIS.md`
++ `sweep_20260724_120008/compare.txt`): family-conditional — `--mohc` / `--polytope
+--polytope-linearizer affine` on odeexpr only, ODE families keep base flags. The
+`--acid`/`--3bcid` tuning sweep (try-order #1) is still uncommitted.
 
 ## Still-open try-order
 
@@ -76,9 +88,10 @@ for each is its "Validate with" column below — none has a committed A/B yet.
 |---|---|---|---|---|---|---|
 | 1 | **Tune the shipped shaving** — `--acid-ct-ratio`/`--s3b` sweep on the odeexpr NRA family | A | 4 | high | high | OFAT sweep `s3b`∈{5,10,20,50}, `ct_ratio`∈{0.001,0.002,0.005}; PAR2, no verdict flips |
 | 2 | Cross-check dReal's own fixpoint stop-ratio vs IBEX (0.01/0.1) | B | 4 | low–med | low–med | A/B the worklist ratio; likely small (micro-opt spent) |
-| 3 | `CtcNewton` as a *late* (small-box) contractor | D | 3 | low–med | med (near solutions) | enable with small `ceil`; odeexpr; mind gradient cost (fork lazy-gradient patch) |
-| 4 | Expose polytope `corners`/`slope` as flags + sweep | D | 3 | unknown | med | once `--polytope` shows a win on some family; else leave hardcoded |
-| 5 | `LinearizerAffine2` (affine plugin port) | D | 1 | unknown | med | plugin port off `origin/dev_affine_arith` first — sketch + soundness obligation in [`RELATED-WORK.md`](RELATED-WORK.md) |
+| 4 | Expose polytope `corners`/`slope` as flags + sweep | D | 3 | unknown | med | the linearizer family now has a win (`--polytope-linearizer affine`, odeexpr_v1 0.804×) — but X-Taylor's own corners/slope are moot while BUG-014 keeps the xtaylor path crash-exposed |
+
+(Former try-orders #3 `CtcNewton` and #5 `LinearizerAffine2` shipped 2026-07 and moved to
+the shipped table above — Newton measured dead, affine measured the odeexpr_v1 winner.)
 
 ## Tier A — strong contraction add-ons (the headline — SHIPPED)
 
@@ -140,34 +153,38 @@ This is a **conscious checklist**, not a code change — it's where an integrati
 silently degrades lemmas or soundness if skipped.
 
 ## Tier D — conditional / niche
-- **D1. `CtcNewton` late — STILL OPEN (the sole absent contractor).** Interval-Newton
-  on small, square, solution-isolating subboxes (gate `ceil` small). Reintroduces the
-  gradient build the fork's lazy-gradient patch made cold — so only worth it where
-  convergence-phase tightening pays. Many ODE/`forall_t` queries aren't square.
-  **`ibex::CtcNewton` already compiles and is installed** in the built fork
-  (`ibex-fork/src/contractor/ibex_CtcNewton.{cpp,h}`, in `src/contractor/CMakeLists.txt`;
-  header at `gcc_build/ibex-install/include/ibex/ibex_CtcNewton.h`) — so the only missing
-  piece is a dReal contractor cell + flag over locally-square subsystems (the C1 checklist
-  in Tier C applies), not an upstream build. [`RELATED-WORK.md`](RELATED-WORK.md) ranks this
-  its **#1** lever (effort S, no soundness risk). Node:
+- **D1. `CtcNewton` — SHIPPED 2026-07 (`--newton`/`--newton-ceil`), MEASURED DEAD.**
+  The cell landed as sketched (interval-Newton over the square equality subsystem,
+  `contractor_ibex_newton.cc`, per-worker `*Mt`, C1 checklist met) and the sweep
+  **refuted** RELATED-WORK's #1-ranked premise: zero unique solves over 270 files, the
+  equality-dense github family 2.75× *worse*, saradc 20→3 solved with 10 OOMs (~10.5 GB
+  during cell construction on giant unrollings); inert on odeexpr (the
+  `!include_ode` equality filter leaves it nothing to build there). All harm is
+  COMPLETENESS-only (missed refutation/witness within budget — asserts φ^δ T-satisfiable
+  undetermined within budget, never a false unsat). Kept as an opt-in for record. Node:
   [`CtcNewton.md`](classes/contractors/CtcNewton.md).
 - **D2. Polytope hull — SHIPPED.** `LP_LIB=soplex` (`CMakeLists.txt:189`, vendored
   SoPlex 4.0.2) and `--polytope`/`--forall-polytope` are live (`theory_solver.cc:237`;
   `ibex::CtcPolytopeHull(LinearizerXTaylor(system, RELAX, RANDOM_OPP, HANSEN))` at
   `contractor_ibex_polytope.cc:108`). The X-Taylor `corners`/`slope` knobs are
   hardcoded at those IBEX defaults, not yet exposed as flags (still-open try-order #4;
-  KNOBS §4). `--forall-polytope` has *mixed* measured perf (`exists_forall_perf.md`).
+  KNOBS §4); the *linearizer itself* is now selectable (`--polytope-linearizer
+  xtaylor|affine|both`, D3). `--forall-polytope` has *mixed* measured perf
+  (`exists_forall_perf.md`). **BUG-014** (`../docs/dreal-bugs.md`): the X-Taylor LP rows
+  trigger an OOB write in vendored SoPlex 4.0.2 presolve (`SPxMainSM::duplicateCols`) —
+  pre-existing, latent SOUNDNESS risk (a corrupted box narrowed past a true model would
+  be a false unsat; none observed), affine rows through the same LP chain are clean —
+  so prefer `--polytope-linearizer affine` until fixed.
   Nodes: [`CtcPolytopeHull.md`](classes/contractors/CtcPolytopeHull.md),
   [`LinearizerXTaylor.md`](classes/linear/LinearizerXTaylor.md).
-- **D3. Affine linearization (`LinearizerAffine2`) — full sketch in
-  [`RELATED-WORK.md`](RELATED-WORK.md).** A `Linearizer` drop-in beside `LinearizerXTaylor`
-  (byte-identical `linearize(const IntervalVector&, LPSolver&)` signature, verified) that
-  captures the first-order variable *correlations* an X-Taylor corner misses — but it lives
-  on the dead `origin/dev_affine_arith` branch (a ~12-file plugin port with API drift), and
-  its one soundness obligation is auditing the fAF2 error-free-transform rounding scope so
-  the accumulated `_err` stays an over-estimate. RELATED-WORK.md carries the source-grounded
-  sketch alongside the OBBT / `CtcMohc` / DynIbex beyond-mainline levers; probe only if
-  `--polytope` shows a win first.
+- **D3. Affine linearization (`LinearizerAffine2`) — SHIPPED 2026-07
+  (`--polytope-linearizer affine|both`), MEASURED.** The plugin port landed fork-side
+  (`b5e7a212`) with the fAF2 rounding obligation discharged
+  (SOUND-WITH-SCOPE-WRAP — [`affine-rounding-audit.md`](affine-rounding-audit.md)).
+  Sweep verdict: **affine strictly dominates X-Taylor here** (polytope's solve set ⊂
+  affine's; odeexpr_v1 0.804× with two base-TIM cracks; hybrid `both` refuted, 113 <
+  affine's 114) and dodges BUG-014. Full record + the Araya-2024 divergence note:
+  [`RELATED-WORK.md`](RELATED-WORK.md).
 - **D4. `CtcInverse` / `CtcQInter`.** Inverse-image contraction and outlier-robust
   q-intersection — niche; no obvious dReal use shape.
 
@@ -197,14 +214,18 @@ the CAPD PDE/DAE notes:
 
 ## Honesty boundary (what's proven vs hypothesized)
 **Proven** (header/doc/code-verified): every default and option menu in
-[KNOBS.md](KNOBS.md); that ACID is IBEX's default contractor; that `--acid`/`--3bcid`/
-`--polytope`/`--forall-pre-prune` are shipped opt-in flags built at the cited
-`theory_solver.cc`/`contractor_ibex_*.cc` sites over `LP_LIB=soplex`; that Newton is
-the sole absent contractor; that affine isn't in the fork; that the HC4 hot-path
-levers are already pulled (fork patches, with their measured %); the Tier-E "different
-problem shape" reasoning.
-**Hypothesized** (NOT yet measured — no committed A/B for the shipped flags): every
-*expected speedup*. Shipping ≠ measured-win — each opt-in is default-off precisely
-because its benchmark payoff is unproven. Next step for any item is its "Validate
-with" column — start with the still-open try-order #1 (tune the shipped shaving) on
-the odeexpr NRA family.
+[KNOBS.md](KNOBS.md); that ACID is IBEX's default contractor; that the opt-in flags
+(`--acid`/`--3bcid`/`--polytope`/`--polytope-linearizer`/`--newton`/`--obbt`/`--mohc`/
+`--forall-pre-prune`) are built at the cited `theory_solver.cc`/`contractor_ibex_*.cc`
+sites over `LP_LIB=soplex`; that the HC4 hot-path levers are already pulled (fork
+patches, with their measured %); the Tier-E "different problem shape" reasoning. (The
+pre-2026-07 claims "Newton is the sole absent contractor" / "affine isn't in the fork"
+are now historical — both shipped.)
+**Measured** (2026-07 sweep — `../OPTIMIZATION_LOG.md` §"RELATED-WORK candidate
+campaign"): newton dead, obbt dead, mohc = the odeexpr-only winner (0.968×), affine >
+xtaylor with the hybrid refuted, everything family-conditional (ODE families keep base
+flags), zero verdict flips beyond the machine-verified aed75881 refutation
+(COMPLETENESS win for the refuting arms — base's delta-sat is the legal δ-artifact).
+**Hypothesized** (still no committed A/B): the `--acid`/`--3bcid` *tuning* payoff
+(try-order #1 on the odeexpr NRA family) and the polytope `corners`/`slope` sweep
+(try-order #4, gated on BUG-014).

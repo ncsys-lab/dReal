@@ -30,13 +30,21 @@ master). Live upstream IBEX docs: <https://ibex-team.github.io/ibex-lib/>.
 Ranked by *(low integration cost × credible completeness win)*; `try-order` is the recommended
 prototyping sequence. "Verified?" = did the dossier read the actual source / API this session.
 
+> **MEASURED 2026-07-23/24:** candidates 1–5 shipped as opt-in flags and went through an
+> 11-arm × 270-job sweep + a 4-arm ODE-family re-sweep — final record in
+> `../OPTIMIZATION_LOG.md` §"RELATED-WORK candidate campaign"; full analysis
+> `../benchmark/results/sweep_20260723_115956/ANALYSIS.md` and
+> `../benchmark/results/sweep_20260724_120008/compare.txt`. The Verified? cells below carry
+> the outcome stamps; the surrounding analysis is kept as the historical record that
+> motivated the arms.
+
 | # | Candidate | What it buys | Effort | Soundness risk | Verified? | Try-order |
 |---|---|---|---|---|---|---|
-| 1 | **`CtcNewton`** (interval Newton / Krawczyk / Hansen-Sengupta) | Quadratic contraction near a root on locally-square subsystems + *certified existence* — a completeness win on equality-heavy atoms HC4 handles only linearly | **S** | None (contraction under correct rounding; guarded to square subsystems) | Yes — `CtcNewton.{cpp,h}` **already compiles in the built fork** | 1 |
-| 2 | **Affine linearizer** `LinearizerAffine2` (+ **hybrid** with X-Taylor) | Second linear relaxation for `CtcPolytopeHull` that captures first-order variable *correlations* (dependency problem) an X-Taylor corner misses; the 2024 result says the two are complementary, not either/or | **M** | Low but real: reconcile the affine plugin's internal rounding (fAF2 error-free transforms) with dReal's phase-scoped rounding contract — **audit before trusting** | Yes — plugin source read this session | 2 |
-| 3 | **ABS activity-based branching** (`--branch abs`; Michel & Van Hentenryck CPAIOR'12 — the VSIDS lift; [details below](#conflictimpact-aware-branching-the-vsids-analog-dreal-is-missing)) | Dynamic, history-aware split-variable choice; its bump signal (`ContractorStatus.output_`) is already computed per-prune by *every* contractor **including ODE** — constraint-aware exactly where `--smear` is structurally blind | **S–M** | None (branch choice never moves a verdict) | Yes — deep-dive this session; signal verified (`contractor_status.h:94`). **No published ICP number; degeneracy risk un-isolated (hypothesis)** | 3 |
-| 4 | **OBBT** (optimization-based bound tightening) | Strictly stronger use of the LP `CtcPolytopeHull` already builds: 2n LPs (min/max each var over the joint relaxation) instead of one hull projection | **M** | Soundness-critical: each LP bound needs Neumaier-Shcherbina safe directed-rounding post-verify (dReal's `UpwardRoundingScope` already models this) | Method sourced; **no dReal-corpus number (gap)** | 4 |
-| 5 | **`CtcMohc`** (monotonicity-based hull consistency) | Optimal hull-consistent contraction on monotone vars — attacks the multi-occurrence dependency problem with **no LP**; lighter complement to polytope | **M** | None (hull consistency removes only infeasible points) | Source located on `origin/mohc-optim` (**not in built fork**); no NRA-SMT number (gap) | 5 |
+| 1 | **`CtcNewton`** (interval Newton / Krawczyk / Hansen-Sengupta) | Quadratic contraction near a root on locally-square subsystems + *certified existence* — a completeness win on equality-heavy atoms HC4 handles only linearly | **S** | None (contraction under correct rounding; guarded to square subsystems) | Yes — shipped as `--newton`. **MEASURED: REFUTED** — zero unique solves over 270 files, github PAR2 2.75×, saradc 20→3 solved (10 OOMs ~10.5 GB during cell build); odeexpr inert (equality filter) | 1 |
+| 2 | **Affine linearizer** `LinearizerAffine2` (+ **hybrid** with X-Taylor) | Second linear relaxation for `CtcPolytopeHull` that captures first-order variable *correlations* (dependency problem) an X-Taylor corner misses; the 2024 result says the two are complementary, not either/or | **M** | Low but real: reconcile the affine plugin's internal rounding (fAF2 error-free transforms) with dReal's phase-scoped rounding contract — **audit before trusting** (audit since discharged: SOUND-WITH-SCOPE-WRAP, [`affine-rounding-audit.md`](affine-rounding-audit.md)) | Yes — shipped as `--polytope --polytope-linearizer affine`. **MEASURED: odeexpr_v1 0.804× (+2 base-TIM cracks), but the 2024 complementarity did NOT transfer** — polytope's solve set ⊂ affine's, hybrid adds nothing; ODE families net-negative (34/108) | 2 |
+| 3 | **ABS activity-based branching** (`--branch abs`; Michel & Van Hentenryck CPAIOR'12 — the VSIDS lift; [details below](#conflictimpact-aware-branching-the-vsids-analog-dreal-is-missing)) | Dynamic, history-aware split-variable choice; its bump signal (`ContractorStatus.output_`) is already computed per-prune by *every* contractor **including ODE** — constraint-aware exactly where `--smear` is structurally blind | **S–M** | None (branch choice never moves a verdict) | Yes — shipped as `--branch abs\|absdiam`. **MEASURED: degeneracy CONFIRMED, both variants dead** (abs 1.611×/1.865× on v1/github with absdiam ≈ base; on v2 both collapse — activity actively mis-guides) | 3 |
+| 4 | **OBBT** (optimization-based bound tightening) | Strictly stronger use of the LP `CtcPolytopeHull` already builds: 2n LPs (min/max each var over the joint relaxation) instead of one hull projection | **M** | Soundness-critical: each LP bound needs Neumaier-Shcherbina safe directed-rounding post-verify (dReal's `UpwardRoundingScope` already models this) | Method sourced; shipped as `--obbt`. **MEASURED: dead** — ≈ polytope (1.026× its PAR2), worse than base on both odeexpr families; BUG-014 crash-exposed (X-Taylor LP path) | 4 |
+| 5 | **`CtcMohc`** (monotonicity-based hull consistency) | Optimal hull-consistent contraction on monotone vars — attacks the multi-occurrence dependency problem with **no LP**; lighter complement to polytope | **M** | None (hull consistency removes only infeasible points) | Source ported into the built fork (`b5e7a212`); shipped as `--mohc`. **MEASURED: the sweep's only base-beater on odeexpr** (115/151 solved, PAR2 0.968×, two base-TIM cracks, cheapest aed75881 refutation 1.71 s) — but net-negative on the ODE families (69/108 vs base 106) | 5 |
 | 6 | **DynIbex** (validated Runge-Kutta ODE plugin) | IBEX-native rigorous ODE backend; affine-RK counters the *wrapping effect* on linear/contracting flows where QR-Taylor struggles; cheap-per-step fast-path / cross-check beside CAPD | **M–L** | Completeness lever; re-audit feed precision + rounding scope for a second integrator | Present in this fork's history (`soonho-upstream/ibex-2.6.5-with-dynibex`); relative accuracy **unmeasured** | 6 |
 | 7 | **GANRA-style GPU candidate generator** | Thousands of parallel gradient-descent SAT candidates feeding `--seed-samples`' verify step | **L** | Completeness-only (each point re-verified by `EvaluateBox`, as `--seed-samples` already does) | Abstract only; CUDA dep + code availability unconfirmed | 7 |
 | 8 | **Alt. ODE integrators** (Flow*, Ariadne) | Taylor-model / function-calculus enclosures potentially tighter than CAPD doubletons on the stiff `odeexpr` cases the worklogs flag intractable | **L** | Completeness lever; whole-flowpipe APIs → large glue + feed/rounding re-audit | C++/embeddable verified; **no in-SMT-loop measurement** | 8 |
@@ -140,8 +148,17 @@ Method foundation (Ninin/Messine/Hansen 2015, 4OR): the affine relaxation solved
 global-optimization problems (32 for the first time) to 1e-8 relative error** — verified against
 the paper abstract (an earlier dossier draft's "61/74" was a transcription error). Note this is
 **global-optimization branch-and-bound, a different task from dReal's δ-decision** — indirect
-evidence for the ICP contractor loop, not a dReal-corpus number. No "affine vs X-Taylor inside
-dReal" measurement exists; it must be produced (A/B below).
+evidence for the ICP contractor loop, not a dReal-corpus number.
+
+**MEASURED 2026-07 (the dReal-corpus number now exists — and diverges from the 2024
+prediction).** Three-arm sweep (`--polytope` vs `…-linearizer affine` vs `both`,
+`sweep_20260723_115956/ANALYSIS.md` §H-affine): on odeexpr (151 valid files) polytope's solve
+set is a **strict subset** of affine's (polytope-only = 0, affine-only = 6), and hybrid `both`
+solved *fewer* than affine alone (113 < 114, nothing exclusive, plus one silent-signal crash
+loss) — so on this corpus there is no complementarity to exploit; **prefer affine outright**
+(odeexpr_v1 0.804×, two ~2 s cracks of base-TIM instances). Honest divergence, not a
+contradiction of the paper: COCONUT global optimization ≠ δ-decision ICP, and the prediction
+simply did not transfer.
 
 ---
 
@@ -186,9 +203,12 @@ Beyond HC4 / ACID / 3BCID / polytope-hull, the adoptable last-~5-yr techniques:
   solution box — a completeness win on the equality-heavy portions HC4 contracts only linearly.
   Lowest-friction of everything here: no port, no new dependency, wire a contractor cell selecting
   square subsystems from the `ibex::System` dReal already builds. Sound by construction; the
-  square-subsystem selection is a guard, not a fallback. This is exactly the "one contractor IBEX
-  ships and dReal has no path to" that [`AUDIT.md`](AUDIT.md) already flags as the sole still-open
-  item — corroboration, not a new claim.
+  square-subsystem selection is a guard, not a fallback. This was the "one contractor IBEX
+  ships and dReal has no path to" that [`AUDIT.md`](AUDIT.md) flagged as the sole still-open
+  item — now shipped (`--newton`/`--newton-ceil`) and **MEASURED: REFUTED** (zero unique
+  solves; the equality-dense github family it was predicted to win got 2.75× *worse*; 11 OOMs
+  ~10.5 GB during cell construction on the giant unrollings — all COMPLETENESS-only harm,
+  missed refutation/witness within budget, never a false unsat).
 
 - **Affine linearizer + hybrid** — see the deep section above. The single highest-leverage *port*.
 
@@ -255,6 +275,15 @@ of the two signals they need is **already computed per-prune and thrown away at 
 are **COMPLETENESS / perf-only** — variable choice can never move a verdict (`brancher.cc:57` bisects
 at the midpoint regardless), so zero soundness risk.
 
+> **MEASURED 2026-07 (verdict line; the analysis below is the historical record that
+> motivated the arm):** ABS shipped as `--branch abs|absdiam` (+ `--branch-decay`) and swept.
+> **The degeneracy hypothesis flagged below was isolated and CONFIRMED** — on v1/github,
+> `abs` (=A/diam, degenerates smallest-first) collapses (1.611×/1.865×) while `absdiam`
+> (=A·diam, degenerates largest-first) ≈ base; on odeexpr_v2 *both* collapse (2.169×/1.671×),
+> i.e. where activity variance exists it actively mis-guides. No family where either variant
+> beats base ⇒ **both variants dead on this corpus**; the ABS thesis (covers what smear
+> skips) did not materialize. `sweep_20260723_115956/ANALYSIS.md` §H-ABS.
+
 | Idea | Rule | Signal it needs | In dReal today | Verdict / effort |
 |---|---|---|---|---|
 | **ABS** — Activity-Based Search (Michel & Van Hentenryck, CPAIOR'12, LNCS 7298:228-243; an explicit VSIDS lift) | per-var activity `A(x)`, bump on every prune that shrinks `x`'s domain, decay each node; branch `argmax A/diam` | "which dims shrank this prune" + a decay clock | **signal PRESENT** — `ContractorStatus.output_` (per-`Prune` reduced-dims bitset, `contractor_status.h:94`), set by *every* contractor **including the ODE contractor** (`contractor_odes.cc`). Missing: the `A(x)` vector + decay + interface widening | **top pick** — the one native-signal brancher; **S/M** |
@@ -313,8 +342,11 @@ largest-first vs `--smear smearsum`, on odeexpr (where smear helps) **and** sara
 (where smear collapses — the ABS thesis); PAR2 + solved count, **expect zero verdict flips**
 (COMPLETENESS/perf-only).
 
-**Gaps.** (1) No published *ICP*-branching number exists for any of these — all evidence is CP/XCSP3
-(ABS/CHS/dom-wdeg/IBS) or BMC (iSAT), **unmeasured on the dReal corpus**. (2) Empirical prior:
+**Gaps.** (1) No *published* ICP-branching number exists for any of these — all external
+evidence is CP/XCSP3 (ABS/CHS/dom-wdeg/IBS) or BMC (iSAT). **The dReal-corpus gap is now
+filled for ABS by the 2026-07 sweep** (both variants measured dead — verdict line above);
+CHS/dom-wdeg/IBS/iSAT remain unmeasured here, and the ABS result is a strong negative prior
+against funding them. (2) Empirical prior:
 constraint-aware branching is *not* a global win here — smear collapses the ODE families ~2× — so any
 brancher must clear that bar, and branching cannot crack the ∃∀/ODE-UNSAT enclosure wall regardless
 (`../CLAUDE.md`). (3) Exact CHS constants (`r = 1/(Conflicts − Conflict(c) + 1)`, `α = 0.4`) are
@@ -328,6 +360,10 @@ core's own VSIDS is *not* reachable: CaDiCaL 3.0.1 exposes no activity getter an
 ## Integration feasibility sketches (top candidates)
 
 ### 1. `CtcNewton` — a new square-subsystem contractor cell (Effort **S**)
+
+> **Outcome (2026-07): built as planned (`--newton`/`--newton-ceil`, per-worker Mt cell) —
+> and the A/B REFUTED the expected win** (github 2.75× worse, zero unique solves, 11 OOMs;
+> zero verdict flips as predicted). Ranked-table stamp has the numbers.
 
 - **Plug-in point:** a new contractor cell mirroring `contractor_ibex_fwdbwd.cc`, constructed from
   the `ibex::System` dReal already builds; wire behind a `--newton` flag (per-worker `*Mt` cell for
@@ -344,6 +380,11 @@ core's own VSIDS is *not* reachable: CaDiCaL 3.0.1 exposes no activity getter an
   ODE families against regression (Newton adds nothing to `forall_t`/`integral` atoms).
 
 ### 2. Affine `LinearizerAffine2` beside X-Taylor, then hybrid (Effort **M**)
+
+> **Outcome (2026-07): built as planned (`--polytope-linearizer xtaylor|affine|both`; port +
+> fAF2 scope-wrap landed fork-side @ `b5e7a212`, audit `affine-rounding-audit.md`). The A/B
+> confirmed the family-specific-default expectation (affine wins odeexpr_v1 0.804×, ODE
+> families net-negative) and REFUTED the hybrid≥max(single) prediction.**
 
 - **Plug-in point:** `contractor_ibex_polytope.cc:108-111` — today
   `make_unique<ibex::LinearizerXTaylor>(*system_, RELAX, RANDOM_OPP, HANSEN)` → `CtcPolytopeHull`.
@@ -365,6 +406,9 @@ core's own VSIDS is *not* reachable: CaDiCaL 3.0.1 exposes no activity getter an
 
 ### 3. ABS — `--branch abs` activity brancher (Effort **S–M**)
 
+> **Outcome (2026-07): built, swept, dead — the degeneracy hypothesis the sketch said to
+> isolate first was isolated and CONFIRMED** (verdict line in the branching section).
+
 The canonical feasibility analysis (plug-in point, effort split, A/B plan, the degeneracy
 hypothesis that gates it) lives inline at
 **[Conflict/impact-aware branching → "Feasibility (ABS)"](#conflictimpact-aware-branching-the-vsids-analog-dreal-is-missing)**
@@ -375,6 +419,11 @@ low-activity-variance degeneracy hypothesis, on odeexpr **and** the ODE families
 thesis (covers what smear skips) actually bites.
 
 ### 4. OBBT on the existing `CtcPolytopeHull` LP (Effort **M**)
+
+> **Outcome (2026-07): built as planned (`--obbt`, certified-LP bounds only) — dead:
+> statistically indistinguishable from polytope (1.026× its PAR2), worse than base on both
+> odeexpr families, its 3 unique-vs-base gains all matched or beaten by mohc/affine; and the
+> X-Taylor LP path it rides is BUG-014 crash-exposed.**
 
 - **Plug-in point:** a new contractor beside `contractor_ibex_polytope.cc` reusing its
   `ibex::System` + SoPlex; the 2n-LP min/max loop over the same relaxation.
@@ -416,6 +465,9 @@ ODE-backend comparanda, then background theory.
 | `ganra_2026_gpu_llm_nra.pdf` | "Using GPUs And LLMs Can Be Satisfying for Nonlinear Real Arithmetic Problems (GANRA)." arXiv:2603.07764, 2026. | [arXiv:2603.07764](https://arxiv.org/abs/2603.07764) | The GPU-parallel angle. Confirm it is SAT-finding-only (completeness lever) and whether its gradient candidates could feed `--seed-samples`, and whether code is released. |
 | `clausesmt_improving_nlsat_2024.pdf` | "clauseSMT: A NLSAT-Based Clause-Level Framework for SMT-NRA (Improving NLSAT for NRA)." arXiv:2406.02122, 2024. | [arXiv:2406.02122](https://arxiv.org/abs/2406.02122) | The "CDCL-guided splitting" NRA literature. Extract the arithmetic-propagation branching heuristic for `--smear`, while confirming the machinery is CAD/MCSAT (not an ICP contractor). |
 
-**Gaps to close by reading:** the 2024 hybrid paper's concrete affine-vs-X-Taylor numbers
-(port-vs-keep decision hinges on them); DynIbex / VNODE-LP / JuliaReach licenses; and any
-dReal-corpus-relevant number for OBBT / MOHC / Newton (none exists — all must be measured here).
+**Gaps to close by reading:** the 2024 hybrid paper's concrete affine-vs-X-Taylor numbers are
+now of historical interest only — the 2026-07 sweep produced the dReal-corpus measurement
+directly (affine ⊃ polytope, hybrid refuted), which is the number the decision needed; the
+OBBT / MOHC / Newton corpus-number gaps are likewise **filled** (dead / winner-on-odeexpr /
+refuted — ranked-table stamps). Still genuinely open: DynIbex / VNODE-LP / JuliaReach licenses,
+if the ODE-backend rows are ever pursued.
