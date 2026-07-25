@@ -33,8 +33,15 @@ perf/behavioral divergences; at worst COMPLETENESS-shaped (slower to a verdict w
 > `forall_parallel_matrix_test.cc`. G5 resolved by the deletion (the cross-instance
 > function-local `static IcpStat` died with `icp_seq.cc`; the per-worker `thread_local`
 > stays). Seq tests ported, not deleted (`icp_parallel_worklist_seeding_test.cc` → jobs=1
-> determinism identity + jobs=1-vs-2 verdict parity). **R5 pending:** local ctest/gates done;
-> the families-level jobs=4-vs-1 verdict diff remains.
+> determinism identity + jobs=1-vs-2 verdict parity). **R5 DONE (2026-07-24) — consolidation
+> CLOSED.** Local half: ctest 946/946 green, `rounding_debug_gate.sh` PASS, jobs=1 model bytes
+> identical ×3. Families half: jobs=1 vs jobs=4 over the 259-job corpus (`sweep_20260724_154758`
+> / `sweep_20260724_163312`, each run in its own correctly-thread-sized pool — jobs=4 at
+> `MAXJOBS=3` so 4 workers × 3 procs ≈ 12 cores, never co-pooled with the 1-thread arm) →
+> **220 files decided on both, ZERO SAT↔UNSAT flips**; jobs=4 solved 2 files jobs=1 timed out
+> on (parallelism gain, no regression). One jobs=4-only OOM (`github_oct5_0hz_k128_quad_quad2-1`
+> — the jobs>1 peak-RSS multiplier, blacklisted, not a verdict event). All six gaps closed;
+> `IcpSeq` is gone.
 
 ## Gaps
 
