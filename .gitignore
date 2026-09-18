@@ -475,3 +475,4 @@ gcc_build_debug
 past_compilations
 benchmark/results/
 dreal_popl27
+dreal_partial_models
