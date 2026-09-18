@@ -63,7 +63,7 @@ git-version target, IBEX/CAPD source-build): `docs/build.md`.
 `./FULL_BUILD.sh` (first build — creates `gcc_build/`) and `./BUILD.sh` (incremental) build
 target `dreal4` with `-j8`; binary at `gcc_build/dreal4`. Override IBEX source via
 `-DIBEX_GIT_REPOSITORY=file:///path/to/ibex-fork` for local-dev against an unpushed checkout
-(`CMakeLists.txt` pins the fork sha `e054af7b`).
+(`CMakeLists.txt` pins the fork sha `b5e7a212`).
 
 **Docker** (Linux hermetic verification): after `docker build -f Dockerfile.dreal_ubuntu -t
 dreal-linux-verify .`, run `cat query.smt2 | docker run --rm -i dreal-linux-verify ./dreal4 --in
@@ -200,7 +200,7 @@ See `docs/architecture.md` (full pipeline, ICP loop, Box, explanations), `docs/c
 **Vendored third-party** (`src/third_party/`): Drake symbolic, libcds, threadpool,
 dynamic_bitset, PicoSAT (legacy, unused). Do not modify without cause.
 
-**Auto-downloaded:** IBEX (`ncsys-lab/ibex-lib@dreal-perf-patches`, sha `e054af7b`), CAPD
+**Auto-downloaded:** IBEX (`ncsys-lab/ibex-lib@dreal-perf-patches`, sha `b5e7a212`), CAPD
 (`b353e170`, `CAPD_INTERVAL_TYPE=NATIVE`), fmt, spdlog, nlopt, GTest. See `DEPENDENCIES.md` for
 build wiring; `../ibex-fork/MIGRATION.md` for the ibex-fork patch catalog.
 
@@ -229,9 +229,9 @@ Run `/benchmark` after every meaningful code change. Run proactively at natural 
 escalation. CPU time (user+sys), not wall clock.
 
 **Benchmark sources** (two content-addressed `odeexpr_v*` manifest families + three flat dirs):
-- `~/Documents/new_dreal/ode_expressivity/benchmarks/` — `odeexpr_v1` family (NRA-only,
+- `~/Documents/expressivity/v1/benchmarks/` — `odeexpr_v1` family (NRA-only,
   manifest `revisions[].file`)
-- `~/Documents/new_dreal/ode_expressivity_energy/benchmarks/` — `odeexpr_v2` family
+- `~/Documents/expressivity/v2/benchmarks/` — `odeexpr_v2` family
   (**newest high-priority target**; ∀/∃∀ MLP-expressivity queries in `forall/` + `exists_forall/`,
   manifest `revisions[].smt2`)
 - `~/Documents/new_dreal/nraode_to_nra/drealgithub_sunoct5/rolled/` — github_oct5_

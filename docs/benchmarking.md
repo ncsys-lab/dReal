@@ -40,10 +40,10 @@ never overwritten) never silently repoints a name. `benchmark/odeexpr.py` is the
 families (`MANIFEST_FAMILIES`, `FAMILY_WEIGHTS`, `family_of`, `load_manifest_names`,
 `resolve_manifest`); `python3 odeexpr.py --all [FAMILY]` dumps a manifest family's TSV.
 
-- `~/Documents/new_dreal/ode_expressivity/benchmarks/` — `odeexpr_v1` family (self-contained
+- `~/Documents/expressivity/v1/benchmarks/` — `odeexpr_v1` family (self-contained
   `.smt2`, content-addressed via `manifest.json` with `revisions[].file`; each sets its own
   `:precision`; NRA-only — no ODEs; no ground-truth `:status`)
-- `~/Documents/new_dreal/ode_expressivity_energy/benchmarks/` — `odeexpr_v2` family (**newest
+- `~/Documents/expressivity/v2/benchmarks/` — `odeexpr_v2` family (**newest
   high-priority target**; ∀/∃∀ MLP-expressivity queries in `forall/` + `exists_forall/`,
   content-addressed via `manifest.json` with `revisions[].smt2` — a *different* manifest schema
   from v1, handled by the same loader parameterized over the revision-file key)

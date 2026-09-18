@@ -11,8 +11,8 @@ Two kinds of family:
     and resolve through the manifest so regeneration (which mints new hashed
     files, never overwrites) never silently repoints a name.
 
-    The two manifests differ in schema — v1 (ode_expressivity) keys a revision's
-    file under "file"; v2 (ode_expressivity_energy) under "smt2", with different
+    The two manifests differ in schema — v1 (expressivity/v1) keys a revision's
+    file under "file"; v2 (expressivity/v2) under "smt2", with different
     record shapes — but share one contract: a record with status=="active" whose
     revisions[] holds a state=="current" entry naming the file under the family's
     rev_file_key. ManifestFamily parameterizes over that key so a single loader
@@ -48,10 +48,10 @@ class ManifestFamily:
 
 MANIFEST_FAMILIES = [
     ManifestFamily("odeexpr_v1",
-                   "/Users/kunalsheth/Documents/new_dreal/ode_expressivity/benchmarks",
+                   "/Users/kunalsheth/Documents/expressivity/v1/benchmarks",
                    "file"),
     ManifestFamily("odeexpr_v2",
-                   "/Users/kunalsheth/Documents/new_dreal/ode_expressivity_energy/benchmarks",
+                   "/Users/kunalsheth/Documents/expressivity/v2/benchmarks",
                    "smt2"),
 ]
 MANIFEST_FAMILY_NAMES = {f.name for f in MANIFEST_FAMILIES}
