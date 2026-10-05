@@ -829,5 +829,111 @@ TEST_F(PinnedRiseTest, FwdPinnedSubTrueGate_BoxEmpties) {
          "[BUG-008 COMPLETENESS GATE]";
 }
 
+// =============================================================================
+// BUG-018: interval initial conditions with the gate near the tube's edge.
+// Every instance below is SAT, with a witness trajectory that ends inside the
+// X_t gate. Before the CAPD bump the per-slice tube's mean-value term used
+// CAPD's Curve::timeDerivative, which scaled the initial-condition spread by
+// f(X)-f(c) instead of X-c: the spread shrank by |Df| (0.1 here) or vanished
+// (the projectile's v' = -1), the tube missed the extreme trajectories, and
+// Prune emptied a SAT box — SOUNDNESS (asserts φ T-unsatisfiable on a
+// T-satisfiable φ — false unsat). Point-IC fixtures above cannot see this: with
+// X = c the spread is zero either way.
+// Each check runs FWD and BWD at hull-grid 1 and 4 for every C0 set type.
+// =============================================================================
+
+class IntervalIcSpreadTest : public ::testing::Test {
+ protected:
+  inline static const Variable x_{"spread_x", Variable::Type::CONTINUOUS};
+  inline static const Variable v_{"spread_v", Variable::Type::CONTINUOUS};
+  inline static const Variable x0_{"spread_x_0_0", Variable::Type::CONTINUOUS};
+  inline static const Variable v0_{"spread_v_0_0", Variable::Type::CONTINUOUS};
+  inline static const Variable xt_{"spread_x_0_t", Variable::Type::CONTINUOUS};
+  inline static const Variable vt_{"spread_v_0_t", Variable::Type::CONTINUOUS};
+  inline static const Variable t0_{"spread_time_0", Variable::Type::CONTINUOUS};
+  inline static const std::shared_ptr<const OdeFlow> growth_ = make_shared<OdeFlow>(
+      "spread_growth", vector<std::pair<Variable, Expression>>{{x_, 0.1 * x_}});
+  inline static const std::shared_ptr<const OdeFlow> decay_ = make_shared<OdeFlow>(
+      "spread_decay", vector<std::pair<Variable, Expression>>{{x_, -0.1 * x_}});
+  inline static const std::shared_ptr<const OdeFlow> projectile_ =
+      make_shared<OdeFlow>("spread_projectile",
+                           vector<std::pair<Variable, Expression>>{
+                               {x_, v_}, {v_, Expression{-1.0}}});
+
+  // One Prune per (direction, hull-grid, C0 set); each must keep the box
+  // non-empty [SOUNDNESS GATE] and keep every witness value.
+  static void ExpectPruneKeepsWitness(
+      const Box& box, const Formula& ic,
+      const vector<std::pair<Variable, double>>& witness) {
+    for (const ode_direction dir : {ode_direction::FWD, ode_direction::BWD}) {
+      for (const int hull_grid : {1, 4}) {
+        for (const OdeC0SetType c0 : {OdeC0SetType::Rect2, OdeC0SetType::Tripleton,
+                                      OdeC0SetType::HORect2}) {
+          SCOPED_TRACE(::testing::Message()
+                       << (dir == ode_direction::FWD ? "FWD" : "BWD")
+                       << " hull-grid " << hull_grid << " c0-set "
+                       << static_cast<int>(c0));
+          Config config;
+          config.mutable_ode_hull_grid().set_from_command_line(hull_grid);
+          config.mutable_ode_c0_set().set_from_command_line(c0);
+          ContractorStatus cs{box};
+          const auto ctc = mk_contractor_ode_lohner(box, {ic, {}}, dir, config, 0.0);
+          { const UpwardRoundingScope rms_; ctc.Prune(&cs, rms_.token()); }
+          if (cs.box().empty()) {
+            ADD_FAILURE() << "SAT box emptied [SOUNDNESS GATE, BUG-018]";
+            continue;
+          }
+          for (const auto& [var, value] : witness) {
+            EXPECT_TRUE(cs.box()[var].contains(value))
+                << var << " = " << cs.box()[var] << " lost the witness value "
+                << value << " [SOUNDNESS GATE, BUG-018]";
+          }
+        }
+      }
+    }
+  }
+};
+
+// x' = 0.1x, x0 ∈ [1,2], t ∈ [0,1], gate x_t ∈ [2.205, 2.3]. Witness: x0 = 2
+// reaches 2.2103 at t ≈ 0.9998 (max 2e^0.1 = 2.21034 at t = 1).
+TEST_F(IntervalIcSpreadTest, Growth_KeepsTubeEdge) {
+  Box box{vector<Variable>{x_, x0_, xt_, t0_}};
+  box[x_] = Box::Interval(-100.0, 100.0);
+  box[x0_] = Box::Interval(1.0, 2.0);
+  box[xt_] = Box::Interval(2.205, 2.3);
+  box[t0_] = Box::Interval(0.0, 1.0);
+  ExpectPruneKeepsWitness(box, integral(0.0, t0_, {x0_}, {xt_}, growth_),
+                          {{x0_, 2.0}, {xt_, 2.2103}});
+}
+
+// x' = -0.1x, x0 ∈ [1,2], t ∈ [0,1], gate x_t ∈ [1.995, 2.1]. Witness: x0 = 2
+// reaches 1.998 at t ≈ 0.010.
+TEST_F(IntervalIcSpreadTest, Decay_KeepsTubeEdge) {
+  Box box{vector<Variable>{x_, x0_, xt_, t0_}};
+  box[x_] = Box::Interval(-100.0, 100.0);
+  box[x0_] = Box::Interval(1.0, 2.0);
+  box[xt_] = Box::Interval(1.995, 2.1);
+  box[t0_] = Box::Interval(0.0, 1.0);
+  ExpectPruneKeepsWitness(box, integral(0.0, t0_, {x0_}, {xt_}, decay_),
+                          {{x0_, 2.0}, {xt_, 1.998}});
+}
+
+// x' = v, v' = -1 (state-independent rate: CAPD's old spread for v was exactly
+// zero), x0 = 0, v0 ∈ [0.5,1.5], t ∈ [0,0.5], gate x_t ∈ [0.6, 1]. Witness:
+// v0 = 1.5 reaches x = 0.62 at t ≈ 0.484 (max 0.625 at t = 0.5).
+TEST_F(IntervalIcSpreadTest, Projectile_KeepsTubeEdge) {
+  Box box{vector<Variable>{x_, v_, x0_, v0_, xt_, vt_, t0_}};
+  box[x_] = Box::Interval(-100.0, 100.0);
+  box[v_] = Box::Interval(-100.0, 100.0);
+  box[x0_] = Box::Interval(0.0, 0.0);
+  box[v0_] = Box::Interval(0.5, 1.5);
+  box[xt_] = Box::Interval(0.6, 1.0);
+  box[vt_] = Box::Interval(-100.0, 100.0);
+  box[t0_] = Box::Interval(0.0, 0.5);
+  ExpectPruneKeepsWitness(
+      box, integral(0.0, t0_, {x0_, v0_}, {xt_, vt_}, projectile_),
+      {{v0_, 1.5}, {xt_, 0.62}});
+}
+
 }  // namespace
 }  // namespace dreal

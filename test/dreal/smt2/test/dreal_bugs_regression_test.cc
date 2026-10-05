@@ -12,6 +12,7 @@
 //   BUG-008  endpoint asserted below its true value          -> unsat (not false delta-sat)
 //   BUG-009  seed pre-pass on a constraint that folds to True -> delta-sat (not a crash)
 //   BUG-011  --model witness of a free integral endpoint-time -> contains the true crossing
+//   BUG-018  interval initial condition near the tube edge   -> delta-sat (not unsat)
 //
 // BUG-002 is NOT here: the silent drop of a negated (integral …)/(forall_t …)
 // is a design gap, not a settled behavior to regression-guard. Its DESIRED
@@ -435,6 +436,61 @@ TEST(DrealBugsRegression, Bug009_SeedTrueCollapse_NoCrash) {
       "(assert (<= (sin x) y))\n"
       "(check-sat)\n")};
   EXPECT_NE(out.find("delta-sat"), std::string::npos) << "got: " << out;
+}
+
+// BUG-018 (dreal4-cmake docs/dreal-bugs.md) — an interval initial condition with
+// the gate near the tube's edge returned `unsat` at default flags. SOUNDNESS
+// (asserts φ T-unsatisfiable on a T-satisfiable φ — false unsat): the per-slice
+// tube's mean-value term took its derivative from CAPD's Curve::timeDerivative,
+// whose initial-condition spread was f(X)-f(c) instead of X-c until CAPD
+// 2a2263c7e. Each query below is satisfiable; texts are the committed
+// docs/dreal-bugs/bug018_meanvalue_*_trigger.smt2 files.
+TEST(DrealBugsRegression, Bug018_GrowthTubeEdge_DeltaSat) {
+  const std::string out{RunSmt2String(
+      "(set-logic QF_NRA_ODE)\n"
+      "(declare-fun x () Real [-100, 100])\n"
+      "(declare-fun x_0 () Real [1, 2])\n"
+      "(declare-fun x_t () Real [-100, 100])\n"
+      "(declare-fun time () Real [0, 1])\n"
+      "(define-ode flow_1 ((= d/dt[x] (* 0.1 x))))\n"
+      "(assert (= [x_t] (integral 0. time [x_0] flow_1)))\n"
+      "(assert (>= x_t 2.205))\n"
+      "(check-sat)\n")};
+  EXPECT_NE(out.find("delta-sat"), std::string::npos)
+      << "x_0 = 2, time = 1 gives x_t = 2.2103; got: " << out;
+}
+
+TEST(DrealBugsRegression, Bug018_DecayTubeEdge_DeltaSat) {
+  const std::string out{RunSmt2String(
+      "(set-logic QF_NRA_ODE)\n"
+      "(declare-fun x () Real [-100, 100])\n"
+      "(declare-fun x_0 () Real [1, 2])\n"
+      "(declare-fun x_t () Real [-100, 100])\n"
+      "(declare-fun time () Real [0, 1])\n"
+      "(define-ode flow_1 ((= d/dt[x] (* -0.1 x))))\n"
+      "(assert (= [x_t] (integral 0. time [x_0] flow_1)))\n"
+      "(assert (>= x_t 1.995))\n"
+      "(check-sat)\n")};
+  EXPECT_NE(out.find("delta-sat"), std::string::npos)
+      << "x_0 = 2, time ≤ 0.025 gives x_t ≥ 1.995; got: " << out;
+}
+
+TEST(DrealBugsRegression, Bug018_ProjectileTubeEdge_DeltaSat) {
+  const std::string out{RunSmt2String(
+      "(set-logic QF_NRA_ODE)\n"
+      "(declare-fun x () Real [-100, 100])\n"
+      "(declare-fun v () Real [-100, 100])\n"
+      "(declare-fun x_0 () Real [0, 0])\n"
+      "(declare-fun v_0 () Real [0.5, 1.5])\n"
+      "(declare-fun x_t () Real [-100, 100])\n"
+      "(declare-fun v_t () Real [-100, 100])\n"
+      "(declare-fun time () Real [0, 0.5])\n"
+      "(define-ode flow_1 ((= d/dt[x] v) (= d/dt[v] -1.0)))\n"
+      "(assert (= [x_t v_t] (integral 0. time [x_0 v_0] flow_1)))\n"
+      "(assert (>= x_t 0.6))\n"
+      "(check-sat)\n")};
+  EXPECT_NE(out.find("delta-sat"), std::string::npos)
+      << "v_0 = 1.5, time = 0.5 gives x_t = 0.625; got: " << out;
 }
 
 }  // namespace

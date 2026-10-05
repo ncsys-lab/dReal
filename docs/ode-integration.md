@@ -127,13 +127,13 @@ See `docs/decisions.md` "ODE backend" for the CAPD-vs-Codac finding and `OPTIMIZ
 
 ## CAPD build wiring
 
-CAPD runs on ARM64 via `CAPD_INTERVAL_TYPE=NATIVE` (master SHA `b353e170`), which uses CAPD's own `DoubleRounding` and skips FILIB entirely. See `DEPENDENCIES.md` § "CAPD" for the full build-wiring details. CAPD expects the FPU in `FE_TONEAREST`; `contractor_ode_lohner::Prune` establishes a nested `NearestRoundingScope` for the CAPD work (and a further nested `UpwardRoundingScope` around the ibex invariant sub-contractors it calls), and the `run_capd_*` / `make_capd_ode_cache` adapters open an `ExpectClobber` `NearestRoundingScope` to contain CAPD's directed-mode clobber (CAPD leaves the FPU in a directed mode on return rather than restoring nearest) — see `docs/rounding.md`. (The earlier Codac/CAPD gated hybrid, and the `--capd-t-gate` / `--capd-ndim-gate` flags that selected between them, were retired when Codac was removed.)
+CAPD runs on ARM64 via `CAPD_INTERVAL_TYPE=NATIVE` (master SHA `03dc5628`), which uses CAPD's own `DoubleRounding` and skips FILIB entirely. See `DEPENDENCIES.md` § "CAPD" for the full build-wiring details. CAPD expects the FPU in `FE_TONEAREST`; `contractor_ode_lohner::Prune` establishes a nested `NearestRoundingScope` for the CAPD work (and a further nested `UpwardRoundingScope` around the ibex invariant sub-contractors it calls), and the `run_capd_*` / `make_capd_ode_cache` adapters open an `ExpectClobber` `NearestRoundingScope` to contain CAPD's directed-mode clobber (CAPD leaves the FPU in a directed mode on return rather than restoring nearest) — see `docs/rounding.md`. (The earlier Codac/CAPD gated hybrid, and the `--capd-t-gate` / `--capd-ndim-gate` flags that selected between them, were retired when Codac was removed.)
 
 ---
 
 ## Dependency history
 
-The current CAPD-only design is the result of two migrations: an earlier move to a Codac-based ODE contractor, then the **removal** of Codac (Codac and Eigen are no longer dependencies). The current stack source-builds the IBEX fork (`ncsys-lab/ibex-lib@dreal-perf-patches`) and CAPD (`CAPDGroup/CAPD@b353e170`); ODE boundary values cross the interface as `ibex::Interval` / `ibex::IntervalVector`. See `DEPENDENCIES.md` for the current stack and `docs/decisions.md` "ODE backend" for the migration rationale.
+The current CAPD-only design is the result of two migrations: an earlier move to a Codac-based ODE contractor, then the **removal** of Codac (Codac and Eigen are no longer dependencies). The current stack source-builds the IBEX fork (`ncsys-lab/ibex-lib@dreal-perf-patches`) and CAPD (`CAPDGroup/CAPD@03dc5628`); ODE boundary values cross the interface as `ibex::Interval` / `ibex::IntervalVector`. See `DEPENDENCIES.md` for the current stack and `docs/decisions.md` "ODE backend" for the migration rationale.
 
 ---
 

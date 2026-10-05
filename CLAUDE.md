@@ -173,9 +173,10 @@ main-thread-only, deterministic; R3 gate: zero verdict flips, PAR2 1.001×;
 
 **CAPD ODE tuning:** `--ode-taylor-order` (default 12), `--ode-hull-grid` (4 — per-step sub-slice
 count; lower widens enclosures (never a false-`unsat`). Since the 2026-06 centered-in-time tube
-fix (`HULL_COMPLETENESS.md`) the per-slice range is mean-value-in-time, so the default tube sits
-near CAPD precision and hull-grid is no longer a completeness knob; raise to 16+ only for
-pathologically sharp invariants),
+fix (`HULL_COMPLETENESS.md`) the per-slice range is mean-value-in-time, so for a thin initial
+set the default tube sits near CAPD precision; on an interval initial set a finer hull-grid still
+refutes more (BUG-013). The mean-value half is sound only with CAPD ≥ `2a2263c7` — the older pin
+gave false `unsat` on interval initial conditions (BUG-018)),
 `--ode-backward` (true), `--ode-abs-tol`/`--ode-rel-tol` (1e-10), `--ode-max-step` (0=adaptive).
 `--refine-witness` (default off): δ-**tight** `--model` witnesses. By default `--model` reports
 the **raw terminating box** with zero post-processing — the exact region ICP certified,
@@ -201,7 +202,7 @@ See `docs/architecture.md` (full pipeline, ICP loop, Box, explanations), `docs/c
 dynamic_bitset, PicoSAT (legacy, unused). Do not modify without cause.
 
 **Auto-downloaded:** IBEX (`ncsys-lab/ibex-lib@dreal-perf-patches`, sha `b5e7a212`), CAPD
-(`b353e170`, `CAPD_INTERVAL_TYPE=NATIVE`), fmt, spdlog, nlopt, GTest. See `DEPENDENCIES.md` for
+(`03dc5628`, `CAPD_INTERVAL_TYPE=NATIVE`), fmt, spdlog, nlopt, GTest. See `DEPENDENCIES.md` for
 build wiring; `../ibex-fork/MIGRATION.md` for the ibex-fork patch catalog.
 
 ---

@@ -234,14 +234,19 @@ set_target_properties(ibex_soplex PROPERTIES IMPORTED_LOCATION "${IBEX_INSTALL_D
 # `msr fpcr` assembly, x86 SSE) is used instead. The two-file FILIB-bypass
 # patch documented in CODAC_MIGRATION.md is no longer required.
 #
-# Pin: b353e170 (2026-05-18). The CAPD_INTERVAL_TYPE switch landed in the
+# Pin: 03dc5628 (2026-09-22). The CAPD_INTERVAL_TYPE switch landed in the
 # v6.1.0 development cycle (Jan 26, 2025 — see CAPD PR #22 / commit b7506bf9
 # bumping the version, alongside the CMAKE_HOST_SYSTEM_PROCESSOR fix). No
 # v6.1.0 release tag exists yet, so we pin a master SHA. Bump only after
 # verifying that the CAPD_INTERVAL_TYPE plumbing is still intact.
+# The pin must include 2a2263c7 (2026-09-14, "Bug fixed in
+# Curve::timeDerivative"): before it the per-slice tube's mean-value term
+# under-enclosed interval initial conditions — a false unsat (BUG-018).
+# UPDATE_DISCONNECTED: an existing build dir does not fetch on a bump; run
+# `git -C <build>/capd_ep/src/capd_external fetch` first.
 # ---------------------------------------------------------------------------
 set(CAPD_INSTALL_DIR "${CMAKE_BINARY_DIR}/capd-install")
-set(CAPD_GIT_TAG     "b353e170")
+set(CAPD_GIT_TAG     "03dc5628")
 
 ExternalProject_Add(capd_external
     PREFIX            "${CMAKE_BINARY_DIR}/capd_ep"

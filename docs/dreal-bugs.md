@@ -365,6 +365,92 @@ Read the flags as in the table; `dreal --help` prints the correct text.
 `exists_forall_perf.md` proposes an A/B with and without the flag instead of
 `--drpm-max-size 0`.
 
+---
+
+## BUG-018 — False `unsat` at default flags on an ODE with an interval initial condition: the per-slice tube's mean-value term used CAPD's `Curve::timeDerivative`, which scaled the initial-condition spread wrongly (SOUNDNESS; fixed 2026-10-05 by the CAPD bump)
+
+**Symptom / Description**
+
+On a satisfiable `integral` whose start variable is an interval, dReal returns `unsat` with
+default flags. This is a SOUNDNESS violation (asserts φ T-unsatisfiable on a T-satisfiable φ —
+false unsat). It needs no flag: both `--ode-backward` values, every `--ode-c0-set`, and
+`--ode-hull-grid 1` and `4` show it. Point initial conditions are unaffected, which is why the
+existing ODE tests (all point-IC or with gates far from the tube edge) never saw it.
+
+**Reproducer(s)**
+
+`bug018_meanvalue_growth_baseline.smt2` and `bug018_meanvalue_growth_trigger.smt2` differ only
+in the threshold (`2.200` / `2.205`):
+```smt2
+(set-logic QF_NRA_ODE)
+(declare-fun x () Real [-100, 100])
+(declare-fun x_0 () Real [1, 2])
+(declare-fun x_t () Real [-100, 100])
+(declare-fun time () Real [0, 1])
+(define-ode flow_1 ((= d/dt[x] (* 0.1 x))))
+(assert (= [x_t] (integral 0. time [x_0] flow_1)))
+(assert (>= x_t 2.205))
+(check-sat)
+```
+x0 = 2, t = 1 gives x_t = 2·e^0.1 = 2.2103, 0.0053 above the threshold (more than 5δ).
+
+`bug018_meanvalue_decay_trigger.smt2`: the same with `(* -0.1 x)` and `(>= x_t 1.995)`
+(satisfiable by x0 = 2, t ≤ 0.025).
+
+`bug018_meanvalue_projectile_trigger.smt2`: `x' = v`, `v' = -1`, `x_0 = 0`, `v_0 ∈ [0.5, 1.5]`,
+`time ∈ [0, 0.5]`, `(>= x_t 0.6)` (satisfiable by v0 = 1.5, t = 0.5: x_t = 0.625).
+
+`timeout 60 <bin> --model <file>`, identical on `gcc_build/dreal4` and `dreal_popl27`:
+
+| file | output |
+|---|---|
+| growth_baseline | `delta-sat with delta = 0.001`, `x_t : [2.199999999999999, 2.20429721542362]` ✗ — the box excludes the true maximum 2.2103 |
+| growth_trigger | `unsat` ✗ false unsat |
+| decay_trigger | `unsat` ✗ false unsat |
+| projectile_trigger | `unsat` ✗ false unsat |
+
+**Root cause / Design notes**
+
+- ESTABLISHED (code): `centered_curve_range` (`src/dreal/contractor/odes/contractor_odes_capd.cc`,
+  added in aa409c688, 2026-06-23) intersects the naive slice range `curve(sub)` with the
+  mean-value form `curve(mid) + curve.timeDerivative(sub)·(sub − mid)`. At the CAPD pin
+  `b353e170`, `Curve<…,true>::timeDerivative` (`capdDynSys/include/capd/diffAlgebra/Curve.hpp:194`)
+  sets the initial-condition spread to `coefficient(d,1) − centerCoefficient(d,1)`, i.e.
+  f(X) − f(c), where its sibling `operator()` (`:75`) uses `coefficient(d,0) −
+  centerCoefficient(d,0)`, i.e. X − c. The spread is understated when |Df| < 1 and vanishes for a
+  state-independent rate such as `v' = -1`, so the derivative enclosure misses real trajectories
+  and the mean-value bound cuts them off.
+- ESTABLISHED (upstream): CAPD commit `2a2263c7e` (2026-09-14, "Bug fixed in
+  Curve::timeDerivative") changes exactly that line to `coefficient(d,0) −
+  centerCoefficient(d,0)`.
+- ESTABLISHED (isolation, one variable): with the CAPD pin set to `f59e2546`, the parent of
+  `2a2263c7`, all six BUG-018 tests below fail; at `2a2263c7`, whose only change is that line,
+  all six pass. A numeric model of CAPD's formulas also predicts the growth tube's upper bound
+  as 2.20430, where the baseline's model box ends.
+
+**Fix**
+
+`CMakeLists.txt` pins CAPD `03dc5628` (upstream master, 2026-09-22), which includes
+`2a2263c7`. Regression tests: `IntervalIcSpreadTest.*` in
+`test/dreal/contractor/test/contractor_odes_semantic_test.cc` (FWD and BWD, hull-grid 1 and 4,
+each C0 set type; every FWD configuration emptied the SAT box before the bump) and
+`DrealBugsRegression.Bug018_*` (the three trigger files, `delta-sat`). After the bump all four
+reproducers answer `delta-sat`; the growth baseline's `x_t` box contains 2.2103.
+
+ODE-family A/B, old pin vs new (`benchmark/results/ab_20261005_005735`, 119 jobs, CPU time):
+PAR2 0.98×, 107/119 solved on both sides, no SAT/UNSAT disagreement. The solve sets differ in
+one job each way: `github_oct5_0hz_k4_battery_battery-double-sat` timed out on the old pin and
+is `delta-sat` in 78 s on the new one, and `github_oct5_0hz_k2_battery_battery-double` was
+`unsat` in 110 s on the old pin and timed out on the new one. Whether the lost `unsat` is a contention timeout or a lost refutation is being re-run alone on the new pin and on `dreal4_cav26`.
+
+Any `unsat` obtained before the bump on a query with an interval start variable should be
+re-checked on a binary built after it.
+
+**Binary**
+
+Reproduced on `gcc_build/dreal4` (Commit `6f02d4010`, CAPD `b353e170`, built 2026-10-05 against
+the MacOSX 26.5 SDK) and `dreal_popl27` (Commit `c294eb435`, built 2026-07-13). Fixed on
+`gcc_build/dreal4` with CAPD `03dc5628`.
 
 ---
 

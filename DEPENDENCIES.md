@@ -49,10 +49,15 @@ The `IBEX_GIT_REPOSITORY` CMake cache variable defaults to `https://github.com/n
 
 ## CAPD (`CAPDGroup/CAPD`)
 
-**Version**: master SHA `b353e170` (2026-05-18; in-development v6.1.0)
+**Version**: master SHA `03dc5628` (2026-09-22; in-development v6.1.0). The pin must include
+`2a2263c7` (2026-09-14, "Bug fixed in Curve::timeDerivative"): the per-slice tube's mean-value
+term calls `Curve::timeDerivative`, which before that commit scaled the initial-condition spread
+by f(X)−f(c) instead of X−c and produced false `unsat` on interval initial conditions (BUG-018,
+`docs/dreal-bugs.md`). An existing build dir does not fetch on a bump (`UPDATE_DISCONNECTED`):
+run `git -C <build>/capd_ep/src/capd_external fetch` before rebuilding.
 **Build**: `ExternalProject_Add`, builds from source into `gcc_build/capd-install/`.
 **Build flags**: `-DCAPD_INTERVAL_TYPE=NATIVE -DCAPD_ENABLE_MULTIPRECISION=OFF -DCAPD_BUILD_ALL=OFF -DCAPD_BUILD_TESTS=OFF`
-**Role**: Sole ODE backend (after Codac removal). Order-20 Taylor integration via `capd::IOdeSolver` + `capd::ITimeMap`. Backward integration uses the negated `-f(x)` map stored alongside the forward map in the per-flow cache.
+**Role**: Sole ODE backend (after Codac removal). Taylor integration (default order 12, `--ode-taylor-order`) via `capd::IOdeSolver` + `capd::ITimeMap`. Backward integration uses the negated `-f(x)` map stored alongside the forward map in the per-flow cache.
 
 ### Why CAPD master (not v4.x or v6.0)
 

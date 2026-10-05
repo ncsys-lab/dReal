@@ -45,7 +45,7 @@ patch (build `_grad` on first use), which made CAPD-only viable without Codac.
 ## Per-slice ODE tube, not a coarse endpoint hull
 
 **Decision:** The ODE contractor builds the **time-ordered per-slice tube** (each adaptive
-step's Taylor curve sub-gridded into `kHullGrid=16` enclosures) and filters slice-by-slice —
+step's Taylor curve sub-gridded into `--ode-hull-grid` enclosures, default 4) and filters slice-by-slice —
 it does not intersect the terminal box with a single endpoint enclosure.
 
 **Why:** The single-endpoint form is **unsound for free-time integrals**. Intersecting only
@@ -56,6 +56,14 @@ per-slice form (and cav26) return `delta-sat` with a witness at interior times �
 horizon 20. A coarse hull also collapses per-time/per-component correlation, under-refuting
 anti-correlated tubes and missing interior-only invariant violations.
 
+**Slice range (aa409c688, 2026-06):** each slice is `curve(sub) ∩ (curve(mid) +
+timeDerivative(sub)·(sub − mid))` (`centered_curve_range`). The mean-value half is sound only if
+CAPD's `timeDerivative` encloses x′ for every trajectory of the initial set, which holds only
+from CAPD `2a2263c7` (2026-09-14) on; at the earlier pin it understated the initial-condition
+spread and returned false `unsat` on interval initial conditions — SOUNDNESS (asserts φ
+T-unsatisfiable on a T-satisfiable φ — false unsat), BUG-018 in `docs/dreal-bugs.md`.
+`CMakeLists.txt` pins a CAPD that includes the fix; `IntervalIcSpreadTest` guards it.
+
 **Alternatives tried and rejected:** the coarse single-endpoint intersection (the
 Codac→CAPD rewrite's form) — unsound as above. dReal3 segfaults on these inputs, so cav26 +
 the explicit witness are the oracle.
@@ -63,7 +71,7 @@ the explicit witness are the oracle.
 **Code:** `contractor_ode_lohner::Prune` + `integrate_tube_slices`
 (`src/dreal/contractor/odes/`). Mechanism detail: `docs/ode-integration.md` §Mechanism.
 Regression coverage: `contractor_odes_semantic_test.cc` (`GravityInvariantTest`,
-`AntiCorrelatedTest`, `DecayFlowTest.*`).
+`AntiCorrelatedTest`, `DecayFlowTest.*`, `IntervalIcSpreadTest.*`).
 
 ---
 

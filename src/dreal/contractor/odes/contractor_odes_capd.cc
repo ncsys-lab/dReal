@@ -360,14 +360,17 @@ namespace dreal
         //
         // The mean-value form  x(sub) ⊆ x(mid) + x'(sub)·(sub - mid)  evaluates
         // the curve at the THIN midpoint time (no time-widening) plus a small
-        // derivative-bounded correction, cutting the slop to O(r²) in the sub
-        // radius r. timeDerivative(sub) and curve() are the same doubleton
-        // machinery CAPD already exposes (diffAlgebra/Curve.hpp) and both account
-        // for the initial-condition spread, so the mean-value bound is a sound
-        // outward enclosure of the true trajectory; intersecting two sound
-        // enclosures still encloses it. Tightens the WHOLE tube uniformly (the
-        // terminal-window clip below uses it too), so hull-grid stops being a
-        // refutation-power knob.
+        // derivative-bounded correction. The bound is sound only if
+        // timeDerivative(sub) encloses x' for EVERY trajectory of the set and
+        // every t in sub; intersecting two sound enclosures still encloses it.
+        // CAPD's timeDerivative does so only from CAPD 2a2263c7 on: before it,
+        // the initial-condition spread term was f(X)-f(c) instead of X-c, which
+        // cut real trajectories off interval initial sets — a false unsat
+        // (BUG-018, docs/dreal-bugs.md; CMakeLists.txt pins a fixed CAPD).
+        // For a thin initial set the slop is O(r²) in the sub radius r. For an
+        // interval initial set the derivative carries the set's spread, so the
+        // correction is O(r · spread) and a finer hull-grid can still refute
+        // more (BUG-013). The terminal-window clip below uses the same range.
         template <typename CurveT>
         capd::IVector centered_curve_range(const CurveT& curve,
                                            const capd::interval& sub) {

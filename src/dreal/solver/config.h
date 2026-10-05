@@ -368,12 +368,13 @@ class Config {
   // SOUNDNESS/COMPLETENESS: lowering order / hull-grid only WIDENS the enclosures
   // (each sub-slice stays a sound outward over-approximation), so a coarser knob
   // can NEVER cause a false-`unsat` (SOUNDNESS) — its only cost is a missed
-  // refutation (COMPLETENESS). Since the 2026-06 centered-in-time tube fix
-  // (HULL_COMPLETENESS.md "Resolution") hull-grid is no longer
-  // completeness-load-bearing: the per-slice range is mean-value-in-time, holding
-  // the tube near CAPD precision regardless of step size (the GravityInvariantTest
-  // F1 sharp-interior case now refutes at this hull-4 default). Raise it (16+) only
-  // for pathologically sharp invariants. Tolerances 1e-10 (not step-limiting here).
+  // refutation (COMPLETENESS). The per-slice range is mean-value-in-time
+  // (HULL_COMPLETENESS.md "Resolution"), so for a thin initial set the tube stays
+  // near CAPD precision whatever the step size (the GravityInvariantTest F1
+  // sharp-interior case refutes at this hull-4 default). For an interval initial
+  // set the mean-value correction grows with the set's spread, and a finer
+  // hull-grid still refutes more (BUG-013). Tolerances 1e-10 (not step-limiting
+  // here).
   static constexpr int kDefaultOdeTaylorOrder{12};
   static constexpr int kDefaultOdeBackwardOrder{12};
   static constexpr double kDefaultOdeAbsTol{1e-10};
