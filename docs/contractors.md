@@ -72,7 +72,7 @@ Linearizes the constraint system and applies polytope (LP-based, `CtcPolytopeHul
 **Files:** `src/dreal/contractor/contractor_ibex_{newton,obbt,mohc}.{h,cc}` (+ per-worker `*_mt` cells for `--jobs>1`). All default-off, soundness-neutral COMPLETENESS levers (weaker/absent contraction risks only a missed refutation — asserts φ^δ T-satisfiable on a T-unsatisfiable φ — never a false unsat).
 
 - **`--newton` / `--newton-ceil` (default 0.01):** `ibex::CtcNewton` on the square equality subsystem of the assertions; the ceil gates it to boxes whose max diameter is small enough for Newton to bite.
-- **`--obbt`:** 2n LPs (min/max each variable) over the X-Taylor relaxation, certified bounds only (`Mode::Certified`, `OptimalProved`-only). Rides the same LP path as `--polytope` — BUG-014-exposed.
+- **`--obbt`:** 2n LPs (min/max each variable) over the X-Taylor relaxation, certified bounds only (`Mode::Certified`, `OptimalProved`-only). Rides the same LP path as `--polytope` (BUG-014, fixed 2026-10-05: SoPlex presolve off).
 - **`--mohc`:** the `CtcMohc` monotonicity contractor (fork port), optimal hull-consistency on monotone multi-occurrence constraints, no LP. Composable with `--acid`/`--3bcid`.
 
 **ODE/forall filtering (`FilterIbexConvertible`, `contractor_ibex_polytope.cc`):** every system-wide cell (polytope, ACID, OBBT, Mohc — and Newton's equality filter) converts only atoms that are neither `forall` nor ODE-carrying (`include_ode()`), since `IbexConverter` throws on `integral`/`forall_t`. Dropping formulas from a pure contraction cell is COMPLETENESS-only. Before this filter the cells aborted the process on ODE-family inputs (pre-existing converter-crash class, fixed `f6d735254`).

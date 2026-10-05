@@ -63,7 +63,7 @@ git-version target, IBEX/CAPD source-build): `docs/build.md`.
 `./FULL_BUILD.sh` (first build — creates `gcc_build/`) and `./BUILD.sh` (incremental) build
 target `dreal4` with `-j8`; binary at `gcc_build/dreal4`. Override IBEX source via
 `-DIBEX_GIT_REPOSITORY=file:///path/to/ibex-fork` for local-dev against an unpushed checkout
-(`CMakeLists.txt` pins the fork sha `b5e7a212`).
+(`CMakeLists.txt` pins the fork sha `6b1b2c10`).
 
 **Docker** (Linux hermetic verification): after `docker build -f Dockerfile.dreal_ubuntu -t
 dreal-linux-verify .`, run `cat query.smt2 | docker run --rm -i dreal-linux-verify ./dreal4 --in
@@ -158,11 +158,11 @@ there). `--drpm-max-size 4` shows a real github lemma-PM signal (PAR2 0.688×, u
 single-file) but has one undiagnosed tacas 9 s→TIM pathology — diagnose before recommending.
 **Measured dead, kept for record:** `--newton`/`--newton-ceil` (zero unique solves, 11
 OOMs), `--branch abs|absdiam`/`--branch-decay` (ABS degeneracy confirmed — both variants
-lose everywhere), `--obbt` (≈polytope). **BUG-014** (`docs/dreal-bugs.md`): X-Taylor LP rows
-trigger an OOB write in vendored SoPlex presolve — latent SOUNDNESS risk (a corrupted box
-narrowed past a true model would assert φ T-unsatisfiable on a T-satisfiable φ — false
-unsat; none observed) — avoid `--obbt`/bare `--polytope`/`--polytope-linearizer both`;
-affine and mohc are immune. The system cells skip `forall_t`/`integral` atoms
+lose everywhere), `--obbt` (≈polytope). **BUG-014** (`docs/dreal-bugs.md`, fixed 2026-10-05):
+X-Taylor rows carry denormal coefficients that SoPlex 4.0.2's presolve cannot take, which led
+to an OOB write; the fork now runs SoPlex with presolve off. **BUG-019** (fixed the same day):
+the Neumaier–Shcherbina certificates fail closed on non-finite data and compute Aᵀy
+rigorously, and non-finite LP rows are refused or (X-Taylor) skipped. The system cells skip `forall_t`/`integral` atoms
 (`FilterIbexConvertible`, COMPLETENESS-only, `f6d735254`). Headline: the system-cell arms
 scored the **first machine-verified UNSAT on the odeexpr_v2 `forall/` wall** (aed75881 —
 a COMPLETENESS win for those arms; base's delta-sat is the legal δ-artifact).
@@ -202,7 +202,7 @@ See `docs/architecture.md` (full pipeline, ICP loop, Box, explanations), `docs/c
 **Vendored third-party** (`src/third_party/`): Drake symbolic, libcds, threadpool,
 dynamic_bitset, PicoSAT (legacy, unused). Do not modify without cause.
 
-**Auto-downloaded:** IBEX (`ncsys-lab/ibex-lib@dreal-perf-patches`, sha `b5e7a212`), CAPD
+**Auto-downloaded:** IBEX (`ncsys-lab/ibex-lib@dreal-perf-patches`, sha `6b1b2c10`), CAPD
 (`03dc5628`, `CAPD_INTERVAL_TYPE=NATIVE`), fmt, spdlog, nlopt, GTest. See `DEPENDENCIES.md` for
 build wiring; `../ibex-fork/MIGRATION.md` for the ibex-fork patch catalog.
 

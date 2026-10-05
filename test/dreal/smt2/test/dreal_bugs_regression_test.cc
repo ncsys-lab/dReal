@@ -1,6 +1,7 @@
 // End-to-end SMT2-path regression guards for the dReal bugs catalogued in
-// simulink-to-dreal/docs/dreal-bugs.md. Each test embeds the *exact* reproducer
-// text committed there (`bug00N_*.smt2`) and pins the correct verdict / model,
+// simulink-to-dreal/docs/dreal-bugs.md and dreal4-cmake/docs/dreal-bugs.md (one
+// shared numbering). Each test embeds the *exact* reproducer text committed
+// there (`bugNNN_*.smt2`) and pins the correct verdict / model,
 // so a regression on any of these resurfaces here rather than silently in the
 // downstream translator.
 //
@@ -15,6 +16,7 @@
 //   BUG-015  integral start variable with no box, sin flow   -> delta-sat + warning (not SIGSEGV)
 //   BUG-016  thin start exactly on a nonzero fixed point     -> endpoint contracts (not skipped)
 //   BUG-018  interval initial condition near the tube edge   -> delta-sat (not unsat)
+//   BUG-014  X-Taylor LP arm on the F3 instance              -> no signal
 //
 // BUG-002 is NOT here: the silent drop of a negated (integral …)/(forall_t …)
 // is a design gap, not a settled behavior to regression-guard. Its DESIRED
@@ -29,6 +31,7 @@
 
 #include <unistd.h>
 
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <iomanip>
@@ -541,6 +544,61 @@ TEST_F(DrealBugsRegressionDeathTest, Bug015_UnboundedDecayStart_DeltaSat) {
                                    "(assert (= [xt] (integral 0. t [x0] flow_1)))\n"
                                    "(check-sat)\n"),
               ::testing::ExitedWithCode(0), "");
+}
+
+// BUG-014 (dreal4-cmake docs/dreal-bugs.md) — the X-Taylor LP arms died on
+// signals inside vendored SoPlex 4.0.2's presolve (SPxMainSM::duplicateCols,
+// an out-of-bounds write; heap corruption, so a latent SOUNDNESS risk). This
+// is the entry's F3 (expressivity v1 tanh_coupling decrease_slope), which
+// crashed 3/3 with --polytope --polytope-linearizer both. F3 is hard (600 s
+// timeout in the probe), so the child counts surviving 5 s as a pass.
+TEST_F(DrealBugsRegressionDeathTest, Bug014_XTaylorBothSurvivesF3) {
+  Config config;
+  config.mutable_use_polytope().set_from_command_line(true);
+  config.mutable_polytope_linearizer().set_from_command_line(PolytopeLinearizer::kBoth);
+  const std::string f3{
+      "(set-option :precision 0.000500000000000000)\n"
+      "(declare-const J_00 Real)\n"
+      "(declare-const J_01 Real)\n"
+      "(declare-const J_11 Real)\n"
+      "(declare-const cse_optimization_symbol_0 Real)\n"
+      "(declare-const cse_optimization_symbol_1 Real)\n"
+      "(declare-const s_0 Real)\n"
+      "(declare-const s_1 Real)\n"
+      "(declare-const x_0 Real)\n"
+      "(declare-const x_1 Real)\n"
+      "(declare-const y_0 Real)\n"
+      "(declare-const y_1 Real)\n"
+      "(assert (= cse_optimization_symbol_0 (+ x_0 (* -1 y_0))))\n"
+      "(assert (= cse_optimization_symbol_1 (+ x_1 (* -1 y_1))))\n"
+      "(assert (> x_0 -1))\n"
+      "(assert (> x_1 -1))\n"
+      "(assert (< x_0 1))\n"
+      "(assert (< x_1 1))\n"
+      "(assert (> y_0 -1))\n"
+      "(assert (> y_1 -1))\n"
+      "(assert (< y_0 1))\n"
+      "(assert (< y_1 1))\n"
+      "(assert (> J_00 (/ -2 5)))\n"
+      "(assert (< J_00 (/ 2 5)))\n"
+      "(assert (> J_01 (/ -2 5)))\n"
+      "(assert (< J_01 (/ 2 5)))\n"
+      "(assert (> J_11 (/ -2 5)))\n"
+      "(assert (< J_11 (/ 2 5)))\n"
+      "(assert (>= s_0 0))\n"
+      "(assert (<= s_0 1))\n"
+      "(assert (>= s_1 0))\n"
+      "(assert (<= s_1 1))\n"
+      "(assert (> (+ (* -2 (pow cse_optimization_symbol_0 2)) (* -2 (pow cse_optimization_symbol_1 2)) (* -1 (+ y_0 (* -4 (tanh (* (/ 1 4) y_0)))) (+ (* -2 y_0) (* 2 x_0))) (* -1 (+ y_1 (* -4 (tanh (* (/ 1 4) y_1)))) (+ (* -2 y_1) (* 2 x_1))) (* 2 cse_optimization_symbol_0 s_0 (+ (* J_00 cse_optimization_symbol_0) (* J_01 cse_optimization_symbol_1))) (* 2 cse_optimization_symbol_1 s_1 (+ (* J_01 cse_optimization_symbol_0) (* J_11 cse_optimization_symbol_1)))) (/ 3 2000)))\n"
+      "(check-sat )\n"};
+  EXPECT_EXIT(
+      {
+        signal(SIGALRM, [](int) { std::_Exit(0); });
+        alarm(5);
+        RunSmt2String(f3, config);
+        std::_Exit(0);
+      },
+      ::testing::ExitedWithCode(0), "");
 }
 
 // BUG-016 (simulink-to-dreal docs/dreal-bugs.md) — a thin start exactly on a

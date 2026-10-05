@@ -99,7 +99,7 @@ github instances is the leading guess) was not measured.
 
 ---
 
-## BUG-014 — X-Taylor LP arms (`--obbt` / `--polytope` / `--polytope-linearizer both`) die on silent signals inside vendored SoPlex 4.0.2 `SPxMainSM::duplicateCols` (OOB write in presolve; heap corruption; latent SOUNDNESS risk, no wrong verdict observed)
+## BUG-014 — X-Taylor LP arms (`--obbt` / `--polytope` / `--polytope-linearizer both`) die on silent signals inside vendored SoPlex 4.0.2 `SPxMainSM::duplicateCols` (OOB write in presolve; heap corruption; latent SOUNDNESS risk, no wrong verdict observed; fixed 2026-10-05)
 
 **Symptom / Description**
 
@@ -207,13 +207,47 @@ disable the SoPlex simplifier in the fork wrapper (`ibex_LPLibWrapper.cpp` never
 SIMPLIFIER_OFF)` would bypass `SPxMainSM` entirely at some LP-solve cost) or bump the
 vendored soplex-4.0.2 tarball.
 
+**Root cause (isolated 2026-10-05)**
+
+The trigger is X-Taylor rows that carry denormal coefficients. dReal's scratch build against an
+assert-enabled IBEX/SoPlex (EP rebuilt `-O0 -g -DDEBUG`, no `NDEBUG`) on F3 with
+`--polytope --polytope-linearizer both --jobs 1`, which is deterministic:
+
+1. the first assertion is SoPlex's soft invariant `WMAISM12 isNotZero(aij, 1.0 / infinity)`
+   (`spxmainsm.cpp:2594`, `simplifyRows`): presolve assumes no stored coefficient has magnitude
+   ≤ 1e-100;
+2. with that assertion made print-only, the next one is hard: `position != -1` in
+   `doRemoveRow` (`spxlpbase.h:2072`), i.e. presolve's row and column copies of the LP disagree
+   — the structural break the earlier hypothesis H1 guessed at;
+3. with entries of magnitude ≤ 1e-100 dropped when the wrapper builds a row (experiment only),
+   no assertion fires and F3 runs to the 120 s timeout. The dropped entries were ±3.95e-323
+   (about 48k of them), i.e. gradient components that are zero widened outward to denormals.
+
+So the out-of-bounds write in `duplicateCols` follows from an LP that violates SoPlex 4.0.2's
+presolve precondition, not from NaN rows (none were seen).
+
+**Fix (2026-10-05)**
+
+ibex-fork `6b1b2c10` sets `SoPlex::SIMPLIFIER_OFF` in `LPSolver::init`: presolve
+(`SPxMainSM`) never runs, the simplex takes the LP as built, and the Neumaier–Shcherbina
+certificates read it as given. `CMakeLists.txt` pins IBEX `6b1b2c10`, which also carries the
+BUG-019 fixes. Test: `DrealBugsRegressionDeathTest.Bug014_XTaylorBothSurvivesF3` (SIGBUS 3/3
+before, passes 3/3 after). The entry's 8-combination × 3-run matrix on the fixed build:
+no signal in any of the 24 runs (`timeout 300`, 12 at a time): `--obbt` F5 `delta-sat` 3/3, F6
+`unsat` 3/3; `--polytope` F1 `delta-sat` 3/3, F4 and F6 `unsat` 3/3; `--polytope-linearizer
+both` F5 `delta-sat` 3/3, F2 and F3 timeouts 3/3 (they had crashed at about 8 s and at once).
+The verdicts agree with the July sweep's.
+
+The corpus paths above moved: F1–F3 are in `~/Documents/expressivity/v1/benchmarks/tanh_coupling/`
+and F4–F6 in `~/Documents/expressivity/v2/benchmarks/forall/` (same file names).
+
 **Binary**
 
 Sweep binary copy `dreal4_60fca6f69` (= `gcc_build/dreal4`, stamp `f51f78b8e <dirty>`, built
 2026-07-23 07:20, IBEX fork @ `b5e7a212`); cross-checked against `cmake-build-release/dreal4`
 @ `fc4c3da04` (fork @ `d9930909`) and `cmake-build-debug/dreal4`. Repro artifacts (24-run
 matrix, isolation battery, lldb logs): `/private/tmp/claude-501/…/tmp/{repro1,isolate,lldb_*.txt}`
-(ephemeral).
+(ephemeral). Fixed on `gcc_build/dreal4` with IBEX `6b1b2c10`.
 
 ---
 
@@ -487,6 +521,55 @@ re-checked on a binary built after it.
 Reproduced on `gcc_build/dreal4` (Commit `6f02d4010`, CAPD `b353e170`, built 2026-10-05 against
 the MacOSX 26.5 SDK) and `dreal_popl27` (Commit `c294eb435`, built 2026-07-13). Fixed on
 `gcc_build/dreal4` with CAPD `03dc5628`.
+
+---
+
+## BUG-019 — The LP certificates read non-finite data as a proof: an empty or NaN interval passed the Neumaier–Shcherbina infeasibility test, and Aᵀy was a plain floating-point product (latent SOUNDNESS, `--polytope`/`--obbt` only; fixed 2026-10-05)
+
+**Symptom / Description**
+
+Latent, found by code reading during the BUG-014 work; no false verdict was observed. ibex's
+`LPSolver` certifies an LP result with Neumaier–Shcherbina post-processing before dReal trusts
+it (`Mode::Certified`; `--polytope`, `--obbt`, `--forall-polytope`). Two defects made a
+certificate possible from data that proves nothing:
+
+- `neumaier_shcherbina_infeasibility_test` (`ibex-fork/src/numeric/ibex_LPSolver.cpp`) returned
+  `!d.contains(0.0)` for `d = (Aᵀλ)·X − λ·b`. `contains` is false on an empty interval, and gaol
+  reads a NaN bound, an infinite scalar or `±inf · interval` as empty. So a NaN or infinite entry
+  in A, b, the bounds or the Farkas ray made the LP `InfeasibleProved`, and `CtcPolytopeHull` /
+  `ContractorIbexObbt` then empty the box — SOUNDNESS (asserts φ T-unsatisfiable on a
+  T-satisfiable φ — false unsat) whenever SoPlex wrongly reports infeasibility on such data.
+- Both certificates computed Aᵀy as `Matrix * Vector`, a double product, not an enclosure, so a
+  certificate within rounding of 0 could be wrong even on finite data.
+
+Non-finite rows could reach the LP: `LPSolver::add_constraint`'s `isfinite` checks are asserts
+(compiled out in the Release IBEX build), and X-Taylor's emptiness checks look only at component
+0 of the gradient, so an empty component j > 0 became a NaN coefficient.
+
+**Reproducer(s)**
+
+No end-to-end false `unsat` was constructed: SoPlex must also misreport infeasibility on the
+bad data. Unit-level, in dReal's suite (red before the fix):
+
+- `LpSolverBoundary.NonFiniteRowIsRejected` (`contractor_ibex_polytope_linearizer_test.cc`):
+  `add_constraint` with a NaN coefficient, an infinite bound, or an infinite coefficient
+  accepted the row silently.
+- `ContractorIbexPolytopeLinearizerTest.EmptyGradientComponentSkipsRow`: `x + sqrt(y) ≤ 1` on
+  `y = [0, 0]` under X-Taylor. Once `add_constraint` refused non-finite rows (ibex-fork
+  `b52f8626`), this Prune threw `std::invalid_argument`, which shows that X-Taylor emitted a
+  NaN row there; it passes from `03712a0a` on.
+
+**Fix (2026-10-05)**, ibex-fork `b52f8626` and `03712a0a` (pinned via `6b1b2c10`): both
+certificates use `Matrix * IntervalVector` for Aᵀy; an empty `d` or objective is a failed
+certificate and `minimize()` reports `OptimalProved` only when post-processing succeeds;
+`add_constraint` throws on a non-finite coefficient or bound; X-Taylor checks every coefficient
+and the bound and skips the row (`BadConstraint`, sound in RELAX mode). The empty-`d` and
+rigorous-product changes have no red test: no deterministic input makes SoPlex hand back a
+non-finite Farkas ray, so they are guarded by review only.
+
+**Binary**
+
+`gcc_build/dreal4` with IBEX `b5e7a212` (before) and `6b1b2c10` (after), 2026-10-05.
 
 ---
 

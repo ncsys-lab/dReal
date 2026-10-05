@@ -49,6 +49,7 @@
 // UnboundedBoxIsIdentity test pins that caveat behaviorally.
 #include <cmath>
 #include <limits>
+#include <stdexcept>
 
 #include <dreal/util/rounding.h>
 
@@ -291,6 +292,47 @@ TEST_F(ContractorIbexPolytopeLinearizerTest, UnboundedBoxIsIdentity) {
   EXPECT_EQ(cs.box()[x_].ub(), std::numeric_limits<double>::infinity());
   EXPECT_EQ(cs.box()[y_].lb(), 0.0);
   EXPECT_EQ(cs.box()[y_].ub(), 1.0);
+}
+
+// BUG-019 (docs/dreal-bugs.md): ibex's LPSolver::add_constraint checked
+// finiteness only with asserts, which the Release IBEX build strips, so a NaN
+// or infinite row reached SoPlex (it has no NaN checks) and the
+// Neumaier–Shcherbina certificates, where a NaN reads as an empty interval
+// and an empty d passed the infeasibility test. A non-finite row must be
+// refused.
+TEST(LpSolverBoundary, NonFiniteRowIsRejected) {
+  ibex::LPSolver lp(2, ibex::LPSolver::Mode::Certified);
+  ibex::Vector row(2);
+  row[0] = 1.0;
+  row[1] = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_THROW(lp.add_constraint(row, ibex::LEQ, 1.0), std::invalid_argument);
+  row[1] = 0.0;
+  EXPECT_THROW(lp.add_constraint(row, ibex::LEQ, std::numeric_limits<double>::infinity()),
+               std::invalid_argument);
+  ibex::Vector inf_row(2);
+  inf_row[0] = std::numeric_limits<double>::infinity();
+  inf_row[1] = 0.0;
+  EXPECT_THROW(lp.add_constraint(-1.0, inf_row, 1.0), std::invalid_argument);
+}
+
+// X-Taylor's emptiness checks look only at component 0 of the gradient, so an
+// empty gradient in a later component (sqrt'(y) = 0.5/sqrt(y) at y = [0, 0])
+// became a NaN coefficient in an LP row. With the LP refusing such rows, the
+// linearizer must skip the row itself (sound in RELAX mode): Prune must not
+// throw, and the real solution x = 1, y = 0 must stay.
+TEST_F(ContractorIbexPolytopeLinearizerTest, EmptyGradientComponentSkipsRow) {
+  const vector<Formula> formulas{{x_ + sqrt(y_) <= 1.0}};
+  box_[x_] = Box::Interval(0.0, 2.0);
+  box_[y_] = Box::Interval(0.0, 0.0);
+  for (const PolytopeLinearizer lin :
+       {PolytopeLinearizer::kXTaylor, PolytopeLinearizer::kBoth}) {
+    ContractorStatus cs{box_};
+    const ContractorIbexPolytope ctc{formulas, box_, MakeConfig(lin)};
+    const UpwardRoundingScope rms_;
+    EXPECT_NO_THROW(ctc.Prune(&cs, rms_.token()));
+    ASSERT_FALSE(cs.box().empty()) << "x = 1, y = 0 satisfies the constraint [SOUNDNESS GATE]";
+    ExpectContains(cs.box()[x_], 1.0);
+  }
 }
 
 }  // namespace
