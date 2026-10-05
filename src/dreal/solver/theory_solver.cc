@@ -43,7 +43,6 @@ namespace dreal {
 using std::cout;
 using std::make_unique;
 using std::numeric_limits;
-using std::set;
 using std::vector;
 
 TheorySolver::TheorySolver(const Config& config)
@@ -414,7 +413,7 @@ const Box& TheorySolver::GetModel() const {
   return model_;
 }
 
-const set<Formula>& TheorySolver::GetExplanation() const {
+const FormulaSet& TheorySolver::GetExplanation() const {
   return explanation_;
 }
 

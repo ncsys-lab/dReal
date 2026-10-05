@@ -22,11 +22,9 @@
 using std::count_if;
 using std::domain_error;
 using std::equal_to;
-using std::map;
 using std::ostringstream;
 using std::pair;
 using std::runtime_error;
-using std::set;
 using std::string;
 using std::unordered_map;
 using std::unordered_set;
@@ -429,7 +427,7 @@ TEST_F(SymbolicExpressionTest, GetConstantTermInAddition) {
 
 TEST_F(SymbolicExpressionTest, GetTermsInAddition) {
   const Expression e{3 + 2 * x_ + 3 * y_};
-  const map<Expression, double> terms{get_expr_to_coeff_map_in_addition(e)};
+  const ExpressionMap<double> terms{get_expr_to_coeff_map_in_addition(e)};
   EXPECT_EQ(terms.at(x_), 2.0);
   EXPECT_EQ(terms.at(y_), 3.0);
 }
@@ -445,7 +443,7 @@ TEST_F(SymbolicExpressionTest, GetConstantFactorInMultiplication) {
 
 TEST_F(SymbolicExpressionTest, GetProductsInMultiplication) {
   const Expression e{2 * x_ * y_ * y_ * pow(z_, y_)};
-  const map<Expression, Expression> products{
+  const ExpressionMap<Expression> products{
       get_base_to_exponent_map_in_multiplication(e)};
   EXPECT_PRED2(ExprEqual, products.at(x_), 1.0);
   EXPECT_PRED2(ExprEqual, products.at(y_), 2.0);
@@ -1162,7 +1160,7 @@ GTEST_TEST(ExpressionTest, CompatibleWithUnorderedMap) {
 // This test checks whether symbolic::Expression is compatible with
 // std::set.
 GTEST_TEST(ExpressionTest, CompatibleWithSet) {
-  set<Expression> set;
+  ExpressionSet set;
   set.emplace(Expression{Variable{"a"}});
   set.emplace(Expression{Variable{"b"}});
 }
@@ -1170,7 +1168,7 @@ GTEST_TEST(ExpressionTest, CompatibleWithSet) {
 // This test checks whether symbolic::Expression is compatible with
 // std::map.
 GTEST_TEST(ExpressionTest, CompatibleWithMap) {
-  map<Expression, Expression> map;
+  ExpressionMap<Expression> map;
   map.emplace(Expression{Variable{"a"}}, Expression{Variable{"b"}});
 }
 

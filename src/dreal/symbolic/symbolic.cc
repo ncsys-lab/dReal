@@ -31,7 +31,6 @@ using std::function;
 using std::inserter;
 using std::ostream;
 using std::pair;
-using std::set;
 using std::string;
 using std::to_string;
 using std::transform;
@@ -60,9 +59,9 @@ Formula iff(const Variable& v1, const Variable& v2) {
   return iff(Formula{v1}, Formula{v2});
 }
 
-set<Formula> map(const set<Formula>& formulas,
+FormulaSet map(const FormulaSet& formulas,
                  const function<Formula(const Formula&)>& func) {
-  set<Formula> result;
+  FormulaSet result;
   transform(formulas.cbegin(), formulas.cend(),
             inserter(result, result.begin()), func);
   return result;
@@ -114,7 +113,7 @@ bool is_clause(const Formula& f) {
   DREAL_UNREACHABLE();
 }
 
-set<Formula> get_clauses(const Formula& f) {
+FormulaSet get_clauses(const Formula& f) {
   if (is_conjunction(f)) {
 #ifndef NDEBUG
     for (const Formula& clause : get_operands(f)) {

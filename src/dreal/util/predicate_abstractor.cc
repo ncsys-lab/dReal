@@ -28,7 +28,6 @@
 namespace dreal {
 
 using std::cout;
-using std::set;
 using std::stringstream;
 using std::vector;
 
@@ -78,7 +77,7 @@ Formula PredicateAbstractor::Convert(const Formula& f) {
 
 Formula PredicateAbstractor::Convert(const vector<Formula>& formulas) {
   return Convert(
-      make_conjunction(set<Formula>{formulas.begin(), formulas.end()}));
+      make_conjunction(FormulaSet{formulas.begin(), formulas.end()}));
 }
 
 Formula PredicateAbstractor::Visit(const Formula& f) {
@@ -161,14 +160,14 @@ Formula PredicateAbstractor::VisitLessThanOrEqualTo(const Formula& f) {
 }
 
 Formula PredicateAbstractor::VisitConjunction(const Formula& f) {
-  const set<Formula> operands{
+  const FormulaSet operands{
       map(get_operands(f),
           [this](const Formula& formula) { return this->Visit(formula); })};
   return make_conjunction(operands);
 }
 
 Formula PredicateAbstractor::VisitDisjunction(const Formula& f) {
-  const set<Formula> operands{
+  const FormulaSet operands{
       map(get_operands(f),
           [this](const Formula& formula) { return this->Visit(formula); })};
   return make_disjunction(operands);

@@ -51,9 +51,9 @@ class ContractorStatus {
   DynamicBitset& mutable_output();
 
   /// Returns explanation, a list of formula responsible for the unsat.
-  std::set<Formula> Explanation() const;
+  FormulaSet Explanation() const;
 
-  const std::set<Formula>& UsedConstraints() const { return used_constraints_; }
+  const FormulaSet& UsedConstraints() const { return used_constraints_; }
 
   /// Add a formula @p f into the used constraints.
   void AddUsedConstraint(const Formula& f);
@@ -97,14 +97,14 @@ class ContractorStatus {
 
   // A set of constraints used during pruning processes. This is an
   // over-approximation of an explanation.
-  std::set<Formula> used_constraints_;
+  FormulaSet used_constraints_;
 
   // ODE constraints that an inconclusive Lohner pass (CAPD divergence etc.)
   // could not record in used_constraints_. Spliced into the explanation as
   // non-expanding leaves so only those touching the relational refutation
   // footprint enter the lemma (avoids dragging in the whole densely-chained
   // BMC ODE web). See AddInconclusiveOde and GenerateExplanation.
-  std::set<Formula> inconclusive_odes_;
+  FormulaSet inconclusive_odes_;
 
   // A set of variables directly responsible for the unsat result. This
   // is used to generate an explanation.

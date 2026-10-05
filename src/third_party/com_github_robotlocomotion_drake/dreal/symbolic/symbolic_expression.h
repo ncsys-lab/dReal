@@ -6,6 +6,7 @@
 #include <limits>
 #include <map>
 #include <ostream>
+#include <set>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -218,8 +219,8 @@ class Expression {
   bool EqualTo(const Expression& e) const;
 
   /** Provides lexicographical ordering between expressions.
-      This function is used as a compare function in map<Expression> and
-      set<Expression> via std::less<dreal::drake::symbolic::Expression>. */
+      This function is used as a compare function in ExpressionMap and
+      ExpressionSet via ExpressionLess. */
   bool Less(const Expression& e) const;
 
   /** Checks if this symbolic expression is convertible to Polynomial. */
@@ -495,6 +496,19 @@ class Expression {
   ExpressionCell* ptr_{nullptr};
 };
 
+/** Orders expressions by Expression::Less. It is the comparator of every
+ *  ordered container keyed by Expression: std::less<Expression> would call the
+ *  symbolic operator<, which builds a Formula, not a bool. */
+struct ExpressionLess {
+  bool operator()(const Expression& lhs, const Expression& rhs) const {
+    return lhs.Less(rhs);
+  }
+};
+
+using ExpressionSet = std::set<Expression, ExpressionLess>;
+template <typename T>
+using ExpressionMap = std::map<Expression, T, ExpressionLess>;
+
 Expression operator+(const Expression& lhs, const Expression& rhs);
 Expression operator+(const Expression& lhs, Expression&& rhs);
 Expression operator+(Expression&& lhs, const Expression& rhs);
@@ -670,7 +684,7 @@ double get_constant_in_addition(const Expression& e);
  *  maps 'x' to 2 and 'y' to 3.
  *  @pre @p e is an addition expression.
  */
-const std::map<Expression, double>& get_expr_to_coeff_map_in_addition(
+const ExpressionMap<double>& get_expr_to_coeff_map_in_addition(
     const Expression& e);
 /** Returns the constant part of the multiplication expression @p e. For
  *  instance, given 7 * x^2 * y^3, it returns 7.
@@ -682,7 +696,7 @@ double get_constant_in_multiplication(const Expression& e);
  * return value maps 'x' to 2, 'y' to 3, and 'z' to 'x'.
  *  @pre @p e is a multiplication expression.
  */
-const std::map<Expression, Expression>&
+const ExpressionMap<Expression>&
 get_base_to_exponent_map_in_multiplication(const Expression& e);
 
 /** Returns the conditional formula in the if-then-else expression @p e.
@@ -722,15 +736,6 @@ struct hash_value<symbolic::Expression> {
 }  // namespace dreal
 
 namespace std {
-/* Provides std::less<dreal::drake::symbolic::Expression>. */
-template <>
-struct less<dreal::drake::symbolic::Expression> {
-  bool operator()(const dreal::drake::symbolic::Expression& lhs,
-                  const dreal::drake::symbolic::Expression& rhs) const {
-    return lhs.Less(rhs);
-  }
-};
-
 /* Provides std::equal_to<dreal::drake::symbolic::Expression>. */
 template <>
 struct equal_to<dreal::drake::symbolic::Expression> {

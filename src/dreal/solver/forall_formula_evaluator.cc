@@ -31,7 +31,6 @@
 namespace dreal {
 
 using std::ostream;
-using std::set;
 using std::vector;
 
 namespace {
@@ -40,7 +39,7 @@ namespace {
 // evaluator for each (eᵢ(x, y) ≥ 0) and return a vector of
 // evaluators.
 vector<RelationalFormulaEvaluator> BuildFormulaEvaluators(
-    const set<Formula>& disjuncts) {
+    const FormulaSet& disjuncts) {
   vector<RelationalFormulaEvaluator> evaluators;
   evaluators.reserve(disjuncts.size());
   for (const Formula& disjunct : disjuncts) {
@@ -60,7 +59,7 @@ vector<RelationalFormulaEvaluator> BuildFormulaEvaluators(const Formula& f) {
   if (is_disjunction(quantified_formula)) {
     return BuildFormulaEvaluators(get_operands(quantified_formula));
   } else {
-    return BuildFormulaEvaluators(std::set<Formula>{quantified_formula});
+    return BuildFormulaEvaluators(FormulaSet{quantified_formula});
   }
 }
 }  // namespace

@@ -70,7 +70,7 @@ TEST(ExplanationInconclusiveOde, RelevantOdeReachesExplanation) {
   const Formula ode = (t + x <= 1.0);             // shares witness var t
   cs.AddInconclusiveOde(ode);
 
-  const std::set<Formula> e = cs.Explanation();
+  const FormulaSet e = cs.Explanation();
   EXPECT_EQ(e.count(emptying), 1u);
   EXPECT_EQ(e.count(ode), 1u) << "the responsible inconclusive ODE must be in `E`";
 }
@@ -111,7 +111,7 @@ TEST(ExplanationInconclusiveOde, SplicedOnWitnessNotClosure) {
   const Formula ode_closure_only = (u == 3.0);    // touches seen (u) but not witness
   cs.AddInconclusiveOde(ode_closure_only);
 
-  const std::set<Formula> e = cs.Explanation();
+  const FormulaSet e = cs.Explanation();
   EXPECT_EQ(e.count(linking), 1u);                // closure still works for relational
   EXPECT_EQ(e.count(ode_closure_only), 0u)
       << "ODE must be keyed on the witness, not the broad closure `seen`";

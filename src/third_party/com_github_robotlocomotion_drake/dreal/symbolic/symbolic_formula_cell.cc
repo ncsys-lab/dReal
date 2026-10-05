@@ -27,7 +27,6 @@ using std::lexicographical_compare;
 using std::ostream;
 using std::ostringstream;
 using std::runtime_error;
-using std::set;
 using std::string;
 
 FormulaCell::FormulaCell(const FormulaKind k, const size_t hash, const size_t alpha_hash,
@@ -76,20 +75,20 @@ bool RelationalFormulaCell::Less(const FormulaCell& f) const {
   return e_rhs_.Less(rel_f.e_rhs_);
 }
 
-size_t alpha_hash_set(const set<Formula> &set) {
+size_t alpha_hash_set(const FormulaSet &set) {
   std::multiset<size_t> hashes;
   for (const auto&k : set) hashes.insert(k.get_al_hash());
   return hash_range(hashes.cbegin(), hashes.cend());
 }
 
-NaryFormulaCell::NaryFormulaCell(const FormulaKind k, set<Formula> formulas)
-    : FormulaCell{k, hash_value<set<Formula>>{}(formulas), alpha_hash_set(formulas),
+NaryFormulaCell::NaryFormulaCell(const FormulaKind k, FormulaSet formulas)
+    : FormulaCell{k, hash_value<FormulaSet>{}(formulas), alpha_hash_set(formulas),
         any_of(formulas.begin(), formulas.end(), [](const Formula& f) { return f.include_ite(); }),
         any_of(formulas.begin(), formulas.end(), [](const Formula& f) { return f.include_ode(); }),
                   ExtractFreeVariables(formulas)},
       formulas_{std::move(formulas)} {}
 
-Variables NaryFormulaCell::ExtractFreeVariables(const set<Formula>& formulas) {
+Variables NaryFormulaCell::ExtractFreeVariables(const FormulaSet& formulas) {
   Variables ret{};
   for (const auto& f : formulas) {
     ret.insert(f.GetFreeVariables());
@@ -118,7 +117,7 @@ bool NaryFormulaCell::Less(const FormulaCell& f) const {
 }
 
 ostream& NaryFormulaCell::DisplayWithOp(ostream& os, const string& op) const {
-  const set<Formula>& formulas{get_operands()};
+  const FormulaSet& formulas{get_operands()};
   auto it(formulas.cbegin());
   assert(formulas.size() > 1U);
   os << "(";
@@ -425,13 +424,13 @@ ostream& FormulaLeq::Display(ostream& os) const {
             << ")";
 }
 
-FormulaAnd::FormulaAnd(set<Formula> formulas)
+FormulaAnd::FormulaAnd(FormulaSet formulas)
     : NaryFormulaCell{FormulaKind::And, std::move(formulas)} {
   assert(get_operands().size() > 1U);
 }
 
 FormulaAnd::FormulaAnd(const Formula& f1, const Formula& f2)
-    : NaryFormulaCell{FormulaKind::And, set<Formula>{f1, f2}} {}
+    : NaryFormulaCell{FormulaKind::And, FormulaSet{f1, f2}} {}
 
 bool FormulaAnd::Evaluate(const Environment& env) const {
   const auto& operands = get_operands();
@@ -467,13 +466,13 @@ ostream& FormulaAnd::Display(ostream& os) const {
   return DisplayWithOp(os, "and");
 }
 
-FormulaOr::FormulaOr(set<Formula> formulas)
+FormulaOr::FormulaOr(FormulaSet formulas)
     : NaryFormulaCell{FormulaKind::Or, std::move(formulas)} {
   assert(get_operands().size() > 1U);
 }
 
 FormulaOr::FormulaOr(const Formula& f1, const Formula& f2)
-    : NaryFormulaCell{FormulaKind::Or, set<Formula>{f1, f2}} {}
+    : NaryFormulaCell{FormulaKind::Or, FormulaSet{f1, f2}} {}
 
 bool FormulaOr::Evaluate(const Environment& env) const {
   const auto& operands = get_operands();

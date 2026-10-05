@@ -15,7 +15,7 @@ namespace symbolic {
 
 /** Represents a set of variables.
  *
- * This class is based on std::set<Variable>. The intent is to add things that
+ * This class is based on VariableSet. The intent is to add things that
  * we need including set-union (Variables::insert, operator+, operator+=),
  * set-minus (Variables::erase, operator-, operator-=), and subset/superset
  * checking functions (Variables::IsSubsetOf, Variables::IsSupersetOf,
@@ -29,11 +29,11 @@ class Variables {
   Variables(Variables&&) = default;
   Variables& operator=(Variables&&) = default;
 
-  typedef typename std::set<Variable>::size_type size_type;
-  typedef typename std::set<Variable>::iterator iterator;
-  typedef typename std::set<Variable>::const_iterator const_iterator;
-  typedef typename std::set<Variable>::reverse_iterator reverse_iterator;
-  typedef typename std::set<Variable>::const_reverse_iterator
+  typedef typename VariableSet::size_type size_type;
+  typedef typename VariableSet::iterator iterator;
+  typedef typename VariableSet::const_iterator const_iterator;
+  typedef typename VariableSet::reverse_iterator reverse_iterator;
+  typedef typename VariableSet::const_reverse_iterator
       const_reverse_iterator;
 
   /** Default constructor. */
@@ -124,10 +124,10 @@ class Variables {
   friend Variables intersect(const Variables& vars1, const Variables& vars2);
 
  private:
-  /* Constructs from std::set<Variable>. */
-  explicit Variables(std::set<Variable> vars);
+  /* Constructs from VariableSet. */
+  explicit Variables(VariableSet vars);
 
-  std::set<Variable> vars_;
+  VariableSet vars_;
 };
 
 /** Updates @p var1 with the result of set-union(@p var1, @p var2). */

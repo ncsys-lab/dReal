@@ -19,7 +19,6 @@
 
 namespace dreal {
 
-using std::set;
 
 Formula Nnfizer::Convert(const Formula& f,
                          const bool push_negation_into_relationals) const {
@@ -139,7 +138,7 @@ Formula Nnfizer::VisitConjunction(
     const bool push_negation_into_relationals) const {
   // NNF(f₁ ∧ ... ∨ fₙ)    = NNF(f₁) ∧ ... ∧ NNF(fₙ)
   // NNF(¬(f₁ ∧ ... ∨ fₙ)) = NNF(¬f₁) ∨ ... ∨ NNF(¬fₙ)
-  const set<Formula> new_operands{map(
+  const FormulaSet new_operands{map(
       get_operands(f),
       [this, polarity, push_negation_into_relationals](const Formula& formula) {
         return this->Visit(formula, polarity, push_negation_into_relationals);
@@ -152,7 +151,7 @@ Formula Nnfizer::VisitDisjunction(
     const bool push_negation_into_relationals) const {
   // NNF(f₁ ∨ ... ∨ fₙ)    = NNF(f₁) ∨ ... ∨ NNF(fₙ)
   // NNF(¬(f₁ ∨ ... ∨ fₙ)) = NNF(¬f₁) ∧ ... ∧ NNF(¬fₙ)
-  const set<Formula> new_operands{map(
+  const FormulaSet new_operands{map(
       get_operands(f),
       [this, polarity, push_negation_into_relationals](const Formula& formula) {
         return this->Visit(formula, polarity, push_negation_into_relationals);

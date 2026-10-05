@@ -41,7 +41,7 @@ namespace dreal
         if (!DREAL_EXPERIMENTAL_SAT_AUDIT_ENABLED) return;
         DREAL_ASSERT(lit != 0);
 
-        static std::set<Variable> seen_literals;
+        static VariableSet seen_literals;
         if (def && !seen_literals.count(*def)) {
             literal_log << "def:\t" << ::abs(lit) << " := " << *def << '\n';
             seen_literals.emplace(*def);

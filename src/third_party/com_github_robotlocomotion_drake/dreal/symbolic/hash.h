@@ -53,17 +53,17 @@ struct hash_value<std::vector<T>> {
 };
 
 /** Computes the hash value of a set @p s. */
-template <class T>
-struct hash_value<std::set<T>> {
-  size_t operator()(const std::set<T>& s) const {
+template <class T, class Compare>
+struct hash_value<std::set<T, Compare>> {
+  size_t operator()(const std::set<T, Compare>& s) const {
     return hash_range(s.begin(), s.end());
   }
 };
 
 /** Computes the hash value of a map @p map. */
-template <class T1, class T2>
-struct hash_value<std::map<T1, T2>> {
-  size_t operator()(const std::map<T1, T2>& map) const {
+template <class T1, class T2, class Compare>
+struct hash_value<std::map<T1, T2, Compare>> {
+  size_t operator()(const std::map<T1, T2, Compare>& map) const {
     return hash_range(map.begin(), map.end());
   }
 };

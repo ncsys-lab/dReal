@@ -31,7 +31,6 @@
 namespace dreal {
 
 using std::cout;
-using std::set;
 using std::string;
 using std::to_string;
 using std::vector;
@@ -93,7 +92,7 @@ vector<Formula> TseitinCnfizer::Convert(const Formula& f) {
   for (auto const& p : map_) {
     if (get_variable(head).equal_to(p.first)) {
       if (is_conjunction(p.second)) {
-        const set<Formula>& conjuncts(get_operands(p.second));
+        const FormulaSet& conjuncts(get_operands(p.second));
         copy(conjuncts.begin(), conjuncts.end(), back_inserter(ret));
       } else {
         ret.push_back(p.second);
@@ -132,9 +131,9 @@ Formula TseitinCnfizer::VisitForall(const Formula& f) {
   const Variables& quantified_variables{get_quantified_variables(f)};  // y
   const Formula& quantified_formula{get_quantified_formula(f)};  // φ(x, y)
   // clause₁(x, y) ∧ ... ∧ clauseₙ(x, y)
-  const set<Formula> clauses{
+  const FormulaSet clauses{
       get_clauses(naive_cnfizer_.Convert(quantified_formula))};
-  const set<Formula> new_clauses{
+  const FormulaSet new_clauses{
       ::dreal::map(clauses, [&quantified_variables](const Formula& clause) {
         DREAL_ASSERT(is_clause(clause));
         if (HaveIntersection(clause.GetFreeVariables(), quantified_variables)) {
@@ -160,7 +159,7 @@ Formula TseitinCnfizer::VisitConjunction(const Formula& f) {
   // Introduce a new Boolean variable, `bvar` for `f` and record the
   // relation `bvar ⇔ f`.
   static size_t id{0};
-  const set<Formula> transformed_operands{::dreal::map(
+  const FormulaSet transformed_operands{::dreal::map(
       get_operands(f),
       [this](const Formula& formula) { return this->Visit(formula); })};
   const Variable bvar{string("conj") + to_string(id++),  // lint: allow int
@@ -171,7 +170,7 @@ Formula TseitinCnfizer::VisitConjunction(const Formula& f) {
 
 Formula TseitinCnfizer::VisitDisjunction(const Formula& f) {
   static size_t id{0};
-  const set<Formula>& transformed_operands{::dreal::map(
+  const FormulaSet& transformed_operands{::dreal::map(
       get_operands(f),
       [this](const Formula& formula) { return this->Visit(formula); })};
   const Variable bvar{string("disj") + to_string(id++),  // lint: allow int
@@ -262,9 +261,9 @@ void CnfizeNegation(const Variable& b, const Formula& f,
 void CnfizeConjunction(const Variable& b, const Formula& f,
                        vector<Formula>* clauses) {
   // operands = {b₁, ..., bₙ}
-  const set<Formula>& operands{get_operands(f)};
+  const FormulaSet& operands{get_operands(f)};
   // negated_operands = {¬b₁, ..., ¬bₙ}
-  const set<Formula>& negated_operands{
+  const FormulaSet& negated_operands{
       map(operands, [](const Formula& formula) { return !formula; })};
   Formula ret{Formula::True()};
   for (const Formula& b_i : operands) {
@@ -282,7 +281,7 @@ void CnfizeConjunction(const Variable& b, const Formula& f,
 void CnfizeDisjunction(const Variable& b, const Formula& f,
                        vector<Formula>* clauses) {
   // negated_operands = {¬b₁, ..., ¬bₙ}
-  const set<Formula>& negated_operands{
+  const FormulaSet& negated_operands{
       map(get_operands(f), [](const Formula& formula) { return !formula; })};
   Add(!b || f, clauses);  // (¬b ∨ b₁ ∨ ... ∨ bₙ)
   for (const Formula& neg_b_i : negated_operands) {

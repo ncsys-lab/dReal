@@ -2,8 +2,10 @@
 
 #include <cstddef>
 #include <functional>
+#include <map>
 #include <memory>
 #include <ostream>
+#include <set>
 #include <string>
 
 #include "dreal/symbolic/hash.h"
@@ -90,6 +92,19 @@ class Variable {
 
 std::ostream& operator<<(std::ostream& os, Variable::Type type);
 
+/** Orders variables by Variable::less. It is the comparator of every ordered
+ *  container keyed by Variable: std::less<Variable> would call the symbolic
+ *  operator<, which builds a Formula, not a bool. */
+struct VariableLess {
+  bool operator()(const Variable& lhs, const Variable& rhs) const {
+    return lhs.less(rhs);
+  }
+};
+
+using VariableSet = std::set<Variable, VariableLess>;
+template <typename T>
+using VariableMap = std::map<Variable, T, VariableLess>;
+
 }  // namespace symbolic
 
 /** Computes the hash value of a variable. */
@@ -102,15 +117,6 @@ struct hash_value<symbolic::Variable> {
 }  // namespace dreal
 
 namespace std {
-/* Provides std::less<dreal::drake::symbolic::Variable>. */
-template <>
-struct less<dreal::drake::symbolic::Variable> {
-  bool operator()(const dreal::drake::symbolic::Variable& lhs,
-                  const dreal::drake::symbolic::Variable& rhs) const {
-    return lhs.less(rhs);
-  }
-};
-
 /* Provides std::equal_to<dreal::drake::symbolic::Variable>. */
 template <>
 struct equal_to<dreal::drake::symbolic::Variable> {

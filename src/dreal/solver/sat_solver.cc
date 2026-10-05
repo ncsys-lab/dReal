@@ -32,7 +32,6 @@
 namespace dreal {
 
 using std::cout;
-using std::set;
 using std::vector;
 
 SatSolver::SatSolver(const Config& config) : cadical(new CaDiCaL::Solver) {
@@ -293,7 +292,7 @@ void SatSolver::learn(const int new_lit) {
   DREAL_ASSERT(buffer_i == expected_clause_size);
 
   sat_log_label_clause("SatSolver::learn");
-  std::set<Formula> neg_conjunction;
+  FormulaSet neg_conjunction;
   for (int i = 0; i < expected_clause_size; i++) {
     const int lit = buffer[i];
     sat_log_literal(lit);

@@ -19,10 +19,16 @@
 #include <gtest/gtest.h>
 #include "dreal/symbolic/symbolic.h"
 
+#include <type_traits>
+
 namespace dreal
 {
     namespace
     {
+        // The ordered set of T ∈ {Formula, Expression}, under T's own comparator.
+        template <typename T>
+        using SymbolicSet = std::conditional_t<std::is_same_v<T, Formula>, FormulaSet, ExpressionSet>;
+
         class PatternMatchingTest : public ::testing::Test
         {
         protected:
@@ -93,7 +99,7 @@ namespace dreal
             for (const auto& match : matches) trie.insert(match);
             for (const auto& miss : misses1) trie.insert(miss);
             for (const auto& miss : misses2) trie2.insert(miss);
-            std::set<T1> found;
+            SymbolicSet<T1> found;
             for (const auto& [form, op_subs] : trie.find_matches(pattern, Box{}, true, random_state).first) {
                 EXPECT_TRUE(op_subs.has_value()); // trie.find_matches(..., return_subs_maps=true)
                 const auto& subs = *op_subs;
@@ -129,7 +135,7 @@ namespace dreal
         TEST_F(PatternMatchingTest, SimpleClauseFinder) {
             // PatternMatchingTrie trie;
             DeBruijnCanonicalizer<Formula> trie;
-            std::set literals{
+            FormulaSet literals{
                 y1 == sin(x1),
                 y2 == sin(x2),
                 y1 == atan(x1),

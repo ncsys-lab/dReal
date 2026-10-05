@@ -24,7 +24,6 @@
 #include "dreal/symbolic/symbolic.h"
 #include "dreal/util/assert.h"
 
-using std::set;
 using std::vector;
 
 namespace dreal {
@@ -50,7 +49,7 @@ class TseitinCnfizerTest : public ::testing::Test {
   ::testing::AssertionResult CnfChecker(const Formula& f) {
     const vector<Formula> clauses{cnfizer_.Convert(f)};
     const Formula f_cnf{
-        make_conjunction(set<Formula>{clauses.begin(), clauses.end()})};
+        make_conjunction(FormulaSet{clauses.begin(), clauses.end()})};
     // Check1: f_cnf should be in CNF.
     if (!is_cnf(f_cnf)) {
       return ::testing::AssertionFailure() << f_cnf << " is not in CNF.";

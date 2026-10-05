@@ -34,7 +34,7 @@ class TseitinCnfizer {
   ///
   /// @note that this member `map_` is cleared at the beginning of `Convert`
   /// method.
-  const std::map<Variable, Formula>& map() const { return map_; }
+  const VariableMap<Formula>& map() const { return map_; }
 
  private:
   Formula Visit(const Formula& f);
@@ -59,7 +59,7 @@ class TseitinCnfizer {
   //
   // @note that this map_ is cleared at the beginning of `Convert`
   // call.
-  std::map<Variable, Formula> map_;
+  VariableMap<Formula> map_;
 
   // To transform nested formulas inside of universal quantifications.
   const NaiveCnfizer naive_cnfizer_{};

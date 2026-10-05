@@ -19,7 +19,7 @@
 // variable hashes by TYPE only (FormulaVar/ExpressionVar constructors:
 // hash_combine(41, type)) -- so the canonical operand order is
 // renaming-invariant for structurally distinct operands and falls back to the
-// underlying container order (std::set<Formula> / expr-keyed map order, i.e.
+// underlying container order (FormulaSet / expr-keyed map order, i.e.
 // variable-ID = creation order) on al_hash ties. pattern_matching_test.cc
 // flags this ordering as brittle in several `todo` comments but never tests
 // the reorder property itself. This file pins the sharpest true statements:
@@ -48,12 +48,17 @@
 #include <chrono>
 #include <set>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace dreal
 {
     namespace
     {
+        // The ordered set of T ∈ {Formula, Expression}, under T's own comparator.
+        template <typename T>
+        using SymbolicSet = std::conditional_t<std::is_same_v<T, Formula>, FormulaSet, ExpressionSet>;
+
         // The four substitution round-trip checks from
         // pattern_matching_test.cc's test_matches_and_misses, extracted for a
         // single (form, subs) match result.
@@ -79,12 +84,12 @@ namespace dreal
         // pattern_matching_test.cc), round-trips every hit, and returns the
         // set of matched atoms. The self-match is the sanity floor.
         template <typename T>
-        std::set<T> insert_and_find(const T& pattern, const std::vector<T>& candidates) {
+        SymbolicSet<T> insert_and_find(const T& pattern, const std::vector<T>& candidates) {
             DeBruijnCanonicalizer<T> trie;
             uint64_t random_state = 0;
             trie.insert(pattern);
             for (const auto& c : candidates) trie.insert(c);
-            std::set<T> found;
+            SymbolicSet<T> found;
             for (const auto& [form, op_subs] : trie.find_matches(pattern, Box{}, true, random_state).first) {
                 EXPECT_TRUE(op_subs.has_value()); // find_matches(..., return_subs_maps=true)
                 check_substitution_round_trip(pattern, form, *op_subs);
@@ -325,7 +330,7 @@ namespace dreal
             // forfeits lemma reuse (performance, never a verdict); if a future
             // canonicalizer strengthening makes this match, flip this
             // expectation -- the impl got stronger, not wrong.
-            EXPECT_EQ(found.count(inverted), 0);  // INTEGRATION-VERIFY: derived from insert_nary's al_hash-tie fallback to std::set<Formula> (variable-ID) order; if this matches instead, update the expectation and the file comment
+            EXPECT_EQ(found.count(inverted), 0);  // INTEGRATION-VERIFY: derived from insert_nary's al_hash-tie fallback to FormulaSet (variable-ID) order; if this matches instead, update the expectation and the file comment
             EXPECT_EQ(found.size(), 2);
         }
 

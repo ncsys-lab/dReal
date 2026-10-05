@@ -44,7 +44,7 @@ class TheorySolver {
   const Box& GetModel() const;
 
   /// Gets a list of used constraints.
-  const std::set<Formula>& GetExplanation() const;
+  const FormulaSet& GetExplanation() const;
 
   optional<Contractor> BuildContractor(const std::vector<Formula>& assertions,
                                        ContractorStatus* contractor_status);
@@ -61,7 +61,7 @@ class TheorySolver {
   const Config& config_;
   std::unique_ptr<Icp> icp_;
   Box model_;
-  std::set<Formula> explanation_;
+  FormulaSet explanation_;
   std::unordered_map<Formula, Contractor> contractor_cache_;
   std::unordered_map<Formula, Contractor> fwd_ode_contractor_cache_;
   std::unordered_map<Formula, Contractor> bwd_ode_contractor_cache_;

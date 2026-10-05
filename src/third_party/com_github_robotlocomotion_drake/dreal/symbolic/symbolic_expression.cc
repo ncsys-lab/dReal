@@ -22,7 +22,6 @@ namespace dreal {
 namespace drake {
 namespace symbolic {
 
-using std::map;
 using std::ostream;
 using std::ostringstream;
 using std::pair;
@@ -968,14 +967,14 @@ const Expression& get_second_argument(const Expression& e) {
 double get_constant_in_addition(const Expression& e) {
   return to_addition(e)->get_constant();
 }
-const map<Expression, double>& get_expr_to_coeff_map_in_addition(
+const ExpressionMap<double>& get_expr_to_coeff_map_in_addition(
     const Expression& e) {
   return to_addition(e)->get_expr_to_coeff_map();
 }
 double get_constant_in_multiplication(const Expression& e) {
   return to_multiplication(e)->get_constant();
 }
-const map<Expression, Expression>& get_base_to_exponent_map_in_multiplication(
+const ExpressionMap<Expression>& get_base_to_exponent_map_in_multiplication(
     const Expression& e) {
   return to_multiplication(e)->get_base_to_exponent_map();
 }

@@ -336,7 +336,7 @@ class ExpressionAdd : public ExpressionCell {
   /** Constructs ExpressionAdd from @p constant_term and @p term_to_coeff_map.
    */
   ExpressionAdd(double constant,
-                std::map<Expression, double> expr_to_coeff_map);
+                ExpressionMap<double> expr_to_coeff_map);
   bool EqualTo(const ExpressionCell& e) const override;
   bool Less(const ExpressionCell& e) const override;
   double Evaluate(const Environment& env) const override;
@@ -348,25 +348,25 @@ class ExpressionAdd : public ExpressionCell {
   /** Returns the constant. */
   double get_constant() const { return constant_; }
   /** Returns map from an expression to its coefficient. */
-  const std::map<Expression, double>& get_expr_to_coeff_map() const {
+  const ExpressionMap<double>& get_expr_to_coeff_map() const {
     return expr_to_coeff_map_;
   }
 
   // TODO(soonho): Make the following private and allow
   // only selected functions/method to use them.
   /** Returns map from an expression to its coefficient. */
-  std::map<Expression, double>& get_mutable_expr_to_coeff_map() {
+  ExpressionMap<double>& get_mutable_expr_to_coeff_map() {
     return expr_to_coeff_map_;
   }
 
  private:
   static Variables ExtractVariables(
-      const std::map<Expression, double>& expr_to_coeff_map);
+      const ExpressionMap<double>& expr_to_coeff_map);
   std::ostream& DisplayTerm(std::ostream& os, bool print_plus, double coeff,
                             const Expression& term) const;
 
   double constant_{};
-  std::map<Expression, double> expr_to_coeff_map_;
+  ExpressionMap<double> expr_to_coeff_map_;
 };
 
 /** Factory class to help build ExpressionAdd expressions.
@@ -391,7 +391,7 @@ class ExpressionAddFactory {
   /** Constructs ExpressionAddFactory with @p constant and @p
    * expr_to_coeff_map. */
   ExpressionAddFactory(double constant,
-                       std::map<Expression, double> expr_to_coeff_map);
+                       ExpressionMap<double> expr_to_coeff_map);
 
   /** Constructs ExpressionAddFactory from @p ptr. */
   explicit ExpressionAddFactory(const ExpressionAdd* ptr);
@@ -433,11 +433,11 @@ class ExpressionAddFactory {
   /* Adds expr_to_coeff_map to this factory. It calls AddConstant and AddTerm
    * methods. */
   ExpressionAddFactory& AddMap(
-      const std::map<Expression, double>& expr_to_coeff_map);
+      const ExpressionMap<double>& expr_to_coeff_map);
 
   bool get_expression_is_called_{false};
   double constant_{0.0};
-  std::map<Expression, double> expr_to_coeff_map_;
+  ExpressionMap<double> expr_to_coeff_map_;
 };
 
 /** Symbolic expression representing a multiplication of powers.
@@ -457,7 +457,7 @@ class ExpressionMul : public ExpressionCell {
  public:
   /** Constructs ExpressionMul from @p constant and @p base_to_exponent_map. */
   ExpressionMul(double constant,
-                std::map<Expression, Expression> base_to_exponent_map);
+                ExpressionMap<Expression> base_to_exponent_map);
   bool EqualTo(const ExpressionCell& e) const override;
   bool Less(const ExpressionCell& e) const override;
   double Evaluate(const Environment& env) const override;
@@ -469,26 +469,26 @@ class ExpressionMul : public ExpressionCell {
   /** Returns constant term. */
   double get_constant() const { return constant_; }
   /** Returns map from a term to its exponent. */
-  const std::map<Expression, Expression>& get_base_to_exponent_map() const {
+  const ExpressionMap<Expression>& get_base_to_exponent_map() const {
     return base_to_exponent_map_;
   }
 
   // TODO(soonho): Make the following private and allow
   // only selected functions/method to use them.
   /** Returns map from a term to its exponent. */
-  std::map<Expression, Expression>& get_mutable_base_to_exponent_map() {
+  ExpressionMap<Expression>& get_mutable_base_to_exponent_map() {
     return base_to_exponent_map_;
   }
 
  private:
   static Variables ExtractVariables(
-      const std::map<Expression, Expression>& base_to_exponent_map);
+      const ExpressionMap<Expression>& base_to_exponent_map);
   std::ostream& DisplayTerm(std::ostream& os, bool print_mul,
                             const Expression& base,
                             const Expression& exponent) const;
 
   double constant_{};
-  std::map<Expression, Expression> base_to_exponent_map_;
+  ExpressionMap<Expression> base_to_exponent_map_;
 };
 
 /** Factory class to help build ExpressionMul expressions.
@@ -513,7 +513,7 @@ class ExpressionMulFactory {
   /** Constructs ExpressionMulFactory with @p constant and @p
    * base_to_exponent_map. */
   ExpressionMulFactory(double constant,
-                       std::map<Expression, Expression> base_to_exponent_map);
+                       ExpressionMap<Expression> base_to_exponent_map);
 
   /** Constructs ExpressionMulFactory from @p ptr. */
   explicit ExpressionMulFactory(const ExpressionMul* ptr);
@@ -554,11 +554,11 @@ class ExpressionMulFactory {
   /* Adds base_to_exponent_map to this factory. It calls AddConstant and AddTerm
    * methods. */
   ExpressionMulFactory& AddMap(
-      const std::map<Expression, Expression>& base_to_exponent_map);
+      const ExpressionMap<Expression>& base_to_exponent_map);
 
   bool get_expression_is_called_{false};
   double constant_{1.0};
-  std::map<Expression, Expression> base_to_exponent_map_;
+  ExpressionMap<Expression> base_to_exponent_map_;
 };
 
 /** Symbolic expression representing division. */

@@ -38,7 +38,7 @@ namespace dreal
     template <typename T>
     void DeBruijnCanonicalizer<T>::insert_nary(const Formula& f, std::vector<Variable>& canon_var_seq) const {
         const auto& ops = get_operands(f);
-        using OSet = std::set<Formula>;
+        using OSet = FormulaSet;
         std::vector<OSet::const_iterator> order;
         order.reserve(ops.size());
         for (/*copy*/ auto it = ops.cbegin(); it != ops.cend(); ++it) order.emplace_back(it);
@@ -78,7 +78,7 @@ void DeBruijnCanonicalizer<T>::name ( \
 
     INSERT_DECL(VisitAddition) {
         const auto& a = to_addition(e);
-        using ECMap = std::map<Expression, double>;
+        using ECMap = ExpressionMap<double>;
         const ECMap& m = a->get_expr_to_coeff_map();
 
         std::vector<ECMap::const_iterator> order;
@@ -96,7 +96,7 @@ void DeBruijnCanonicalizer<T>::name ( \
 
     INSERT_DECL(VisitMultiplication) {
         const auto& a = to_multiplication(e);
-        using BEMap = std::map<Expression, Expression>;
+        using BEMap = ExpressionMap<Expression>;
         const BEMap& m = a->get_base_to_exponent_map();
 
         std::vector<BEMap::const_iterator> order;
@@ -344,7 +344,7 @@ void DeBruijnCanonicalizer<T>::name ( \
 
                 // avoid re-finding 1000s of permutations of the same clause on fedor_13.smt2, etc.
                 // copy required. do NOT modify matches_vec... that needs to be a pure stack
-                // std::set matches_vec_set(matches_vec.begin(), matches_vec.end());
+                // FormulaSet matches_vec_set(matches_vec.begin(), matches_vec.end());
                 // const auto [_, successful_emplace] = seen_truncateds.emplace(
                 // make_conjunction_SKIP_CHECKS_KUNAL_HACK(std::move(matches_vec_set))
                 // );

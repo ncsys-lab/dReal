@@ -212,8 +212,8 @@ Config MakeConfig(const int jobs, const Mode mode) {
 bool WitnessBoxConsistent(const Formula& f, const Box& box,
                           const double precision) {
   vector<FormulaEvaluator> evaluators;
-  const std::set<Formula> conjuncts{is_conjunction(f) ? get_operands(f)
-                                                      : std::set<Formula>{f}};
+  const FormulaSet conjuncts{is_conjunction(f) ? get_operands(f)
+                                                      : FormulaSet{f}};
   for (const Formula& conjunct : conjuncts) {
     if (is_relational(conjunct)) {
       evaluators.push_back(make_relational_formula_evaluator(conjunct));

@@ -53,7 +53,7 @@ namespace dreal
             const auto model = cdcl.CheckSat(false);
             EXPECT_TRUE(model);
 
-            std::map<Variable, bool> assignments;
+            VariableMap<bool> assignments;
             for (const auto& kv : model->first.first) assignments.emplace(kv);
 
             EXPECT_EQ(assignments.size(), 2);
@@ -68,7 +68,7 @@ namespace dreal
             const auto model = cdcl.CheckSat(false);
             EXPECT_TRUE(model);
 
-            std::map<Variable, bool> assignments;
+            VariableMap<bool> assignments;
             for (const auto& kv : model->first.first) assignments.emplace(kv);
 
             EXPECT_EQ(assignments.size(), 2);
@@ -83,7 +83,7 @@ namespace dreal
             const auto model = cdcl.CheckSat(false);
             EXPECT_TRUE(model);
 
-            std::map<Variable, bool> assignments;
+            VariableMap<bool> assignments;
             for (const auto& kv : model->first.first) assignments.emplace(kv);
 
             EXPECT_EQ(assignments.size(), 1);
@@ -99,7 +99,7 @@ namespace dreal
             const auto model = cdcl.CheckSat(false);
             EXPECT_TRUE(model);
 
-            std::map<Variable, bool> assignments;
+            VariableMap<bool> assignments;
             for (const auto& kv : model->first.first) assignments.emplace(kv);
 
             EXPECT_EQ(assignments.size(), 1);
@@ -116,7 +116,7 @@ namespace dreal
             const auto model = cdcl.CheckSat(false);
             EXPECT_TRUE(model);
 
-            std::map<Variable, bool> assignments;
+            VariableMap<bool> assignments;
             for (const auto& kv : model->first.first) assignments.emplace(kv);
 
             EXPECT_EQ(assignments.size(), 1);
@@ -132,7 +132,7 @@ namespace dreal
             const auto model = cdcl.CheckSat(false);
             EXPECT_TRUE(model);
 
-            std::map<Variable, bool> assignments;
+            VariableMap<bool> assignments;
             for (const auto& kv : model->first.first) assignments.emplace(kv);
             EXPECT_EQ(assignments.size(), 2);
             for (const auto & [k,v] : assignments) EXPECT_TRUE(v);
@@ -145,7 +145,7 @@ namespace dreal
             const auto model = cdcl.CheckSat(false);
             EXPECT_TRUE(model);
 
-            std::map<Variable, bool> assignments;
+            VariableMap<bool> assignments;
             for (const auto& kv : model->first.first) assignments.emplace(kv);
             EXPECT_LE(assignments.size(), 2);
         }
@@ -169,7 +169,7 @@ namespace dreal
         //
         //     auto model = cdcl.CheckSat(false);
         //     EXPECT_TRUE(model);
-        //     std::map<Variable, bool> assignments;
+        //     VariableMap<bool> assignments;
         //     for (const auto& kv : model->first.first) assignments.emplace(kv);
         //     EXPECT_EQ(assignments.size(), 1);
         //     EXPECT_TRUE(assignments[b2]);
@@ -195,7 +195,7 @@ namespace dreal
         //
         //     auto model = cdcl.CheckSat(false);
         //     EXPECT_TRUE(model);
-        //     std::map<Variable, bool> assignments;
+        //     VariableMap<bool> assignments;
         //     for (const auto& kv : model->first.first) assignments.emplace(kv);
         //     EXPECT_EQ(assignments.size(), 1);
         //     EXPECT_TRUE(assignments[b2]);

@@ -20,8 +20,8 @@ namespace dreal::drake::symbolic
 
         OdeFlow(std::string flow_id, const std::vector<std::pair<Variable, Expression>>& ode_list);
 
-        const std::set<Variable>& get_ode_vars() const { return ode_vars; }
-        const std::set<Variable>& get_ode_pars() const { return ode_pars; }
+        const VariableSet& get_ode_vars() const { return ode_vars; }
+        const VariableSet& get_ode_pars() const { return ode_pars; }
         bool is_var(const Variable& v) const { return ode_vars.count(v) > 0; }
         bool is_par(const Variable& v) const { return ode_pars.count(v) > 0; }
 
@@ -29,8 +29,8 @@ namespace dreal::drake::symbolic
         bool operator!=(const OdeFlow& flow) const { return !(*this == flow); }
 
     private:
-        std::set<Variable> ode_vars;
-        std::set<Variable> ode_pars;
+        VariableSet ode_vars;
+        VariableSet ode_pars;
     };
 }
 

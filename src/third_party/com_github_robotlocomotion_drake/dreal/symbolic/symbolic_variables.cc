@@ -14,11 +14,9 @@
 using std::includes;
 using std::initializer_list;
 using std::inserter;
-using std::less;
 using std::ostream;
 using std::ostream_iterator;
 using std::ostringstream;
-using std::set;
 using std::set_intersection;
 using std::string;
 
@@ -29,7 +27,7 @@ namespace symbolic {
 Variables::Variables(std::initializer_list<Variable> init) : vars_(init) {}
 
 size_t Variables::get_hash() const {
-  return hash_value<set<Variable>>{}(vars_);
+  return hash_value<VariableSet>{}(vars_);
 }
 
 string Variables::to_string() const {
@@ -48,7 +46,7 @@ Variables::size_type Variables::erase(const Variables& vars) {
 
 bool Variables::IsSubsetOf(const Variables& vars) const {
   return includes(vars.begin(), vars.end(), begin(), end(),
-                  std::less<Variable>{});
+                  VariableLess{});
 }
 
 bool Variables::IsSupersetOf(const Variables& vars) const {
@@ -77,7 +75,7 @@ bool operator==(const Variables& vars1, const Variables& vars2) {
 bool operator<(const Variables& vars1, const Variables& vars2) {
   return std::lexicographical_compare(vars1.vars_.begin(), vars1.vars_.end(),
                                       vars2.vars_.begin(), vars2.vars_.end(),
-                                      std::less<Variable>{});
+                                      VariableLess{});
 }
 
 // NOLINTNEXTLINE(runtime/references) per C++ standard signature.
@@ -127,14 +125,14 @@ Variables operator-(Variables vars, const Variable& var) {
   return vars;
 }
 
-Variables::Variables(set<Variable> vars) : vars_{std::move(vars)} {}
+Variables::Variables(VariableSet vars) : vars_{std::move(vars)} {}
 
 Variables intersect(const Variables& vars1, const Variables& vars2) {
-  set<Variable> intersection;
+  VariableSet intersection;
   set_intersection(vars1.vars_.begin(), vars1.vars_.end(), vars2.vars_.begin(),
                    vars2.vars_.end(),
                    inserter(intersection, intersection.begin()),
-                   less<Variable>{});
+                   VariableLess{});
   return Variables{std::move(intersection)};
 }
 

@@ -21,7 +21,6 @@ namespace symbolic {
 using std::ostream;
 using std::ostringstream;
 using std::runtime_error;
-using std::set;
 using std::string;
 
 bool operator<(FormulaKind k1, FormulaKind k2) {
@@ -193,7 +192,7 @@ Formula forall(const Variables& vars, const Formula& f) {
 }
 
 namespace {
-void MergeConjunction(const Formula& f, set<Formula>* const s) {
+void MergeConjunction(const Formula& f, FormulaSet* const s) {
   if (is_conjunction(f)) {
     for (const auto& g : get_operands(f)) {
       s->insert(g);
@@ -223,24 +222,24 @@ Formula Formula::make_conjunction(Formula& f1, const Formula& f2) {
   }
   if (is_conjunction(f1)) {
     if (f1.ptr_->use_count() == 1) {
-      set<Formula>& operands{to_nary(f1)->get_mutable_operands()};  // reference
+      FormulaSet& operands{to_nary(f1)->get_mutable_operands()};  // reference
       MergeConjunction(f2, &operands);
       return f1 = Formula{new FormulaAnd(std::move(operands))};
     } else {
-      set<Formula> operands{to_nary(f1)->get_operands()};  // Make a copy
+      FormulaSet operands{to_nary(f1)->get_operands()};  // Make a copy
       MergeConjunction(f2, &operands);
       return f1 = Formula{new FormulaAnd(std::move(operands))};
     }
   }
   if (is_conjunction(f2)) {
-    set<Formula> operands{to_nary(f2)->get_operands()};  // Make a copy
+    FormulaSet operands{to_nary(f2)->get_operands()};  // Make a copy
     MergeConjunction(f1, &operands);
     return f1 = Formula{new FormulaAnd(std::move(operands))};
   }
-  return f1 = Formula{new FormulaAnd(set<Formula>{f1, f2})};
+  return f1 = Formula{new FormulaAnd(FormulaSet{f1, f2})};
 }
 
-Formula make_conjunction_SKIP_CHECKS_KUNAL_HACK(set<Formula> formulas) { // copy because move later.
+Formula make_conjunction_SKIP_CHECKS_KUNAL_HACK(FormulaSet formulas) { // copy because move later.
   for (const Formula& f : formulas) {
     DREAL_ASSERT(!is_false(f));
     DREAL_ASSERT(!is_true(f));
@@ -256,8 +255,8 @@ Formula make_conjunction_SKIP_CHECKS_KUNAL_HACK(set<Formula> formulas) { // copy
   return Formula{new FormulaAnd(std::move(formulas))};
 }
 
-Formula make_conjunction(const set<Formula>& formulas) {
-  set<Formula> operands;
+Formula make_conjunction(const FormulaSet& formulas) {
+  FormulaSet operands;
   for (const Formula& f : formulas) {
     if (is_false(f)) {
       // Short-circuits to False.
@@ -337,7 +336,7 @@ Formula operator&&(const Variable& v1, const Variable& v2) {
 
 namespace {
 // Updates s by adding f into it.
-void MergeDisjunction(const Formula& f, set<Formula>* const s) {
+void MergeDisjunction(const Formula& f, FormulaSet* const s) {
   if (is_disjunction(f)) {
     for (const auto& g : get_operands(f)) {
       s->insert(g);
@@ -367,25 +366,25 @@ Formula Formula::make_disjunction(Formula& f1, const Formula& f2) {
   }
   if (is_disjunction(f1)) {
     if (f1.ptr_->use_count() == 1) {
-      set<Formula>& operands{to_nary(f1)->get_mutable_operands()};  // reference
+      FormulaSet& operands{to_nary(f1)->get_mutable_operands()};  // reference
       MergeDisjunction(f2, &operands);
       return f1 = Formula{new FormulaOr(std::move(operands))};
     } else {
-      set<Formula> operands{to_nary(f1)->get_operands()};  // Make a copy
+      FormulaSet operands{to_nary(f1)->get_operands()};  // Make a copy
       MergeDisjunction(f2, &operands);
       return f1 = Formula{new FormulaOr(std::move(operands))};
     }
   }
   if (is_disjunction(f2)) {
-    set<Formula> operands{to_nary(f2)->get_operands()};  // Make a copy
+    FormulaSet operands{to_nary(f2)->get_operands()};  // Make a copy
     MergeDisjunction(f1, &operands);
     return f1 = Formula{new FormulaOr(std::move(operands))};
   }
-  return f1 = Formula{new FormulaOr(set<Formula>{f1, f2})};
+  return f1 = Formula{new FormulaOr(FormulaSet{f1, f2})};
 }
 
-Formula make_disjunction(const set<Formula>& formulas) {
-  set<Formula> operands;
+Formula make_disjunction(const FormulaSet& formulas) {
+  FormulaSet operands;
   for (const Formula& f : formulas) {
     if (is_true(f)) {
       // Short-circuits to True.
@@ -636,7 +635,7 @@ const Expression& get_rhs_expression(const Formula& f) {
   return to_relational(f)->get_rhs_expression();
 }
 
-const set<Formula>& get_operands(const Formula& f) {
+const FormulaSet& get_operands(const Formula& f) {
   return to_nary(f)->get_operands();
 }
 

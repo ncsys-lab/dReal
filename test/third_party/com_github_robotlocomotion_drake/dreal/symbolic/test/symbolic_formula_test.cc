@@ -21,10 +21,8 @@ namespace drake {
 namespace symbolic {
 namespace {
 
-using std::map;
 using std::numeric_limits;
 using std::runtime_error;
-using std::set;
 using std::transform;
 using std::unordered_map;
 using std::unordered_set;
@@ -1144,7 +1142,7 @@ TEST_F(SymbolicFormulaTest, GetRhsExpression) {
 }
 
 TEST_F(SymbolicFormulaTest, GetOperandsConjunction) {
-  const set<Formula> formulas{get_operands(f1_ && f2_ && f3_ && f4_)};
+  const FormulaSet formulas{get_operands(f1_ && f2_ && f3_ && f4_)};
   EXPECT_EQ(formulas.size(), 4u);
   EXPECT_EQ(formulas.count(f1_), 1u);
   EXPECT_EQ(formulas.count(f2_), 1u);
@@ -1153,7 +1151,7 @@ TEST_F(SymbolicFormulaTest, GetOperandsConjunction) {
 }
 
 TEST_F(SymbolicFormulaTest, GetOperandsDisjunction) {
-  const set<Formula> formulas{get_operands(f1_ || f2_ || f3_ || f4_)};
+  const FormulaSet formulas{get_operands(f1_ || f2_ || f3_ || f4_)};
   EXPECT_EQ(formulas.size(), 4u);
   EXPECT_EQ(formulas.count(f1_), 1u);
   EXPECT_EQ(formulas.count(f2_), 1u);
@@ -1205,7 +1203,7 @@ GTEST_TEST(FormulaTest, CompatibleWithUnorderedMap) {
 // This test checks whether symbolic::Formula is compatible with
 // std::set.
 GTEST_TEST(FormulaTest, CompatibleWithSet) {
-  set<Formula> set;
+  FormulaSet set;
   set.emplace(Formula::True());
   set.emplace(Formula::True());
   set.emplace(Formula::False());
@@ -1215,7 +1213,7 @@ GTEST_TEST(FormulaTest, CompatibleWithSet) {
 // This test checks whether symbolic::Formula is compatible with
 // std::map.
 GTEST_TEST(FormulaTest, CompatibleWithMap) {
-  map<Formula, Formula> map;
+  FormulaMap<Formula> map;
   map.emplace(Formula::True(), Formula::False());
 }
 

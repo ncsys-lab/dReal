@@ -51,7 +51,6 @@ using std::find_if;
 using std::isfinite;
 using std::ostringstream;
 using std::pair;
-using std::set;
 using std::string;
 using std::unordered_set;
 using std::vector;
@@ -617,7 +616,7 @@ void Context::Impl::Minimize(const vector<Expression>& functions) {
   // To construct ϕᵢ(y), we need to traverse both `box()` and
   // `stack_` because some of the asserted formulas are translated
   // and applied into `box()`.
-  set<Formula> set_of_negated_phi;  // Collects ¬ϕᵢ(y).
+  FormulaSet set_of_negated_phi;  // Collects ¬ϕᵢ(y).
   ExpressionSubstitution subst;  // Maps xᵢ ↦ yᵢ to build f(y₁, ..., yₙ).
   Variables quantified_variables;  // {y₁, ... yₙ}
   Variables x_vars;

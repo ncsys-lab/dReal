@@ -77,7 +77,7 @@ Formula iff(const Variable& v1, const Variable& v2);
 // Given @p formulas = {f₁, ..., fₙ} and a @p func : Formula →
 // Formula, `map(formulas, func)` returns a set `{func(f₁),
 // ... func(fₙ)}`.
-std::set<Formula> map(const std::set<Formula>& formulas,
+FormulaSet map(const FormulaSet& formulas,
                       const std::function<Formula(const Formula&)>& func);
 
 /// Checks if @p f is atomic.
@@ -90,7 +90,7 @@ bool is_clause(const Formula& f);
 ///
 /// @pre @p f is in CNF. That is, @p f is either a single clause or a
 /// conjunction of clauses.
-std::set<Formula> get_clauses(const Formula& f);
+FormulaSet get_clauses(const Formula& f);
 
 /// Checks if @p is in CNF form.
 bool is_cnf(const Formula& f);
@@ -117,12 +117,12 @@ bool IsDifferentiable(const Expression& e);
 ///
 /// @note This is different from the one in Drake's symbolic
 /// library. It takes `std::vector<Formula>` while Drake's version
-/// takes `std::set<Formula>`.
+/// takes `FormulaSet`.
 Formula make_conjunction(const std::vector<Formula>& formulas);
 
 /// @note This is different from the one in Drake's symbolic
 /// library. It takes `std::vector<Formula>` while Drake's version
-/// takes `std::set<Formula>`.
+/// takes `FormulaSet`.
 Formula make_disjunction(const std::vector<Formula>& formulas);
 
 /// Creates a vector of variables of @p type whose size is @p

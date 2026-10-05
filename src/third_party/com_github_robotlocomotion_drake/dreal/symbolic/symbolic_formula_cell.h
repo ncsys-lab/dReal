@@ -156,22 +156,22 @@ class NaryFormulaCell : public FormulaCell {
   /** Copy-assign (DELETED). */
   NaryFormulaCell& operator=(const NaryFormulaCell& f) = delete;
   /** Construct NaryFormulaCell of kind @p k with @p formulas. */
-  NaryFormulaCell(FormulaKind k, std::set<Formula> formulas);
+  NaryFormulaCell(FormulaKind k, FormulaSet formulas);
   bool EqualTo(const FormulaCell& f) const override;
   bool Less(const FormulaCell& f) const override;
   /** Returns the formulas. */
-  const std::set<Formula>& get_operands() const { return formulas_; }
+  const FormulaSet& get_operands() const { return formulas_; }
 
   /** Returns the formulas. */
-  std::set<Formula>& get_mutable_operands() { return formulas_; }
+  FormulaSet& get_mutable_operands() { return formulas_; }
 
  protected:
   std::ostream& DisplayWithOp(std::ostream& os, const std::string& op) const;
 
  private:
-  static Variables ExtractFreeVariables(const std::set<Formula>& formulas);
+  static Variables ExtractFreeVariables(const FormulaSet& formulas);
 
-  std::set<Formula> formulas_;
+  FormulaSet formulas_;
 };
 
 /** Symbolic formula representing true. */
@@ -289,7 +289,7 @@ class FormulaLeq : public RelationalFormulaCell {
 class FormulaAnd : public NaryFormulaCell {
  public:
   /** Constructs from @p formulas. */
-  explicit FormulaAnd(std::set<Formula> formulas);
+  explicit FormulaAnd(FormulaSet formulas);
   /** Constructs @p f1 ∧ @p f2. */
   FormulaAnd(const Formula& f1, const Formula& f2);
   bool Evaluate(const Environment& env) const override;
@@ -302,7 +302,7 @@ class FormulaAnd : public NaryFormulaCell {
 class FormulaOr : public NaryFormulaCell {
  public:
   /** Constructs from @p formulas. */
-  explicit FormulaOr(std::set<Formula> formulas);
+  explicit FormulaOr(FormulaSet formulas);
   /** Constructs @p f1 ∨ @p f2. */
   FormulaOr(const Formula& f1, const Formula& f2);
   bool Evaluate(const Environment& env) const override;

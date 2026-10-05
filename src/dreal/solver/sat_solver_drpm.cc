@@ -110,7 +110,7 @@ namespace dreal
 #endif
 
         if (DREAL_EXPERIMENTAL_THEORY_AUDIT_ENABLED) {
-            std::set s(base_conflict.begin(), base_conflict.end());
+            FormulaSet s(base_conflict.begin(), base_conflict.end());
             theory_audit_formula(
                 "AddLearnedClausePattern",
                 !make_conjunction_SKIP_CHECKS_KUNAL_HACK(std::move(s)),

@@ -23,7 +23,6 @@
 #include "dreal/util/stat.h"
 #include "dreal/util/timer.h"
 
-using std::set;
 using std::vector;
 
 namespace dreal {
@@ -114,9 +113,9 @@ void ContractorStatus::AddUnsatWitness(const Variable& var) {
   unsat_witness_.insert(var);
 }
 
-set<Formula> GenerateExplanation(const Variables& unsat_witness,
-                                 const set<Formula>& used_constraints,
-                                 const set<Formula>& inconclusive_odes) {
+FormulaSet GenerateExplanation(const Variables& unsat_witness,
+                                 const FormulaSet& used_constraints,
+                                 const FormulaSet& inconclusive_odes) {
   static ContractorStatusStat stat(DREAL_LOG_INFO_ENABLED);
   stat.increase_num_explanation_generation();
   TimerGuard timer_guard(&stat.timer_explanation_generation_, stat.enabled());
@@ -129,7 +128,7 @@ set<Formula> GenerateExplanation(const Variables& unsat_witness,
 
   // Set up the initial explanation based on variables.
   Variables seen;
-  set<Formula> explanation;
+  FormulaSet explanation;
   for (const Formula& f_i : used_constraints) {
     if (f_i.GetFreeVariables().empty()) {
       // It is possible that the constraint has no free variable but
@@ -184,7 +183,7 @@ set<Formula> GenerateExplanation(const Variables& unsat_witness,
   return explanation;
 }
 
-set<Formula> ContractorStatus::Explanation() const {
+FormulaSet ContractorStatus::Explanation() const {
   return GenerateExplanation(unsat_witness_, used_constraints_, inconclusive_odes_);
 }
 

@@ -144,7 +144,7 @@ PatternMatchingTrie::ExprNode& PatternMatchingTrie::name (const Expression &e, E
     ADD_DECL(VisitMultiplication) {
         auto& n1 = parent.c_like(e).emplace_back(e);
         ExprNode *stateExp = &n1, *stateBase = nullptr;
-        std::multimap<Expression, Expression> multimap; // canonicalize..ish
+        std::multimap<Expression, Expression, ExpressionLess> multimap; // canonicalize..ish
         for (const auto& [base, expo] : to_multiplication(e)->get_base_to_exponent_map()) {
             multimap.emplace(expo, base);
         }
@@ -166,7 +166,7 @@ PatternMatchingTrie::ExprNode& PatternMatchingTrie::name (const Expression &e, E
             if (e->get_constant() != m->get_constant()) continue;
             if (e->get_base_to_exponent_map().size() != m->get_base_to_exponent_map().size()) continue;
 
-            std::multimap<Expression, Expression> e_canon_expo_to_base_map;
+            std::multimap<Expression, Expression, ExpressionLess> e_canon_expo_to_base_map;
             for (const auto& [base, expo] : e->get_base_to_exponent_map())
                 e_canon_expo_to_base_map.emplace(expo, base);
 

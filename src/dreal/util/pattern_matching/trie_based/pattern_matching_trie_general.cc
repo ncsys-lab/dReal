@@ -55,7 +55,7 @@ namespace dreal
 
                 // avoid re-finding 1000s of permutations of the same clause on fedor_13.smt2, etc.
                 // copy required. do NOT modify matches_vec... that needs to be a pure stack
-                std::set matches_vec_set(matches_vec.begin(), matches_vec.end());
+                FormulaSet matches_vec_set(matches_vec.begin(), matches_vec.end());
                 const auto [_, successful_emplace] = seen_truncateds.emplace(
                     make_conjunction_SKIP_CHECKS_KUNAL_HACK(std::move(matches_vec_set))
                 );

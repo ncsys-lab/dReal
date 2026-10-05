@@ -24,7 +24,6 @@
 #include "dreal/symbolic/symbolic.h"
 #include "dreal/symbolic/symbolic_test_util.h"
 
-using std::set;
 
 namespace dreal {
 namespace {
@@ -158,11 +157,11 @@ TEST_F(PredicateAbstractorTest, Conjunction) {
   const Formula f3{x_ + y_ <= 15};
   const Formula f4{y_ * z_ > 0};
   const Formula conjunction{f1 && f2 && f3 && f4};
-  const set<Formula> operands{get_operands(conjunction)};
+  const FormulaSet operands{get_operands(conjunction)};
 
   const Formula conjunction_abstracted{CONVERT(conjunction)};
   ASSERT_TRUE(is_conjunction(conjunction_abstracted));
-  const set<Formula> operands_abstracted{get_operands(conjunction_abstracted)};
+  const FormulaSet operands_abstracted{get_operands(conjunction_abstracted)};
   EXPECT_EQ(operands_abstracted.size(), operands.size());
 
   for (const Formula& f : operands_abstracted) {
@@ -189,11 +188,11 @@ TEST_F(PredicateAbstractorTest, Disjunction) {
   const Formula f3{x_ + y_ <= 15};
   const Formula f4{y_ * z_ > 0};
   const Formula disjunction{f1 || f2 || f3 || f4};
-  const set<Formula> operands{get_operands(disjunction)};
+  const FormulaSet operands{get_operands(disjunction)};
 
   const Formula disjunction_abstracted{CONVERT(disjunction)};
   ASSERT_TRUE(is_disjunction(disjunction_abstracted));
-  const set<Formula> operands_abstracted{get_operands(disjunction_abstracted)};
+  const FormulaSet operands_abstracted{get_operands(disjunction_abstracted)};
   EXPECT_EQ(operands_abstracted.size(), operands.size());
 
   for (const Formula& f : operands_abstracted) {

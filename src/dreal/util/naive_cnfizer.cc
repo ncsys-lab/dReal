@@ -24,7 +24,6 @@
 namespace dreal {
 
 using std::accumulate;
-using std::set;
 
 // The main function of the NaiveCnfizer:
 //  - It visits each node and introduce a Boolean variable `b` for
@@ -70,20 +69,20 @@ Formula NaiveCnfizer::VisitForallT(const Formula& f) const { return f; }
 Formula NaiveCnfizer::VisitIntegral(const Formula& f) const { return f; }
 
 Formula NaiveCnfizer::VisitConjunction(const Formula& f) const {
-  const set<Formula> transformed_operands{
+  const FormulaSet transformed_operands{
       map(get_operands(f),
           [this](const Formula& formula) { return this->Visit(formula); })};
   return make_conjunction(transformed_operands);
 }
 
 Formula NaiveCnfizer::VisitDisjunction(const Formula& f) const {
-  const set<Formula>& transformed_operands{
+  const FormulaSet& transformed_operands{
       map(get_operands(f),
           [this](const Formula& formula) { return this->Visit(formula); })};
   return accumulate(transformed_operands.begin(), transformed_operands.end(),
                     Formula::False(),
                     [](const Formula& cnf1, const Formula& cnf2) {
-                      set<Formula> clauses;
+                      FormulaSet clauses;
                       if (is_conjunction(cnf1)) {
                         if (is_conjunction(cnf2)) {
                           // Both of cnf1 and cnf2 are conjunctions.

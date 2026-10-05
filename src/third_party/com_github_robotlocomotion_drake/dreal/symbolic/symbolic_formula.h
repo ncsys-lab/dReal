@@ -2,6 +2,7 @@
 #pragma once
 
 #include <functional>
+#include <map>
 #include <ostream>
 #include <set>
 #include <string>
@@ -58,6 +59,18 @@ class FormulaForall;          // In symbolic/symbolic_formula_cell.h
 class FormulaForallT;         // In symbolic/odes/symbolic_odes.h
 class FormulaIntegral;        // In symbolic/odes/symbolic_odes.h
 class OdeFlow;                // In symbolic/odes/OdeFlow.h
+
+/** Orders formulas by Formula::Less. It is the comparator of every ordered
+ *  container keyed by Formula: std::less<Formula> would call the symbolic
+ *  operator<, which builds a Formula, not a bool. Declared ahead of Formula,
+ *  whose friends take a FormulaSet; defined after it. */
+struct FormulaLess {
+  bool operator()(const Formula& lhs, const Formula& rhs) const;
+};
+
+using FormulaSet = std::set<Formula, FormulaLess>;
+template <typename T>
+using FormulaMap = std::map<Formula, T, FormulaLess>;
 
 /** Represents a symbolic form of a first-order logic formula.
 
@@ -148,9 +161,8 @@ class Formula {
    *
    * and f_1_i.Less(f_2_i) holds.
    *
-   * This function is used as a compare function in
-   * std::map<symbolic::Formula> and std::set<symbolic::Formula> via
-   * std::less<symbolic::Formula>. */
+   * This function is used as a compare function in FormulaMap and
+   * FormulaSet via FormulaLess. */
   bool Less(const Formula& f) const;
 
   /** Evaluates under a given environment (by default, an empty environment).
@@ -269,9 +281,9 @@ class Formula {
   friend Formula integral(const Expression& time_0, const Expression& time_t,
                                 const std::vector<Expression>& vec_0, const std::vector<Expression>& vec_t,
                                 const std::shared_ptr<const OdeFlow>& flow);
-  friend Formula make_conjunction(const std::set<Formula>& formulas);
-  friend Formula make_conjunction_SKIP_CHECKS_KUNAL_HACK(std::set<Formula> formulas);
-  friend Formula make_disjunction(const std::set<Formula>& formulas);
+  friend Formula make_conjunction(const FormulaSet& formulas);
+  friend Formula make_conjunction_SKIP_CHECKS_KUNAL_HACK(FormulaSet formulas);
+  friend Formula make_disjunction(const FormulaSet& formulas);
   friend Formula operator!(const Formula& f);
   friend Formula operator==(const Expression& e1, const Expression& e2);
   friend Formula operator!=(const Expression& e1, const Expression& e2);
@@ -291,6 +303,11 @@ class Formula {
   FormulaCell* ptr_;
 };
 
+inline bool FormulaLess::operator()(const Formula& lhs,
+                                    const Formula& rhs) const {
+  return lhs.Less(rhs);
+}
+
 /** Returns a formula @p f, universally quantified by variables @p vars. */
 Formula forall(const Variables& vars, const Formula& f);
 
@@ -304,8 +321,8 @@ Formula forall(const Variables& vars, const Formula& f);
  * - Nested conjunctions will be flattened. For example, make_conjunction({f₁,
  *   f₂ ∧ f₃}) returns f₁ ∧ f₂ ∧ f₃.
  */
-Formula make_conjunction(const std::set<Formula>& formulas);
-Formula make_conjunction_SKIP_CHECKS_KUNAL_HACK(std::set<Formula> formulas);
+Formula make_conjunction(const FormulaSet& formulas);
+Formula make_conjunction_SKIP_CHECKS_KUNAL_HACK(FormulaSet formulas);
 Formula operator&&(const Formula& f1, const Formula& f2);
 Formula operator&&(const Formula& f1, Formula&& f2);
 Formula operator&&(Formula&& f1, const Formula& f2);
@@ -327,7 +344,7 @@ Formula operator&&(const Variable& v1, const Variable& v2);
  * - Nested disjunctions will be flattened. For example, make_disjunction({f₁,
  *   f₂ ∨ f₃}) returns f₁ ∨ f₂ ∨ f₃.
  */
-Formula make_disjunction(const std::set<Formula>& formulas);
+Formula make_disjunction(const FormulaSet& formulas);
 Formula operator||(const Formula& f1, const Formula& f2);
 Formula operator||(const Formula& f1, Formula&& f2);
 Formula operator||(Formula&& f1, const Formula& f2);
@@ -436,7 +453,7 @@ const Expression& get_rhs_expression(const Formula& f);
 /** Returns the set of formulas in a n-ary formula @p f.
  *  @pre @p f is a n-ary formula.
  */
-const std::set<Formula>& get_operands(const Formula& f);
+const FormulaSet& get_operands(const Formula& f);
 
 /** Returns the formula in a negation formula @p f.
  *  @pre @p f is a negation formula.
@@ -471,15 +488,6 @@ struct hash_value<symbolic::Formula> {
 }  // namespace dreal
 
 namespace std {
-/* Provides std::less<dreal::drake::symbolic::Formula>. */
-template <>
-struct less<dreal::drake::symbolic::Formula> {
-  bool operator()(const dreal::drake::symbolic::Formula& lhs,
-                  const dreal::drake::symbolic::Formula& rhs) const {
-    return lhs.Less(rhs);
-  }
-};
-
 /* Provides std::equal_to<dreal::drake::symbolic::Formula>. */
 template <>
 struct equal_to<dreal::drake::symbolic::Formula> {

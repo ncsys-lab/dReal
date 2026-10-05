@@ -35,11 +35,10 @@ namespace dreal::drake::symbolic
     using std::ostream;
     using std::ostringstream;
     using std::runtime_error;
-    using std::set;
     using std::vector;
     using std::string;
 
-    set<Formula> flatten_nested_boolean_structures(Formula f, bool inverted=false) {
+    FormulaSet flatten_nested_boolean_structures(Formula f, bool inverted=false) {
         if (f.get_kind() == FormulaKind::True) {
             return {};
         }
@@ -54,7 +53,7 @@ namespace dreal::drake::symbolic
             (f.get_kind() == FormulaKind::And && !inverted) ||
             (f.get_kind() == FormulaKind::Or && inverted)
         ) {
-            set<Formula> ret;
+            FormulaSet ret;
             for (const auto& op : get_operands(f)) {
                 auto const nlctrs = flatten_nested_boolean_structures(op, inverted);
                 ret.insert(nlctrs.begin(), nlctrs.end());

@@ -27,7 +27,6 @@
 #include "dreal/util/timer.h"
 
 using std::cout;
-using std::set;
 using std::to_string;
 using std::unordered_set;
 
@@ -300,7 +299,7 @@ Formula IfThenElseEliminator::VisitLessThanOrEqualTo(const Formula& f,
 Formula IfThenElseEliminator::VisitConjunction(const Formula& f,
                                                const Formula& guard) {
   // f := f₁ ∧ ... ∧ fₙ
-  set<Formula> new_conjuncts;
+  FormulaSet new_conjuncts;
   for (const Formula& f_i : get_operands(f)) {
     new_conjuncts.emplace(Visit(f_i, guard));
   }
@@ -310,7 +309,7 @@ Formula IfThenElseEliminator::VisitConjunction(const Formula& f,
 Formula IfThenElseEliminator::VisitDisjunction(const Formula& f,
                                                const Formula& guard) {
   // f := f₁ ∨ ... ∨ fₙ
-  set<Formula> new_disjuncts;
+  FormulaSet new_disjuncts;
   for (const Formula& f_i : get_operands(f)) {
     new_disjuncts.emplace(Visit(f_i, guard));
   }
