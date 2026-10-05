@@ -789,7 +789,10 @@ TEST_F(SymbolicFormulaTest, ToString) {
   EXPECT_EQ(f_or_.to_string(), "(((x + y) > 0) or ((x * y) < 5))");
   EXPECT_EQ(f_forall_.to_string(),
             "forall({x, y}. (((x + y) > 0) or ((x * y) < 5)))");
-  // todo: check forallT and integral printing, once API is solidified.
+  // End states on the left, start states inside, as in the SMT2 input.
+  EXPECT_EQ(f_integral_.to_string(),
+            "(= [xT, yT] (integral flow_1, from t=0 to z, [x, y]))");
+  // todo: check forallT printing, once API is solidified.
 }
 
 TEST_F(SymbolicFormulaTest, IsTrue) {

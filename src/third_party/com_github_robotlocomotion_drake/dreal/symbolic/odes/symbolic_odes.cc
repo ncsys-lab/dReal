@@ -313,15 +313,15 @@ namespace dreal::drake::symbolic
 
     ostream& FormulaIntegral::Display(ostream& os) const {
         os << "(= [";
-        for (size_t i = 0; i < vec_0_.size(); ++i) {
-            if (i > 0) os << ", ";
-            os << vec_0_[i];
-        }
-        os << "] (integral " << flow_->name << ", from t=" << time_0_ << " to " << time_t_ << ", ";
-        os << "[";
         for (size_t i = 0; i < vec_t_.size(); ++i) {
             if (i > 0) os << ", ";
             os << vec_t_[i];
+        }
+        os << "] (integral " << flow_->name << ", from t=" << time_0_ << " to " << time_t_ << ", ";
+        os << "[";
+        for (size_t i = 0; i < vec_0_.size(); ++i) {
+            if (i > 0) os << ", ";
+            os << vec_0_[i];
         }
         os << "]";
         return os << "))";
