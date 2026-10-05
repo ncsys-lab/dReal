@@ -125,10 +125,16 @@ When `TheorySolver::CheckSat` returns UNSAT with an explanation set `{f₁, ...,
 
 ## CLI Configuration
 
-Two flags control the pattern matching budget (both apply per-call to `find_matches`):
+Two flags control pattern matching (`src/dreal/dreal_main.cc`, `src/dreal/solver/context_impl.cc`):
 
-- `--drpm-max-size <n>`: maximum number of formulas in the pattern database before pruning old entries
-- `--drpm-max-time <µs>`: timeout (microseconds) for a single matching call; if exceeded, matching stops and returns whatever it found
+- `--drpm-max-size <n>`: a lemma (explanation) is pattern-matched only if it has **fewer than
+  `n` literals** (`explanation.size() < config().drpm_max_size()`). It does not bound the pattern
+  database. The default is 0, which matches nothing, so DRPM is off unless the flag is given; the
+  flag itself must be positive (`--drpm-max-size 0` is rejected), so omit it to turn DRPM off.
+- `--drpm-max-time <s>`: in **seconds** (default 0.222). A matching call for a lemma gets
+  `t_sat + t_theory + min(99·(t_sat + t_theory), drpm_max_time)`, where `t_sat` and `t_theory` are
+  that lemma's own SAT and theory check times; when the budget runs out, matching stops and keeps
+  what it found.
 
 These replaced compile-time constants in earlier branches.
 

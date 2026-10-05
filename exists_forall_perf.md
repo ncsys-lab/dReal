@@ -243,7 +243,7 @@ verdict flips. Test: `test/dreal/contractor/test/contractor_ibex_forall_test.cc`
 already **ground** (`QF_NRA_ODE` over `J_*/ch*/x_*`; the `∀` is discharged by the nested CE-search
 before any lemma exists), and the CAV26 matcher already fires on them. Perf upside is at most a
 constant factor on per-node CE cost — it cannot reduce node count and cannot beat the existential
-wall; unmeasured off-pin, so measure (`--drpm-max-size 0` A/B) before building anything. Two fixes
+wall; unmeasured off-pin, so measure (an A/B with and without `--drpm-max-size`; the flag rejects 0, and omitting it turns DRPM off) before building anything. Two fixes
 landed while scoping (commit `fc4c3da04`):
 - **Bound-var canonicalization UB fix** (`DeBruijnCanonicalizer.cc`): the old `VisitForall`
   appended a `forall`'s *bound* variable to the canonical sequence, driving

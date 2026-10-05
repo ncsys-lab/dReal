@@ -322,7 +322,7 @@ return `[-1, 1]` for a non-finite argument.
 
 ---
 
-## BUG-017 — Documentation: `docs/pattern-matching.md` misdescribes `--drpm-max-size` and `--drpm-max-time` (LIVE, 2026-10-04)
+## BUG-017 — Documentation: `docs/pattern-matching.md` misdescribes `--drpm-max-size` and `--drpm-max-time` (fixed 2026-10-05)
 
 The log has no documentation category; this is filed as a BUG because the text states the
 wrong behavior. Nothing in the solver is wrong.
@@ -358,6 +358,13 @@ rejects.
 **Workaround**
 
 Read the flags as in the table; `dreal --help` prints the correct text.
+
+**Fix (2026-10-05)**
+
+`docs/pattern-matching.md` §"CLI Configuration" now states both flags as in the table, and
+`exists_forall_perf.md` proposes an A/B with and without the flag instead of
+`--drpm-max-size 0`.
+
 
 ---
 
