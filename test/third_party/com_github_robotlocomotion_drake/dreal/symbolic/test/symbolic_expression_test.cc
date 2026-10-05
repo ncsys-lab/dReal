@@ -26,7 +26,6 @@ using std::ostringstream;
 using std::pair;
 using std::runtime_error;
 using std::string;
-using std::unordered_map;
 using std::unordered_set;
 using std::vector;
 
@@ -1145,7 +1144,7 @@ TEST_F(SymbolicExpressionTest, Div4) {
 // This test checks whether symbolic::Expression is compatible with
 // std::unordered_set.
 GTEST_TEST(ExpressionTest, CompatibleWithUnorderedSet) {
-  unordered_set<Expression> uset;
+  ExpressionUnorderedSet uset;
   uset.emplace(Expression{Variable{"a"}});
   uset.emplace(Expression{Variable{"b"}});
 }
@@ -1153,7 +1152,7 @@ GTEST_TEST(ExpressionTest, CompatibleWithUnorderedSet) {
 // This test checks whether symbolic::Expression is compatible with
 // std::unordered_map.
 GTEST_TEST(ExpressionTest, CompatibleWithUnorderedMap) {
-  unordered_map<Expression, Expression> umap;
+  ExpressionUnorderedMap<Expression> umap;
   umap.emplace(Expression{Variable{"a"}}, Expression{Variable{"b"}});
 }
 

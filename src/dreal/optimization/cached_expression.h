@@ -42,7 +42,7 @@ class CachedExpression {
   Expression expression_;
   Environment environment_;
   const Box* box_{nullptr};
-  std::unordered_map<Variable, Expression, hash_value<Variable>> gradient_;
+  VariableUnorderedMap<Expression> gradient_;
 
   friend std::ostream& operator<<(std::ostream& os,
                                   const CachedExpression& expression);

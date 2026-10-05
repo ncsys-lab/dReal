@@ -52,14 +52,14 @@ Box::Box()
       // rely on `values_.size()`.
       values_(1),
       var_to_idx_{
-          make_shared<unordered_map<Variable, int, hash_value<Variable>>>()},
+          make_shared<VariableUnorderedMap<int>>()},
       idx_to_var_{make_shared<unordered_map<int, Variable>>()} {}
 
 Box::Box(const vector<Variable>& variables)
     : variables_{make_shared<vector<Variable>>()},
       values_(static_cast<int>(variables.size())),
       var_to_idx_{
-          make_shared<unordered_map<Variable, int, hash_value<Variable>>>()},
+          make_shared<VariableUnorderedMap<int>>()},
       idx_to_var_{make_shared<unordered_map<int, Variable>>()} {
   for (const Variable& var : variables) {
     Add(var);
@@ -78,7 +78,7 @@ void Box::Add(const Variable& v) {
     // so that these changes remain local.
     variables_ = make_shared<vector<Variable>>(*variables_);
     var_to_idx_ =
-        make_shared<unordered_map<Variable, int, hash_value<Variable>>>(
+        make_shared<VariableUnorderedMap<int>>(
             *var_to_idx_);
     idx_to_var_ = make_shared<unordered_map<int, Variable>>(*idx_to_var_);
   }
@@ -143,7 +143,7 @@ Box::Interval& Box::operator[](const int i) {
 // wrong-contraction (SOUNDNESS-class) landmine. See
 // simulink-to-dreal_bug_reports.md BUG-012.
 namespace {
-int checked_index(const std::unordered_map<Variable, int, hash_value<Variable>>&
+int checked_index(const VariableUnorderedMap<int>&
                       var_to_idx,
                   const Variable& var) {
   const auto it = var_to_idx.find(var);
@@ -274,7 +274,7 @@ Box& Box::InplaceUnion(const Box& b) {
   // Checks variables() == b.variables().
   DREAL_ASSERT(equal(variables().begin(), variables().end(),
                      b.variables().begin(), b.variables().end(),
-                     std::equal_to<Variable>{}));
+                     VariableEqualTo{}));
   values_ |= b.values_;
   return *this;
 }
@@ -329,7 +329,7 @@ ostream& operator<<(ostream& os, const Box& box) {
 bool operator==(const Box& b1, const Box& b2) {
   return equal(b1.variables().begin(), b1.variables().end(),
                b2.variables().begin(), b2.variables().end(),
-               std::equal_to<Variable>{}) &&
+               VariableEqualTo{}) &&
          (b1.interval_vector() == b2.interval_vector());
 }
 

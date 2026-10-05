@@ -24,8 +24,6 @@ namespace {
 using std::numeric_limits;
 using std::runtime_error;
 using std::transform;
-using std::unordered_map;
-using std::unordered_set;
 using std::vector;
 
 using test::all_of;
@@ -1188,7 +1186,7 @@ GTEST_TEST(FormulaTest, DefaultConstructors) {
 // This test checks whether symbolic::Formula is compatible with
 // std::unordered_set.
 GTEST_TEST(FormulaTest, CompatibleWithUnorderedSet) {
-  unordered_set<Formula> uset;
+  FormulaUnorderedSet uset;
   uset.emplace(Formula::True());
   uset.emplace(Formula::True());
   uset.emplace(Formula::False());
@@ -1198,7 +1196,7 @@ GTEST_TEST(FormulaTest, CompatibleWithUnorderedSet) {
 // This test checks whether symbolic::Formula is compatible with
 // std::unordered_map.
 GTEST_TEST(FormulaTest, CompatibleWithUnorderedMap) {
-  unordered_map<Formula, Formula> umap;
+  FormulaUnorderedMap<Formula> umap;
   umap.emplace(Formula::True(), Formula::False());
   umap.emplace(Formula::False(), Formula::True());
 }

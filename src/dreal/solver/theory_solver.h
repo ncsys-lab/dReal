@@ -62,10 +62,10 @@ class TheorySolver {
   std::unique_ptr<Icp> icp_;
   Box model_;
   FormulaSet explanation_;
-  std::unordered_map<Formula, Contractor> contractor_cache_;
-  std::unordered_map<Formula, Contractor> fwd_ode_contractor_cache_;
-  std::unordered_map<Formula, Contractor> bwd_ode_contractor_cache_;
-  std::unordered_map<Formula, FormulaEvaluator> formula_evaluator_cache_;
+  FormulaUnorderedMap<Contractor> contractor_cache_;
+  FormulaUnorderedMap<Contractor> fwd_ode_contractor_cache_;
+  FormulaUnorderedMap<Contractor> bwd_ode_contractor_cache_;
+  FormulaUnorderedMap<FormulaEvaluator> formula_evaluator_cache_;
 };
 
 }  // namespace dreal

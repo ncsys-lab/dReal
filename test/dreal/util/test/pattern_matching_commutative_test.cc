@@ -48,17 +48,12 @@
 #include <chrono>
 #include <set>
 #include <string>
-#include <type_traits>
 #include <vector>
 
 namespace dreal
 {
     namespace
     {
-        // The ordered set of T ∈ {Formula, Expression}, under T's own comparator.
-        template <typename T>
-        using SymbolicSet = std::conditional_t<std::is_same_v<T, Formula>, FormulaSet, ExpressionSet>;
-
         // The four substitution round-trip checks from
         // pattern_matching_test.cc's test_matches_and_misses, extracted for a
         // single (form, subs) match result.

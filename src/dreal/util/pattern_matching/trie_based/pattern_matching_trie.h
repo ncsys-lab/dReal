@@ -179,10 +179,10 @@ namespace dreal
         using FormNode = TrieNode<FormulaKind, Formula, ExpressionKind, Expression>;
         ExprNode e_root;
         FormNode f_root;
-        // std::unordered_set<Formula> f_already_inserted;
-        // std::unordered_set<Expression> e_already_inserted;
-        // std::unordered_map<Formula, uint64_t> f_branch_est_cache;
-        // std::unordered_map<Expression, uint64_t> e_branch_est_cache;
+        // FormulaUnorderedSet f_already_inserted;
+        // ExpressionUnorderedSet e_already_inserted;
+        // FormulaUnorderedMap<uint64_t> f_branch_est_cache;
+        // ExpressionUnorderedMap<uint64_t> e_branch_est_cache;
 
         // using e_partial_matches_vec = std::vector<std::pair<const ExprNode*, substitutions_map>>;
         using e_partial_matches_vec = std::function<void(const ExprNode& n, substitutions_map& s)>;

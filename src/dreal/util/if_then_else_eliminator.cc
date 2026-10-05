@@ -28,7 +28,6 @@
 
 using std::cout;
 using std::to_string;
-using std::unordered_set;
 
 namespace dreal {
 
@@ -74,7 +73,7 @@ Formula IfThenElseEliminator::Process(const Formula& f) {
   }
 }
 
-const unordered_set<Variable, hash_value<Variable>>&
+const VariableUnorderedSet&
 IfThenElseEliminator::variables() const {
   return ite_variables_;
 }

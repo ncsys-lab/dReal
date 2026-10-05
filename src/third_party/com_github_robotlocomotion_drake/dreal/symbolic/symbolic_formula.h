@@ -6,6 +6,8 @@
 #include <ostream>
 #include <set>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 #include "dreal/symbolic/hash.h"
@@ -60,17 +62,27 @@ class FormulaForallT;         // In symbolic/odes/symbolic_odes.h
 class FormulaIntegral;        // In symbolic/odes/symbolic_odes.h
 class OdeFlow;                // In symbolic/odes/OdeFlow.h
 
-/** Orders formulas by Formula::Less. It is the comparator of every ordered
- *  container keyed by Formula: std::less<Formula> would call the symbolic
- *  operator<, which builds a Formula, not a bool. Declared ahead of Formula,
- *  whose friends take a FormulaSet; defined after it. */
+/** Orders formulas by Formula::Less, and compares them by Formula::EqualTo.
+ *  They are the comparators of every container keyed by Formula:
+ *  std::less<Formula> and std::equal_to<Formula> would call the symbolic
+ *  operator< and operator==, which build a Formula, not a bool. Declared ahead
+ *  of Formula, whose friends take a FormulaSet; defined after it. */
 struct FormulaLess {
+  bool operator()(const Formula& lhs, const Formula& rhs) const;
+};
+
+struct FormulaEqualTo {
   bool operator()(const Formula& lhs, const Formula& rhs) const;
 };
 
 using FormulaSet = std::set<Formula, FormulaLess>;
 template <typename T>
 using FormulaMap = std::map<Formula, T, FormulaLess>;
+using FormulaUnorderedSet =
+    std::unordered_set<Formula, std::hash<Formula>, FormulaEqualTo>;
+template <typename T>
+using FormulaUnorderedMap =
+    std::unordered_map<Formula, T, std::hash<Formula>, FormulaEqualTo>;
 
 /** Represents a symbolic form of a first-order logic formula.
 
@@ -308,6 +320,11 @@ inline bool FormulaLess::operator()(const Formula& lhs,
   return lhs.Less(rhs);
 }
 
+inline bool FormulaEqualTo::operator()(const Formula& lhs,
+                                     const Formula& rhs) const {
+  return lhs.EqualTo(rhs);
+}
+
 /** Returns a formula @p f, universally quantified by variables @p vars. */
 Formula forall(const Variables& vars, const Formula& f);
 
@@ -488,15 +505,6 @@ struct hash_value<symbolic::Formula> {
 }  // namespace dreal
 
 namespace std {
-/* Provides std::equal_to<dreal::drake::symbolic::Formula>. */
-template <>
-struct equal_to<dreal::drake::symbolic::Formula> {
-  bool operator()(const dreal::drake::symbolic::Formula& lhs,
-                  const dreal::drake::symbolic::Formula& rhs) const {
-    return lhs.EqualTo(rhs);
-  }
-};
-
 template <>
 struct hash<dreal::drake::symbolic::Formula> {
   size_t operator()(const dreal::drake::symbolic::Formula& f) const {

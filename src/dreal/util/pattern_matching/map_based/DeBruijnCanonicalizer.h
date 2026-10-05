@@ -26,9 +26,9 @@ namespace dreal
         // using DeBruijnEquivalenceClass = std::map<std::vector<Variable>, T>;
         using DeBruijnEquivalenceClass = substitution_tree<T>;
 
-        std::unordered_map<T, std::tuple<T, DeBruijnIndices, std::vector<Variable>>> canonicalization_cache;
-        // std::unordered_map<T, std::map<DeBruijnIndices, DeBruijnEquivalenceClass>> structure_to_indices_to_concrete;
-        std::unordered_map<T, DeBruijnEquivalenceClass> structure_to_concrete;
+        SymbolicUnorderedMap<T, std::tuple<T, DeBruijnIndices, std::vector<Variable>>> canonicalization_cache;
+        // SymbolicUnorderedMap<T, std::map<DeBruijnIndices, DeBruijnEquivalenceClass>> structure_to_indices_to_concrete;
+        SymbolicUnorderedMap<T, DeBruijnEquivalenceClass> structure_to_concrete;
 
         // Bound (universal) variables currently in scope while canonicalizing a `forall` atom.
         // They are NOT free solver variables, so they are excluded from the canonical variable

@@ -40,7 +40,7 @@ class IfThenElseEliminator {
   /// Returns a equisatisfiable formula by eliminating
   /// if-then-expressions in @p f by introducing new variables.
   Formula Process(const Formula& f);
-  const std::unordered_set<Variable, hash_value<Variable>>& variables() const;
+  const VariableUnorderedSet& variables() const;
 
  private:
   // Handle expressions.
@@ -97,7 +97,7 @@ class IfThenElseEliminator {
   // The added formulas introduced by the elimination process.
   std::vector<Formula> added_formulas_;
   // The variables introduced by the elimination process.
-  std::unordered_set<Variable, hash_value<Variable>> ite_variables_;
+  VariableUnorderedSet ite_variables_;
   // Mints the <N> in ITE<N> aux-var names. Per-instance (not static) so the
   // names are deterministic regardless of process history. Variables are
   // id-keyed, so equal display names across eliminator instances (e.g. one

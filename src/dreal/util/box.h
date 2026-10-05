@@ -134,7 +134,7 @@ class Box {
 
   ibex::IntervalVector values_;
 
-  std::shared_ptr<std::unordered_map<Variable, int, hash_value<Variable>>>
+  std::shared_ptr<VariableUnorderedMap<int>>
       var_to_idx_;
 
   std::shared_ptr<std::unordered_map<int, Variable>> idx_to_var_;

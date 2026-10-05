@@ -19,8 +19,6 @@ namespace {
 using std::map;
 using std::move;
 using std::ostringstream;
-using std::unordered_map;
-using std::unordered_set;
 using std::vector;
 using test::VarEqual;
 using test::VarLess;
@@ -120,14 +118,14 @@ TEST_F(VariableTest, ToString) {
 
 // This test checks whether Variable is compatible with std::unordered_set.
 TEST_F(VariableTest, CompatibleWithUnorderedSet) {
-  unordered_set<Variable> uset;
+  VariableUnorderedSet uset;
   uset.emplace(x_);
   uset.emplace(y_);
 }
 
 // This test checks whether Variable is compatible with std::unordered_map.
 TEST_F(VariableTest, CompatibleWithUnorderedMap) {
-  unordered_map<Variable, Variable> umap;
+  VariableUnorderedMap<Variable> umap;
   umap.emplace(x_, y_);
 }
 

@@ -19,16 +19,11 @@
 #include <gtest/gtest.h>
 #include "dreal/symbolic/symbolic.h"
 
-#include <type_traits>
 
 namespace dreal
 {
     namespace
     {
-        // The ordered set of T ∈ {Formula, Expression}, under T's own comparator.
-        template <typename T>
-        using SymbolicSet = std::conditional_t<std::is_same_v<T, Formula>, FormulaSet, ExpressionSet>;
-
         class PatternMatchingTest : public ::testing::Test
         {
         protected:

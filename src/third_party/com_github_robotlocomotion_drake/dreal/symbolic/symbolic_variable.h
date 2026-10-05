@@ -7,6 +7,8 @@
 #include <ostream>
 #include <set>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "dreal/symbolic/hash.h"
 
@@ -92,18 +94,30 @@ class Variable {
 
 std::ostream& operator<<(std::ostream& os, Variable::Type type);
 
-/** Orders variables by Variable::less. It is the comparator of every ordered
- *  container keyed by Variable: std::less<Variable> would call the symbolic
- *  operator<, which builds a Formula, not a bool. */
+/** Orders variables by Variable::less, and compares them by Variable::equal_to.
+ *  They are the comparators of every container keyed by Variable:
+ *  std::less<Variable> and std::equal_to<Variable> would call the symbolic
+ *  operator< and operator==, which build a Formula, not a bool. */
 struct VariableLess {
   bool operator()(const Variable& lhs, const Variable& rhs) const {
     return lhs.less(rhs);
   }
 };
 
+struct VariableEqualTo {
+  bool operator()(const Variable& lhs, const Variable& rhs) const {
+    return lhs.equal_to(rhs);
+  }
+};
+
 using VariableSet = std::set<Variable, VariableLess>;
 template <typename T>
 using VariableMap = std::map<Variable, T, VariableLess>;
+using VariableUnorderedSet =
+    std::unordered_set<Variable, std::hash<Variable>, VariableEqualTo>;
+template <typename T>
+using VariableUnorderedMap =
+    std::unordered_map<Variable, T, std::hash<Variable>, VariableEqualTo>;
 
 }  // namespace symbolic
 
@@ -117,15 +131,6 @@ struct hash_value<symbolic::Variable> {
 }  // namespace dreal
 
 namespace std {
-/* Provides std::equal_to<dreal::drake::symbolic::Variable>. */
-template <>
-struct equal_to<dreal::drake::symbolic::Variable> {
-  bool operator()(const dreal::drake::symbolic::Variable& lhs,
-                  const dreal::drake::symbolic::Variable& rhs) const {
-    return lhs.equal_to(rhs);
-  }
-};
-
 template <>
 struct hash<dreal::drake::symbolic::Variable> {
   size_t operator()(const dreal::drake::symbolic::Variable& v) const {

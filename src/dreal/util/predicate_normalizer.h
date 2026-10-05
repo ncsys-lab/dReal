@@ -54,7 +54,7 @@ namespace dreal
         Formula VisitForallT(const Formula& f);
         Formula VisitIntegral(const Formula& f);
 
-        std::unordered_map<Formula, Formula> cache;
+        FormulaUnorderedMap<Formula> cache;
 
 #ifdef DREAL_EXPERIMENTAL_PM_USE_TRIE_IMPL
         PatternMatchingTrie trie;

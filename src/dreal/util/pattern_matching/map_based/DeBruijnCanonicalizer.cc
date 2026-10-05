@@ -224,7 +224,7 @@ void DeBruijnCanonicalizer<T>::name ( \
 
         Variable::Id next_dummy_idx = 0;
 
-        std::unordered_map<Variable, Variable> as;
+        VariableUnorderedMap<Variable> as;
         FormulaSubstitution fs;
         ExpressionSubstitution es;
         as.reserve(GetVars(atom).size());
@@ -329,7 +329,7 @@ void DeBruijnCanonicalizer<T>::name ( \
 
         const auto ibegin = literals.begin();
         const auto iend = literals.end();
-        // std::unordered_set<Formula> seen_truncateds; // lexo-compare for nary goes one by one...
+        // FormulaUnorderedSet seen_truncateds; // lexo-compare for nary goes one by one...
         // seen_truncateds.reserve(1024 * literals.size());
         std::function<
             std::function<void(const T& f, substitutions_map& s)> (typeof(ibegin))

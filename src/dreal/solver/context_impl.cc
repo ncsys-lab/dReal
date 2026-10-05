@@ -52,7 +52,6 @@ using std::isfinite;
 using std::ostringstream;
 using std::pair;
 using std::string;
-using std::unordered_set;
 using std::vector;
 
 namespace {
@@ -162,7 +161,7 @@ void RejectUnlinkedForallT(const ScopedVector<Formula>& stack) {
 // corpus reach megabytes.
 void RejectNonPositiveOde(const Formula& f) {
   if (!f.include_ode()) return;
-  std::unordered_set<Formula> seen[2];  // indexed by polarity, 1 = positive
+  FormulaUnorderedSet seen[2];  // indexed by polarity, 1 = positive
   vector<pair<Formula, bool>> todo{{f, true}};
   while (!todo.empty()) {
     const auto [g, positive] = todo.back();
@@ -689,7 +688,7 @@ void Context::Impl::Minimize(const vector<Expression>& functions) {
   // pre-fix path, slow but correct. Known caveat, shared with upstream: if e
   // is partial (poles), dropping `v == e` admits universal points at the
   // poles that the quantified encoding excluded.
-  unordered_set<Formula> dropped_definitions;
+  FormulaUnorderedSet dropped_definitions;
   const auto defines_otherwise_unused_variable =
       [this, &x_vars](const Formula& eq, const Expression& var_side,
                       const Expression& expr_side) {
@@ -723,7 +722,7 @@ void Context::Impl::Minimize(const vector<Expression>& functions) {
   }
 
   // Collects side-constraints related to the cost functions.
-  unordered_set<Formula> constraints;
+  FormulaUnorderedSet constraints;
   bool keep_going = true;
   while (keep_going) {
     keep_going = false;

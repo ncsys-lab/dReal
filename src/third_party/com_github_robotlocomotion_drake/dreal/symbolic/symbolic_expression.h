@@ -10,6 +10,7 @@
 #include <string>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -90,14 +91,12 @@ class Expression;
 // ExpressionSubstitution is a map from a Variable to a symbolic expression. It
 // is used in Expression::Substitute and Formula::Substitute methods as an
 // argument.
-using ExpressionSubstitution =
-    std::unordered_map<Variable, Expression, hash_value<Variable>>;
+using ExpressionSubstitution = VariableUnorderedMap<Expression>;
 
 // FormulaSubstitution is a map from a Variable to a symbolic formula. It
 // is used in Expression::Substitute and Formula::Substitute methods as an
 // argument.
-using FormulaSubstitution =
-    std::unordered_map<Variable, Formula, hash_value<Variable>>;
+using FormulaSubstitution = VariableUnorderedMap<Formula>;
 
 /** Represents a symbolic form of an expression.
 
@@ -496,18 +495,30 @@ class Expression {
   ExpressionCell* ptr_{nullptr};
 };
 
-/** Orders expressions by Expression::Less. It is the comparator of every
- *  ordered container keyed by Expression: std::less<Expression> would call the
- *  symbolic operator<, which builds a Formula, not a bool. */
+/** Orders expressions by Expression::Less, and compares them by
+ *  Expression::EqualTo. They are the comparators of every container keyed by
+ *  Expression: std::less<Expression> and std::equal_to<Expression> would call
+ *  the symbolic operator< and operator==, which build a Formula, not a bool. */
 struct ExpressionLess {
   bool operator()(const Expression& lhs, const Expression& rhs) const {
     return lhs.Less(rhs);
   }
 };
 
+struct ExpressionEqualTo {
+  bool operator()(const Expression& lhs, const Expression& rhs) const {
+    return lhs.EqualTo(rhs);
+  }
+};
+
 using ExpressionSet = std::set<Expression, ExpressionLess>;
 template <typename T>
 using ExpressionMap = std::map<Expression, T, ExpressionLess>;
+using ExpressionUnorderedSet =
+    std::unordered_set<Expression, std::hash<Expression>, ExpressionEqualTo>;
+template <typename T>
+using ExpressionUnorderedMap =
+    std::unordered_map<Expression, T, std::hash<Expression>, ExpressionEqualTo>;
 
 Expression operator+(const Expression& lhs, const Expression& rhs);
 Expression operator+(const Expression& lhs, Expression&& rhs);
@@ -736,15 +747,6 @@ struct hash_value<symbolic::Expression> {
 }  // namespace dreal
 
 namespace std {
-/* Provides std::equal_to<dreal::drake::symbolic::Expression>. */
-template <>
-struct equal_to<dreal::drake::symbolic::Expression> {
-  bool operator()(const dreal::drake::symbolic::Expression& lhs,
-                  const dreal::drake::symbolic::Expression& rhs) const {
-    return lhs.EqualTo(rhs);
-  }
-};
-
 template <>
 struct hash<dreal::drake::symbolic::Expression> {
   size_t operator()(const dreal::drake::symbolic::Expression& e) const {

@@ -32,8 +32,11 @@
 
 #include <functional>
 #include <ostream>
+#include <map>
 #include <set>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <spdlog/fmt/ostr.h>
 
@@ -52,6 +55,38 @@ using drake::hash_value;  // NOLINT
 
 // NOLINTNEXTLINE(build/namespaces)
 using namespace drake::symbolic;
+
+/// The comparators of a symbolic key type K (Variable, Expression or
+/// Formula), for code generic over K. Code with a fixed key type uses that
+/// type's own aliases (FormulaSet, VariableUnorderedMap<V>, ...).
+template <typename K>
+struct SymbolicCompare;
+template <>
+struct SymbolicCompare<Variable> {
+  using Less = VariableLess;
+  using Equal = VariableEqualTo;
+};
+template <>
+struct SymbolicCompare<Expression> {
+  using Less = ExpressionLess;
+  using Equal = ExpressionEqualTo;
+};
+template <>
+struct SymbolicCompare<Formula> {
+  using Less = FormulaLess;
+  using Equal = FormulaEqualTo;
+};
+
+template <typename K>
+using SymbolicSet = std::set<K, typename SymbolicCompare<K>::Less>;
+template <typename K, typename V>
+using SymbolicMap = std::map<K, V, typename SymbolicCompare<K>::Less>;
+template <typename K>
+using SymbolicUnorderedSet =
+    std::unordered_set<K, std::hash<K>, typename SymbolicCompare<K>::Equal>;
+template <typename K, typename V>
+using SymbolicUnorderedMap =
+    std::unordered_map<K, V, std::hash<K>, typename SymbolicCompare<K>::Equal>;
 
 /// Returns a formula @p f1 ⇒ @p f2.
 Formula imply(const Formula& f1, const Formula& f2);
