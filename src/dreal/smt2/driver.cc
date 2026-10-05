@@ -87,7 +87,7 @@ Term FunctionDefinition::operator()(const vector<Term>& arguments) const {
 
 Smt2Driver::Smt2Driver(Context context) : context_{std::move(context)} {}
 
-bool Smt2Driver::parse_stream(istream& in, const string& sname) {
+void Smt2Driver::parse_stream(istream& in, const string& sname) {
   streamname_ = sname;
 
   Smt2Scanner new_scanner(&in);
@@ -96,24 +96,29 @@ bool Smt2Driver::parse_stream(istream& in, const string& sname) {
 
   Smt2Parser parser(*this);
   parser.set_debug_level(trace_parsing_);
-  return (parser.parse() == 0);
+  // The syntax error, or the rule that aborted, has already printed its
+  // location and reason to std::cerr.
+  if (parser.parse() != 0) {
+    throw DREAL_RUNTIME_ERROR("Failed to parse {}.", sname);
+  }
 }
 
-bool Smt2Driver::parse_file(const string& filename) {
+void Smt2Driver::parse_file(const string& filename) {
   if (filename.empty()) {
     // Option --in passed to dreal.
-    return parse_stream(cin, "(stdin)");
+    parse_stream(cin, "(stdin)");
+    return;
   }
   ifstream in(filename.c_str());
   if (!in.good()) {
-    return false;
+    throw DREAL_RUNTIME_ERROR("Cannot open {}.", filename);
   }
-  return parse_stream(in, filename);
+  parse_stream(in, filename);
 }
 
-bool Smt2Driver::parse_string(const string& input, const string& sname) {
+void Smt2Driver::parse_string(const string& input, const string& sname) {
   istringstream iss(input);
-  return parse_stream(iss, sname);
+  parse_stream(iss, sname);
 }
 
 void Smt2Driver::error(const location& l, const string& m) {

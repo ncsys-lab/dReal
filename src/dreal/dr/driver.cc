@@ -26,6 +26,7 @@
 
 #include "dreal/dr/scanner.h"
 #include "dreal/solver/expression_evaluator.h"
+#include "dreal/util/exception.h"
 #include "dreal/util/optional.h"
 
 namespace dreal {
@@ -41,7 +42,7 @@ using std::string;
 
 DrDriver::DrDriver(Context context) : context_{std::move(context)} {}
 
-bool DrDriver::parse_stream(istream& in, const string& sname) {
+void DrDriver::parse_stream(istream& in, const string& sname) {
   streamname_ = sname;
 
   DrScanner scanner(&in);
@@ -50,24 +51,29 @@ bool DrDriver::parse_stream(istream& in, const string& sname) {
 
   DrParser parser(*this);
   parser.set_debug_level(trace_parsing_);
-  return (parser.parse() == 0);
+  // The syntax error, or the rule that aborted, has already printed its
+  // location and reason to std::cerr.
+  if (parser.parse() != 0) {
+    throw DREAL_RUNTIME_ERROR("Failed to parse {}.", sname);
+  }
 }
 
-bool DrDriver::parse_file(const string& filename) {
+void DrDriver::parse_file(const string& filename) {
   if (filename.empty()) {
     // Option --in passed to dreal.
-    return parse_stream(cin, "(stdin)");
+    parse_stream(cin, "(stdin)");
+    return;
   }
   ifstream in(filename.c_str());
   if (!in.good()) {
-    return false;
+    throw DREAL_RUNTIME_ERROR("Cannot open {}.", filename);
   }
-  return parse_stream(in, filename);
+  parse_stream(in, filename);
 }
 
-bool DrDriver::parse_string(const string& input, const string& sname) {
+void DrDriver::parse_string(const string& input, const string& sname) {
   istringstream iss(input);
-  return parse_stream(iss, sname);
+  parse_stream(iss, sname);
 }
 
 void DrDriver::error(const location& l, const string& m) {

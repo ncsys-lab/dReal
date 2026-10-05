@@ -43,6 +43,8 @@
 
 #include <gtest/gtest.h>
 
+#include "dreal/dr/run.h"
+#include "dreal/smt2/run.h"
 #include "dreal/solver/brancher.h"
 #include "dreal/solver/config.h"
 #include "dreal/solver/context.h"
@@ -58,6 +60,13 @@ namespace {
 struct CoutRedirect {
   explicit CoutRedirect(std::streambuf* buf) : old_{std::cout.rdbuf(buf)} {}
   ~CoutRedirect() { std::cout.rdbuf(old_); }
+  std::streambuf* old_;
+};
+
+// The same for std::cin, which RunSmt2/RunDr read for the filename "" (--in).
+struct CinRedirect {
+  explicit CinRedirect(std::streambuf* buf) : old_{std::cin.rdbuf(buf)} {}
+  ~CinRedirect() { std::cin.rdbuf(old_); }
   std::streambuf* old_;
 };
 
@@ -504,6 +513,33 @@ TEST(DrealBugsRegression, Bug018_ProjectileTubeEdge_DeltaSat) {
       << "v_0 = 1.5, time = 0.5 gives x_t = 0.625; got: " << out;
 }
 
+// RunSmt2 and RunDr, dreal's two front ends, ignored parse_file's bool: after a
+// parse error the commands before it had run, the rest (a later (check-sat)
+// included) had not, and dreal exited 0, often with no verdict. A failed parse
+// now throws — a syntax error, a rule that aborts on an undeclared name, and a
+// file that cannot be opened — in both front ends.
+TEST(DrealBugsRegression, ParseFailure_Throws) {
+  using FrontEnd = void (*)(const std::string&, const Config&, bool, bool);
+  const auto run_on_stdin = [](const FrontEnd front_end, const std::string& input) {
+    std::istringstream in{input};
+    const CinRedirect redirect{in.rdbuf()};
+    front_end("", Config{}, false, false);
+  };
+  for (const std::string smt2 :
+       {"(set-logic QF_NRA)\n(declare-fun x () Real)\n(assert (> x 0)\n",
+        "(set-logic QF_NRA)\n(declare-fun x () Real)\n(assert (> y 0))\n(check-sat)\n"}) {
+    EXPECT_THROW(run_on_stdin(RunSmt2, smt2), std::runtime_error) << smt2;
+  }
+  for (const std::string dr : {"var:\n[0, 1] x;\nctr:\nx > ;\n",
+                               "var:\n[0, 1] x;\nctr:\ny > 0;\n"}) {
+    EXPECT_THROW(run_on_stdin(RunDr, dr), std::runtime_error) << dr;
+  }
+  for (const FrontEnd front_end : {RunSmt2, RunDr}) {
+    EXPECT_THROW(front_end("/nonexistent/dreal-input", Config{}, false, false),
+                 std::runtime_error);
+  }
+}
+
 // `(forall_t N …)` names the flow `flow_N`, so N is written as an integer. A
 // decimal N used to be rounded to a double and truncated: `1.5` and
 // `1.0000000000000001` both named flow_1 silently. The grammar now takes only
@@ -525,7 +561,7 @@ TEST(DrealBugsRegression, ForallTDecimalFlowId_Rejected) {
     Smt2Driver driver{Context{Config{}}};
     std::ostringstream captured;
     const CoutRedirect redirect{captured.rdbuf()};
-    EXPECT_FALSE(driver.parse_string(ForallTQuery(id)))
+    EXPECT_THROW(driver.parse_string(ForallTQuery(id)), std::runtime_error)
         << "forall_t " << id << " parsed; output: " << captured.str();
   }
   try {
