@@ -24,6 +24,7 @@
 #include "dreal/smt2/sort.h"
 #include "dreal/smt2/term.h"
 #include "dreal/solver/context.h"
+#include "dreal/util/exception.h"
 #include "dreal/util/math.h"
 #include "dreal/util/scoped_unordered_map.h"
 
@@ -155,8 +156,8 @@ class Smt2Driver {
 
   const std::shared_ptr<const OdeFlow>& LookupOde(const std::string& name);
   const std::shared_ptr<const OdeFlow>& LookupOde(const double id) {
-      DREAL_ASSERT(id >= 0);
-      DREAL_ASSERT(is_integer(id));
+      if (!(id >= 0 && is_integer(id)))
+          throw DREAL_RUNTIME_ERROR("forall_t: the flow id must be a non-negative integer, got {}", id);
       return LookupOde("flow_" + std::to_string(static_cast<int>(id)));  // lint: allow int
   }
 

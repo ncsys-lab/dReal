@@ -502,6 +502,27 @@ TEST(DrealBugsRegression, Bug018_ProjectileTubeEdge_DeltaSat) {
       << "v_0 = 1.5, time = 0.5 gives x_t = 0.625; got: " << out;
 }
 
+// `(forall_t N …)` names the flow `flow_N`. A fractional N used to be truncated
+// (the check was a DREAL_ASSERT, compiled out in Release), so `forall_t 1.5`
+// silently constrained flow_1.
+TEST(DrealBugsRegression, ForallTFractionalFlowId_Throws) {
+  try {
+    const std::string out{RunSmt2String(
+        "(set-logic QF_NRA_ODE)\n"
+        "(declare-fun x () Real [-10, 10])\n"
+        "(declare-fun x_0 () Real [1, 1])\n"
+        "(declare-fun x_t () Real [-10, 10])\n"
+        "(declare-fun time () Real [0, 1])\n"
+        "(define-ode flow_1 ((= d/dt[x] (* -1 x))))\n"
+        "(assert (= [x_t] (integral 0. time [x_0] flow_1)))\n"
+        "(assert (forall_t 1.5 [0 time] (<= x_t 2)))\n"
+        "(check-sat)\n")};
+    ADD_FAILURE() << "expected a rejection, got: " << out;
+  } catch (const std::exception& e) {
+    EXPECT_NE(std::string{e.what()}.find("flow id"), std::string::npos) << e.what();
+  }
+}
+
 // BUG-015 (dreal4-cmake docs/dreal-bugs.md) — an integral whose start variable
 // has no box and whose flow has sin crashed with SIGSEGV: CAPD splits the start
 // [-inf, inf] into a NaN center, and its interval sin recurses on NaN until the
