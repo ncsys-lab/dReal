@@ -138,8 +138,9 @@ void ContractorIbexObbt::Prune(ContractorStatus* cs,
   DREAL_ASSERT(!is_dummy_ && lp_ && linear_relax_);
 
   // The X-Taylor cut coefficients (interval-gradient endpoints, interval rhs)
-  // and the Neumaier-Shcherbina certification (interval matrix/vector products
-  // in neumaier_shcherbina_postprocessing) run gaol interval arithmetic, sound
+  // and the Neumaier-Shcherbina certificates (the interval product Aᵀy in
+  // neumaier_shcherbina_postprocessing and _infeasibilitytest, rigorous since
+  // the fork's BUG-019 fix, docs/dreal-bugs.md) run gaol interval arithmetic, sound
   // only under FE_UPWARD. The mode is established once per ICP phase by the
   // caller's UpwardRoundingScope and witnessed by `ur` (no per-call
   // fesetround); a wrong ambient mode here would be a false `unsat`

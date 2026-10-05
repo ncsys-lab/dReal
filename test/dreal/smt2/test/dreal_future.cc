@@ -5,18 +5,20 @@
 //   • negated NRA `forall` — the FEAT-001 roadmap
 //     (ode_expressivity_energy/docs/dreal-bugs.md §FEAT-001), Design Axis 3 below.
 //
-// WHAT BUG-002 ACTUALLY IS. When an `(integral …)` or `(forall_t …)` assertion
-// is wrapped in `(not …)`, dReal silently DROPS the constraint and the state
-// variable reverts to its declared range. The drop is at
-//   src/dreal/contractor/odes/contractor_odes.h:113-115
-// (`link_integral_invariants` logs "Inverted ODE constraints are currently
-// ignored" at DEBUG and never builds a contractor). The effect is verdict-level,
-// reachable only through the full solver, so these tests drive RunSmt2String
-// (parse → theory_solver → link_integral_invariants), exactly like
-// dreal_bugs_regression_test.cc — but unlike that file, NOTHING here is a fixed
-// behavior to guard. Every test below either (a) is a control that passes today,
-// or (b) is GTEST_SKIP-ed and encodes DESIRED-but-unimplemented behavior. Remove
-// a skip to watch the current solver give the documented wrong answer.
+// WHAT BUG-002 IS. Inside the DPLL(T) loop a negated `(integral …)` or
+// `(forall_t …)` literal builds no contractor: `link_integral_invariants`
+// (src/dreal/contractor/odes/contractor_odes.h, its is_negation branch) logs
+// "Inverted ODE constraints are currently ignored" at DEBUG. Until 2026-10-05 a
+// user assertion `(not (integral …))` reached that drop, and the state variable
+// reverted to its declared range. Since then RejectNonPositiveOde
+// (context_impl.cc) rejects, at assert time, any ODE atom in negative or mixed
+// polarity or inside an NRA forall body (Group A3 below), so the in-loop drop
+// only sees negations the SAT solver produces, where it is exact. The effect is
+// verdict-level, reachable only through the full solver, so these tests drive
+// RunSmt2String (parse → assert → theory_solver), like
+// dreal_bugs_regression_test.cc. Every test below either (a) is a control or a
+// live rejection, or (b) is GTEST_SKIP-ed and encodes DESIRED-but-unimplemented
+// semantics. Remove a skip to watch the current build reject the input.
 //
 // ─────────────────────────────────────────────────────────────────────────────
 // DESIGN AXIS 1 — negated forall_t: settled as genuine ∃-semantics.
@@ -31,7 +33,7 @@
 // empties the box when SOME slice violates φ; a negated forall_t must empty the
 // box when EVERY slice satisfies φ.
 //
-// KEY STRUCTURAL FACTS (link_integral_invariants, contractor_odes.h:104-143) —
+// KEY STRUCTURAL FACTS (link_integral_invariants, contractor_odes.h) —
 // two silent-drop hazards in BUG-002's own spirit, both verified empirically
 // while writing these tests:
 //   (1) A forall_t — positive OR negated — is inert without a companion
@@ -63,9 +65,10 @@
 //       (forallt_links_to_integral, contractor_odes.h).
 //       The NEGATED forall_t / integral drops (BUG-002 proper, Axis 1/2 below)
 //       sit on the is_negation branch and have the SAME in-loop constraint: a
-//       negated ODE literal is a normal product of DPLL(T) search, so rejecting
-//       a user-asserted hard negation likewise needs global scope — still
-//       unimplemented (Axis 1/2 semantics deliberately open).
+//       negated ODE literal is a normal product of DPLL(T) search. So the
+//       rejection of a user-asserted negation lives at assert time instead
+//       (RejectNonPositiveOde, context_impl.cc, live since 2026-10-05); the
+//       Axis 1/2 semantics that could replace it stay deliberately open.
 //
 // ─────────────────────────────────────────────────────────────────────────────
 // DESIGN AXIS 2 — negated integral: deliberately left OPEN; both rival semantics
@@ -170,7 +173,7 @@ struct CoutRedirect {
 
 // Parse an SMT2 string (its (check-sat) prints the verdict to std::cout) and
 // return the captured output. Default Config precision is 0.001 — the delta the
-// reference reproducers use. Based on dreal_bugs_regression_test.cc:37, made
+// reference reproducers use. Based on dreal_bugs_regression_test.cc's runner, made
 // exception-safe (see CoutRedirect) so the throwing tests don't corrupt cout.
 std::string RunSmt2String(const std::string& smt2) {
   Config config;

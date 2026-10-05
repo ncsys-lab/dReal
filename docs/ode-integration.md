@@ -15,7 +15,7 @@ ODE-related AST extensions (in `src/dreal/symbolic/symbolic.h` and the Drake-der
 - **`Integral`**: Represents integration of a continuous flow over a time interval. `Integral(flow, t_0, t_1)` says variables evolve according to `flow` from time `t_0` to `t_1`.
 - **`ForallT`**: Universal quantification over time. `ForallT(φ, t_0, t_1)` means `φ` must hold for all `t ∈ [t_0, t_1]` along the trajectory.
 
-These are parsed from both SMT2 (`define-ode`, `integral`, `forall_t`) and dReal3-compatible `.dr` syntax (`d/dt[x] = ...`).
+Only the SMT2 parser builds them, from dReal3's SMT2 extensions (`define-ode`, `d/dt[x]`, `integral`, `forall_t`; §Input Formats). The `.dr` parser reads no ODEs.
 
 ### Constraint forms accepted, and the silent drops (BUG-002)
 
@@ -140,34 +140,29 @@ The current CAPD-only design is the result of two migrations: an earlier move to
 
 ## Input Formats
 
-### SMT2-LIB ODE syntax
+ODEs reach dReal4 only through the SMT2 parser (`src/dreal/smt2/`), in dReal3's SMT2
+extensions. From the corpus file `0hz_k2_bouncing_ball_bouncing_ball.drh.o.smt2`
+(declarations and most of the assertion cut):
 
 ```smt2
-(define-ode flow_1 ((= (D 0 x) (- x)))
-                   ((= (D 0 v) (+ (* -1.0 (sin x)) (* -0.5 v)))))
-
-(assert (and (<= 0.0 time_0_1) (<= time_0_1 3.0)
-             (= [x_1_0 x_1_t] (integral 0 time_0_1 [x_0_0 x_0_t] flow_1))
-             (forall_t 1 [0 time_0_1] (<= x_1_t 2.0))))
+(set-logic QF_NRA_ODE)
+(declare-fun v_2_0 () Real [-100.000000, 100.000000])
+(declare-fun v_2_t () Real [-100.000000, 100.000000])
+(declare-fun time_2 () Real [0.000000, 10.000000])
+(define-ode flow_2 ((= d/dt[v] -9.8000000000000007) (= d/dt[x] v)))
+(assert (and (= [v_2_t x_2_t] (integral 0. time_2 [v_2_0 x_2_0] flow_2))
+             (forall_t 2 [0 time_2] (>= x_2_t 0))))
 ```
 
-### dReal3-compatible .dr syntax
+- `(define-ode flow_N ((= d/dt[x] e) …))` names a flow; each `d/dt[x]` refers to a declared
+  template variable `x`.
+- `(= [x_t …] (integral t0 t1 [x_0 …] flow_N))` binds end states to start states, in the
+  flow's variable order. `t0` and `t1` must be variables or constants, and every `x_0`/`x_t`
+  a variable (the `FormulaIntegral` constructor throws otherwise).
+- `(forall_t N [t0 t1] φ)` requires φ along the trajectory of `flow_N`, phrased over the end
+  variables (§Constraint forms above).
 
-```dr
-{
-  mode 1;
-  invt:
-    (x >= 0);
-  flow:
-    d/dt[x] = v;
-    d/dt[v] = -9.8;
-  jump:
-    (x = 0) and (v <= 0) ==> @2 (x' = x) and (v' = -0.9 * v);
-  init:
-    @1 (x >= 1) and (x <= 1.5);
-  goal:
-    @2 (x >= 0.5);
-}
-```
-
-Both formats ultimately produce the same `Integral` and `ForallT` AST nodes in the symbolic layer.
+dReal4 has no parser for dReal3's `.drh` hybrid-automaton format (`mode`, `flow`, `jump`,
+`init`, `goal`). A hybrid model arrives already unrolled into SMT2 like the file above; the
+benchmark corpora's `rolled/` directories hold such unrollings. The `.dr` parser
+(`src/dreal/dr/`) reads dReal3's NRA format only (`var:`, `ctr:`, `cost:` sections).

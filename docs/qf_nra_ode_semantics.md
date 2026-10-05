@@ -596,16 +596,12 @@ sets are independent constraints and both are contracted.
 (= [x_t] (integral 0. 5.0 [x_0] flow_1))
 ```
 
-The constructor assertion `is_variable(time_t_) || is_constant(time_t_) || is_real_constant(time_t_)`
-accepts a constant. However, `Prune` bails early:
-
-```cpp
-if (!is_variable(icct)) return;
-```
-
-The ODE integration is skipped. Only parameter intersection and T=0 detection run. This means
-specifying a literal constant duration does not trigger integration — you must use a variable for
-`time_t` if you want the ODE dynamics to be enforced.
+A constant end time is integrated like a variable whose box is that point: `Prune` reads the
+window from the constant (`contractor_odes.cc`, the `is_constant(icct)` branch, since
+`deab8ccae`). Any other time term (`(* 2 t)`) is rejected when the formula is built: the
+`FormulaIntegral` constructor throws unless each time bound is a variable or a constant
+(an always-on check since 2026-10-05; it was a `DREAL_ASSERT`, compiled out in Release, and the
+contractor then skipped such an integral on every `Prune`).
 
 ### 10.3 `forall_t` with a flow not defined in any `integral`
 
@@ -659,28 +655,24 @@ to `(pow x 2)`.
 
 ### 10.8 Flow IDs in `forall_t` must be non-negative integers
 
-`driver.LookupOde(double id)` asserts `id >= 0` and `is_integer(id)`. Fractional or negative
-numeric IDs will trigger a `DREAL_ASSERT` failure at runtime.
+`driver.LookupOde(double id)` throws unless `id` is a non-negative integer. Until 2026-10-05
+this was a `DREAL_ASSERT`, compiled out in Release, so `(forall_t 1.5 …)` silently named
+`flow_1`.
 
 ### 10.9 CAPD integration divergence
 
 If CAPD's `IOdeSolver` cannot maintain step-control (the trajectory tube is too stiff or the
-over-approximation explodes), it throws. `run_capd_fwd` / `run_capd_bwd` catch the integrator
-exception **internally** and report failure via `CapdOdeResult::found == false` rather than
-propagating:
-
-```cpp
-try {
-    // ... CAPD IOdeSolver / ITimeMap integration ...
-} catch (const std::exception&) {
-    // Integration diverged — return no narrowing (found stays false).
-}
-```
-
-The contractor then does `if (!res.found) return;` and skips narrowing for that `Prune` call. This
-is sound (no incorrect pruning) but incomplete (the ODE constraint is not enforced for that call).
-It can happen on long time horizons or highly nonlinear RHS. (Distinct from an *untranslatable* RHS,
-which raises at cache-build time — see §3.)
+over-approximation explodes), it throws. The same happens, by the adapter's own check, when a
+start set, flow parameter, time window or computed slice has a bound CAPD cannot represent
+(non-finite, inverted, or beyond DBL_MAX/2). `integrate_tube_slices_impl` catches the exception
+and records its message in `CapdTubeResult::failure`. The contractor then narrows nothing for
+that `Prune` call and records the integral with that reason (`AddInconclusiveOde`), so a conflict
+explanation keeps it and a `delta-sat` verdict reached on such a box prints `WARNING: delta-sat
+while N ODE constraint(s) were not integrated …` on stderr. This is the one approved fallback on
+the ODE path (`docs/decisions.md` "ODE inconclusive skip"; grep `FALLBACK(approved)`). It is
+COMPLETENESS only (asserts φ^δ T-satisfiable on a possibly T-unsatisfiable φ — missed
+refutation), never a false `unsat`. It can happen on long time horizons or highly nonlinear RHS.
+(Distinct from an *untranslatable* RHS, which raises at cache-build time — see §3.)
 
 ---
 

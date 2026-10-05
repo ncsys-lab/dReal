@@ -273,8 +273,9 @@ copied box (bisect children included) and read/WRITE dimension 0. That silent pa
 corruption on the ∃∀ path (`ForallFormulaEvaluator` copied foreign outer-box variables into
 its nested CE context). Full record: `simulink-to-dreal_bug_reports.md` BUG-012.
 
-**dReal3 backward compatibility is intentional.** The DR parser (`src/dreal/dr/`) handles the
-older dReal3 ODE syntax. Don't break this.
+**dReal3 backward compatibility is intentional.** The SMT2 parser takes dReal3's ODE extensions
+(`define-ode`, `d/dt[x]`, `integral`, `forall_t`); the DR parser (`src/dreal/dr/`) takes dReal3's
+`.dr` NRA format, which has no ODEs. Don't break either.
 
 **`auditor.cc`** (`src/dreal/solver/auditor.cc`) reprints learned lemmas in dReal3-compatible
 format for independent re-checking. Not part of the core solving loop.
