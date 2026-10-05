@@ -5,9 +5,11 @@ problems in this project's pinned dReal binary, with minimal reproducers. Files 
 committed under `docs/dreal-bugs/`. List entries with:
 `grep "^## BUG-\|^## QUIRK-\|^## FEAT-\|^## PERF-" docs/dreal-bugs.md`
 
-Numbering continues the project-wide sequence from `simulink-to-dreal_bug_reports.md`
-(BUG-001 … BUG-012 live there; its `docs/dreal-bugs/bug*.smt2` reproducer convention is
-shared). New entries land here.
+Numbering is one project-wide sequence shared with s2d's log
+(`~/Documents/MATLAB/simulink-to-dreal/docs/dreal-bugs.md`, once `simulink-to-dreal_bug_reports.md`):
+BUG-001 … BUG-012 and BUG-016 live there, the rest here. A new entry takes the number after the
+highest in either log and lands here; the `docs/dreal-bugs/bug*.smt2` reproducer convention is
+shared.
 
 ## BUG-013 — `--ode-taylor-order` 16/20 and `--ode-abs-tol`/`--ode-rel-tol` ≥ 1e-6 make the FWD ODE prune silently inert on interval-IC instances (CAPD divergence → inconclusive skip; COMPLETENESS)
 
@@ -85,6 +87,10 @@ fails at *higher* order / *looser* tolerance on this interval IC is an open
 **hypothesis, not isolated** — candidate: the wide interval IC inflates high-order Taylor
 coefficient enclosures until the predicted step underflows the controller's minimum, but
 no experiment has varied this in isolation.
+
+s2d's log BUG-016 (a thin start exactly on a nonzero fixed point, CAPD "minimal time step
+reached") reaches the same silent `!res.found` skip through a different CAPD failure; the two
+are separate bugs.
 
 **Workaround**
 
@@ -213,6 +219,145 @@ Sweep binary copy `dreal4_60fca6f69` (= `gcc_build/dreal4`, stamp `f51f78b8e <di
 @ `fc4c3da04` (fork @ `d9930909`) and `cmake-build-debug/dreal4`. Repro artifacts (24-run
 matrix, isolation battery, lldb logs): `/private/tmp/claude-501/…/tmp/{repro1,isolate,lldb_*.txt}`
 (ephemeral).
+
+---
+
+## BUG-015 — SIGSEGV: an `integral` whose start variable has no box and whose flow has `sin`/`cos` sends CAPD's interval `sin` a [NaN, NaN] argument, on which `scaledSin1` recurses until the stack is exhausted (LIVE, 2026-10-04)
+
+**Symptom / Description**
+
+dReal dies of signal 11 (exit 139, no verdict, nothing on stderr) in about 0.03 s on a
+one-line `integral` whose flow contains `sin` or `cos` and whose start variable is declared
+without a box. Both pinned builds, `--ode-backward` true or false. With a finite box on the
+start variable the same query is `delta-sat`. It is loud, so not a soundness hazard; every
+affected run is lost (COMPLETENESS-shaped).
+
+Found through s2d: since s2d `d4cc8e5` a defined signal and an Integrator state without
+limits get no default ±1e6 box, and six parity queries of the case study's vendor-copy
+models `microgrid_cs_core_{grid,islanded}[_ts0p1]_norefgen_nobs` (swing equation with
+`sin δ`) crash after one to three lemmas (s2d `triage/campaign_results.json`, 2026-10-04,
+DREAL_ERROR rows; s2d keeps the change, so the fix is dReal's).
+
+**Reproducer(s)**
+
+`docs/dreal-bugs/bug015_unbounded_sin_baseline.smt2` (248 B) — the start variable boxed:
+```smt2
+(set-logic QF_NRA_ODE)
+(declare-fun x () Real)
+(declare-fun x0 () Real [-1000000, 1000000])
+(declare-fun xt () Real)
+(declare-fun t () Real [0, 1])
+(define-ode flow_1 ((= d/dt[x] (sin x))))
+(assert (= [xt] (integral 0. t [x0] flow_1)))
+(check-sat)
+```
+
+`docs/dreal-bugs/bug015_unbounded_sin_trigger.smt2` (228 B) — identical except `x0` has no box:
+```smt2
+(set-logic QF_NRA_ODE)
+(declare-fun x () Real)
+(declare-fun x0 () Real)
+(declare-fun xt () Real)
+(declare-fun t () Real [0, 1])
+(define-ode flow_1 ((= d/dt[x] (sin x))))
+(assert (= [xt] (integral 0. t [x0] flow_1)))
+(check-sat)
+```
+
+`timeout 10 ./dreal_popl27 --model --ode-backward {true,false} <file>`, and the same on
+`./dreal_partial_models`; identical on all four:
+
+| file | output |
+|---|---|
+| baseline | `delta-sat with delta = 0.001`, `x0 : [-1000000, 1000000]`, `xt : [-2284424.786620999, 2284424.786620999]`, `t : [0, 1]` ✓ |
+| trigger | exit 139 (SIGSEGV), no output ✗ |
+
+Other probes, all with the start unboxed: a box on `xt` alone still crashes; `cos` in
+place of `sin` crashes; `d/dt[d] = 1, d/dt[w] = sin d` crashes, but `d/dt[d] = 0,
+d/dt[w] = sin d` does not; `d/dt[x] = -x`, and `d/dt[d] = 1` with `d/dt[w]` equal to `d`,
+`d²` or `exp d`, do not crash (timeout at 6 s), nor did s2d's earlier `-0.5·x`, `1/x`, `x²`.
+On these probes the crash needed `sin`/`cos` of a state that moves.
+
+How it was found: delta debugging of s2d's campaign query for
+`microgrid_cs_core_islanded_ts0p1_norefgen_nobs / load_step_0p10` (428,097 B, 2,881 lines;
+in s2d's history as `14c6817:docs/dreal-bugs/bug014_stack_exhaustion_unboxed_core.smt2`),
+keeping a candidate only if both builds exit by signal 11 within 6 s, one process at a time
+(417 runs): the 1,518 assertions reduce to one `integral` of the swing-equation flow; its
+eleven ODE components reduce to `d/dt[δ] = 1`, `d/dt[ω] = sin δ` with everything unboxed;
+the trigger above is that with one component.
+
+**Root cause / Design notes**
+
+- ESTABLISHED (lldb, trigger and the 2,881-line original on `dreal_popl27`): the fault is
+  `EXC_BAD_ACCESS (code=2)` on the stack guard page in
+  `capd::intervals::operator/` called from `capd::intervals::scaledSin1`, under an unbroken
+  chain of `scaledSin1` frames calling themselves (offset +396). On the trigger the argument
+  of `scaledSin1` read at depths 1, 5 and 9 is `[NaN, NaN]`.
+- ESTABLISHED (CAPD source, `gcc_build/capd-install/include/capd/intervals/Interval_Fun.hpp`):
+  `sin` (:424) returns `[-1, 1]` only when `diam(x) ≥ 2π`, and range-reduces with loops
+  guarded by `y.leftBound() < 0.` and `y.leftBound() >= pi2.rightBound()`; every one of
+  these comparisons is false for NaN, so a NaN interval reaches `scaledSin1(y)` (:463).
+  There the two branch guards (`x.leftBound() <= piby2.rightBound()`, `<= pi.rightBound()`)
+  are false too, and it falls through to `return - scaledSin1 (x - pi);` (:418). NaN − π is
+  NaN, so the recursion has no base case. It is a stack overflow, not a C++ exception, so the
+  catch-all skip in `contractor_odes_capd.cc:505` does not apply.
+- HYPOTHESIS (not isolated): the NaN is produced inside the CAPD integration from the
+  unbounded start set `x0 = [-inf, inf]` (for example a midpoint or an ∞ − ∞ of the initial
+  enclosure). A finite box on `x0` removes it; where in CAPD the NaN first appears was not
+  traced.
+
+**Workaround**
+
+Give every `integral` start variable whose flow uses `sin`/`cos` a finite box. s2d does not
+(by decision, s2d `docs/decisions.md`, "no default box on a defined signal or on an
+Integrator's state"); its six affected parity rows stay DREAL_ERROR. Candidate fixes, both
+untested: refuse a non-finite initial set in dReal's CAPD adapter before integrating
+(treat it as an inconclusive skip, like the other CAPD failures), or make CAPD's `sin`/`cos`
+return `[-1, 1]` for a non-finite argument.
+
+**Binary**
+
+`dreal_popl27` (Commit `c294eb435`, built 2026-07-13) and `dreal_partial_models` (Commit
+`ce5c8971c`, built 2026-09-18). Recorded 2026-10-04.
+
+---
+
+## BUG-017 — Documentation: `docs/pattern-matching.md` misdescribes `--drpm-max-size` and `--drpm-max-time` (LIVE, 2026-10-04)
+
+The log has no documentation category; this is filed as a BUG because the text states the
+wrong behavior. Nothing in the solver is wrong.
+
+**Symptom / Description**
+
+`docs/pattern-matching.md:130-131` reads:
+
+- `--drpm-max-size <n>`: "maximum number of formulas in the pattern database before pruning
+  old entries"
+- `--drpm-max-time <µs>`: "timeout (microseconds) for a single matching call"
+
+The source says otherwise (all verified at `290bd8474`):
+
+| flag | the source | correct reading |
+|---|---|---|
+| `--drpm-max-size` | `src/dreal/dreal_main.cc:303` "Set maximum lemma size to pattern match. (default = 0)"; `src/dreal/solver/context_impl.cc:472` `if (explanation.size() < config().drpm_max_size()` | a lemma (explanation) is pattern-matched only if it has **fewer literals** than this; it says nothing about the database size. The default 0 matches nothing, so DRPM is off unless the flag is given. |
+| `--drpm-max-time` | `dreal_main.cc:309-310` "Set pattern matching timeout in seconds"; `src/dreal/solver/config.cc:201-202` (a `duration<double, seconds>`); `config.h:359` default `0.222`; `context_impl.cc:477-481` | **seconds**, not microseconds, and not the whole budget: a matching call gets `t_sat + t_theory + min(99·(t_sat + t_theory), drpm_max_time)`, where `t_sat` and `t_theory` are that lemma's own SAT and theory check times (`context_impl.cc:403-406`, `:434-438`). |
+
+Also: `--drpm-max-size 0`, the documented default, is rejected on the command line
+(`dreal_main.cc:114-115`: `positive_int_option_validator` is `gt 0`; `./dreal_popl27
+--drpm-max-size 0 q.smt2` prints `ERROR: Got invalid argument "0" for option
+--drpm-max-size.`). To turn DRPM off, omit the flag.
+
+**Other docs checked** (dReal `docs/`, `CLAUDE.md`, `OPTIMIZATION_LOG.md`,
+`exists_forall_perf.md`; s2d `docs/` and `triage/`; the case study's `data/findings.md`,
+`pipeline/`, `slides/`): none repeats the wrong reading. The case study states the correct
+one (`data/findings.md`, "What `--drpm-max-time` actually caps";
+`slides/solver/drpm_and_partial_models.md:27-29`). One related error:
+`exists_forall_perf.md:246` proposes a "`--drpm-max-size 0` A/B", which the validator
+rejects.
+
+**Workaround**
+
+Read the flags as in the table; `dreal --help` prints the correct text.
 
 ---
 

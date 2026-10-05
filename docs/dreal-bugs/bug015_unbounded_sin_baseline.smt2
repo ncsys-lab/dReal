@@ -1,0 +1,8 @@
+(set-logic QF_NRA_ODE)
+(declare-fun x () Real)
+(declare-fun x0 () Real [-1000000, 1000000])
+(declare-fun xt () Real)
+(declare-fun t () Real [0, 1])
+(define-ode flow_1 ((= d/dt[x] (sin x))))
+(assert (= [xt] (integral 0. t [x0] flow_1)))
+(check-sat)
