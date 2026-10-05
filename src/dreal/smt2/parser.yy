@@ -109,7 +109,6 @@
 
 %type <std::pair<Variable, Expression>>              ode
 %type <std::vector<std::pair<Variable, Expression>>> ode_list
-%type <double>                                       double_or_int_value
 %type <std::string>                                  ignored_dreal3_precision_value
 
 %{
@@ -390,7 +389,7 @@ term:           TK_TRUE { $$ = Formula::True(); }
 	    }
         }
 
-        | '(' TK_FORALLT double_or_int_value '[' term term ']' term_list ')' {
+        | '(' TK_FORALLT INT '[' term term ']' term_list ')' {
             Formula f = Formula::True();
             for (const Term& t : $8) f = f && t.formula();
             $$ = forallT(driver.LookupOde($3), $5.expression(), $6.expression(), f);
@@ -579,11 +578,6 @@ ode_list: /* empty list */ { $$ = std::vector<std::pair<Variable, Expression>>{}
 	    $$ = $1;
         }
         ;
-
-double_or_int_value
-  : DOUBLE             { $$ = std::stod($1); }
-  | INT                { $$ = static_cast<double>($1); }
-  ;
 
 ignored_dreal3_precision_value
   : '[' DOUBLE ']'             { $$ = ""; }

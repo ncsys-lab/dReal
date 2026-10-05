@@ -13,6 +13,7 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 */
+#include <cstdint>
 #include <istream>
 #include <string>
 #include <unordered_set>
@@ -155,10 +156,10 @@ class Smt2Driver {
                       const std::vector<Term>& arguments);
 
   const std::shared_ptr<const OdeFlow>& LookupOde(const std::string& name);
-  const std::shared_ptr<const OdeFlow>& LookupOde(const double id) {
-      if (!(id >= 0 && is_integer(id)))
-          throw DREAL_RUNTIME_ERROR("forall_t: the flow id must be a non-negative integer, got {}", id);
-      return LookupOde("flow_" + std::to_string(static_cast<int>(id)));  // lint: allow int
+  const std::shared_ptr<const OdeFlow>& LookupOde(const std::int64_t id) {
+      if (id < 0)
+          throw DREAL_RUNTIME_ERROR("forall_t: the flow id must be non-negative, got {}", id);
+      return LookupOde("flow_" + std::to_string(id));
   }
 
   static Variable ParseVariableSort(const std::string& name, Sort s);

@@ -50,9 +50,8 @@ namespace {
 // RAII redirect of std::cout, restored on BOTH the normal and exception paths.
 // A plain "restore after parse_string" is skipped during stack unwinding if
 // parse_string throws, leaving std::cout pointing at a destroyed local buffer —
-// the next writer to std::cout then segfaults. None of the tests in this file
-// throw today, but the guard keeps a future throwing test from reintroducing the
-// crash (it bit dreal_future.cc's aspirational throw tests).
+// the next writer to std::cout then segfaults (it bit dreal_future.cc's throw
+// tests). ForallTDecimalFlowId_Rejected throws through it here.
 struct CoutRedirect {
   explicit CoutRedirect(std::streambuf* buf) : old_{std::cout.rdbuf(buf)} {}
   ~CoutRedirect() { std::cout.rdbuf(old_); }
@@ -502,25 +501,37 @@ TEST(DrealBugsRegression, Bug018_ProjectileTubeEdge_DeltaSat) {
       << "v_0 = 1.5, time = 0.5 gives x_t = 0.625; got: " << out;
 }
 
-// `(forall_t N …)` names the flow `flow_N`. A fractional N used to be truncated
-// (the check was a DREAL_ASSERT, compiled out in Release), so `forall_t 1.5`
-// silently constrained flow_1.
-TEST(DrealBugsRegression, ForallTFractionalFlowId_Throws) {
+// `(forall_t N …)` names the flow `flow_N`, so N is written as an integer. A
+// decimal N used to be rounded to a double and truncated: `1.5` and
+// `1.0000000000000001` both named flow_1 silently. The grammar now takes only
+// an INT there, and a negative one is refused.
+std::string ForallTQuery(const std::string& id) {
+  return "(set-logic QF_NRA_ODE)\n"
+         "(declare-fun x () Real [-10, 10])\n"
+         "(declare-fun x_0 () Real [1, 1])\n"
+         "(declare-fun x_t () Real [-10, 10])\n"
+         "(declare-fun time () Real [0, 1])\n"
+         "(define-ode flow_1 ((= d/dt[x] (* -1 x))))\n"
+         "(assert (= [x_t] (integral 0. time [x_0] flow_1)))\n"
+         "(assert (forall_t " + id + " [0 time] (<= x_t 2)))\n"
+         "(check-sat)\n";
+}
+
+TEST(DrealBugsRegression, ForallTDecimalFlowId_Rejected) {
+  for (const std::string id : {"1.5", "1.0000000000000001", "1.0"}) {
+    Smt2Driver driver{Context{Config{}}};
+    std::ostringstream captured;
+    const CoutRedirect redirect{captured.rdbuf()};
+    EXPECT_FALSE(driver.parse_string(ForallTQuery(id)))
+        << "forall_t " << id << " parsed; output: " << captured.str();
+  }
   try {
-    const std::string out{RunSmt2String(
-        "(set-logic QF_NRA_ODE)\n"
-        "(declare-fun x () Real [-10, 10])\n"
-        "(declare-fun x_0 () Real [1, 1])\n"
-        "(declare-fun x_t () Real [-10, 10])\n"
-        "(declare-fun time () Real [0, 1])\n"
-        "(define-ode flow_1 ((= d/dt[x] (* -1 x))))\n"
-        "(assert (= [x_t] (integral 0. time [x_0] flow_1)))\n"
-        "(assert (forall_t 1.5 [0 time] (<= x_t 2)))\n"
-        "(check-sat)\n")};
-    ADD_FAILURE() << "expected a rejection, got: " << out;
+    const std::string out{RunSmt2String(ForallTQuery("-1"))};
+    ADD_FAILURE() << "expected a rejection of a negative flow id, got: " << out;
   } catch (const std::exception& e) {
     EXPECT_NE(std::string{e.what()}.find("flow id"), std::string::npos) << e.what();
   }
+  EXPECT_NE(RunSmt2String(ForallTQuery("1")).find("delta-sat"), std::string::npos);
 }
 
 // BUG-015 (dreal4-cmake docs/dreal-bugs.md) — an integral whose start variable
