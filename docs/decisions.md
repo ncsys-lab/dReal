@@ -167,9 +167,12 @@ direction handling in `qf_nra_ode_semantics.md` §4.5.
 ## Negated / unlinked ODE constraints: negations dropped in-loop, unlinked forall_t rejected globally
 
 **Decision:** A negated `integral`/`forall_t` literal is silently dropped in
-`link_integral_invariants` — *not* turned into a loud error. The silent drop of negated ODE
-atoms is the documented §6 behavior and the root of **BUG-002** (a user-asserted negation is
-silently removed). A positive `forall_t` that links to no integral anywhere in the problem
+`link_integral_invariants` — *not* turned into a loud error there. A user formula that puts an
+ODE atom in negative or mixed polarity (or inside an NRA `forall` body) is **rejected at assert
+time** (`RejectNonPositiveOde`, `context_impl.cc`, owner decision 2026-10-05, **BUG-002**), so
+every in-loop negated literal comes from a positive-only atom and its drop is exact. Corpus
+census before the change: no file among the 7,094 ODE-bearing github, VNAMSCwI and saradc
+files has an ODE atom in negative or mixed polarity. A positive `forall_t` that links to no integral anywhere in the problem
 (same-flow + invariant-over-endpoint-vars test) is **rejected with a throw at check-sat time**
 (`RejectUnlinkedForallT`, `context_impl.cc`, 2026-07-13; it previously fell through the same
 silent drop — surfaced as simulink-to-dreal **BUG-010**, an invariant written over the flow

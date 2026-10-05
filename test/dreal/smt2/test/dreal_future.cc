@@ -294,7 +294,139 @@ TEST(Bug002NegatedOde, PosForallT_InvariantOverFlowVar_ShouldReject) {
 }
 
 // =============================================================================
+// Group A3 — an ODE atom in negative or mixed polarity IS a hard error (LIVE
+// since 2026-10-05). The theory solver enforces (integral …) and (forall_t …)
+// only positively: it drops a negated ODE literal (which DPLL(T) produces
+// legitimately for a positive-only atom, so the drop itself must stay quiet —
+// Group A2's rationale). A user formula that puts an ODE atom under `not`, an
+// `=>` antecedent, a Boolean `=`, `xor` or an ite condition (the parser turns
+// all of them into Not), or inside an NRA `forall` body, was therefore solved
+// without it — COMPLETENESS (asserts φ^δ T-satisfiable on a possibly
+// T-unsatisfiable φ — missed refutation). Context::Impl::Assert now rejects it
+// with the whole assertion in view (RejectNonPositiveOde). Positive occurrences
+// under `or` / `and` / an `=>` consequent stay accepted (s2d's implied
+// integrals, dReach's mode-guarded invariants).
+// =============================================================================
+
+// The rejection names its reason; a different throw (e.g. the unlinked
+// forall_t check) must not satisfy these tests.
+void ExpectNonPositiveOdeRejected(const std::string& smt2,
+                                  const std::string& phrase = "negative polarity") {
+  try {
+    const std::string out{RunSmt2String(smt2)};
+    ADD_FAILURE() << "expected a rejection, got: " << out;
+  } catch (const std::exception& e) {
+    EXPECT_NE(std::string{e.what()}.find(phrase), std::string::npos) << e.what();
+  }
+}
+
+TEST(Bug002NegatedOde, NegIntegral_Rejected) {
+  ExpectNonPositiveOdeRejected(
+      std::string(kDecayPreamble) +
+      "(assert (and (= x_0 100) (not (= [x_t] (integral 0. time [x_0] flow_1))) "
+      "(> x_t 95)))\n(check-sat)\n");
+}
+
+TEST(Bug002NegatedOde, NegForallT_WithIntegral_Rejected) {
+  ExpectNonPositiveOdeRejected(
+      std::string(kDecayPreamble) +
+      "(assert (and (= x_0 100) (= [x_t] (integral 0. time [x_0] flow_1)) "
+      "(not (forall_t 1 [0 time] (<= x_t 150)))))\n(check-sat)\n");
+}
+
+TEST(Bug002NegatedOde, ImplicationAntecedentIntegral_Rejected) {
+  ExpectNonPositiveOdeRejected(
+      std::string(kDecayPreamble) +
+      "(assert (= x_0 100))\n"
+      "(assert (=> (= [x_t] (integral 0. time [x_0] flow_1)) (> x_t 95)))\n"
+      "(check-sat)\n");
+}
+
+// (= g I) is mixed polarity: (or (not g) I) and (or (not I) g).
+TEST(Bug002NegatedOde, BoolEqualityIntegral_Rejected) {
+  ExpectNonPositiveOdeRejected(
+      std::string(kDecayPreamble) +
+      "(declare-fun g () Bool)\n"
+      "(assert (= x_0 100))\n"
+      "(assert (= g (= [x_t] (integral 0. time [x_0] flow_1))))\n"
+      "(check-sat)\n");
+}
+
+// An ite condition is lifted to both polarities by ITE elimination; the check
+// runs after it (a relational formula hides an ite condition's ODE atom).
+TEST(Bug002NegatedOde, IteConditionIntegral_Rejected) {
+  ExpectNonPositiveOdeRejected(
+      std::string(kDecayPreamble) +
+      "(declare-fun y () Real [0, 1])\n"
+      "(assert (= x_0 100))\n"
+      "(assert (= y (ite (= [x_t] (integral 0. time [x_0] flow_1)) 1 0)))\n"
+      "(check-sat)\n");
+}
+
+// An ODE atom inside an NRA forall body: the theory solver skips the whole
+// forall, so it cannot be enforced in either polarity. (Before, the positive
+// case aborted in relational_formula_evaluator.cc "Should not be reachable".)
+TEST(Bug002NegatedOde, IntegralInsideForallBody_Rejected) {
+  ExpectNonPositiveOdeRejected(
+      std::string(kDecayPreamble) +
+      "(assert (= x_0 100))\n"
+      "(assert (> x_t 95))\n"
+      "(assert (forall ((y Real [0, 1])) (or (= [x_t] (integral 0. time [x_0] flow_1)) "
+      "(> y 2))))\n"
+      "(check-sat)\n",
+      "inside a (forall …) body");
+}
+
+// Controls: positive occurrences are accepted and enforced.
+TEST(Bug002NegatedOde, GuardedIntegral_GuardTrue_Unsat) {
+  const std::string out{RunSmt2String(
+      std::string(kDecayPreamble) +
+      "(declare-fun g () Bool)\n"
+      "(assert g)\n"
+      "(assert (or (not g) (= [x_t] (integral 0. time [x_0] flow_1))))\n"
+      "(assert (= x_0 100))\n"
+      "(assert (> x_t 95))\n"
+      "(check-sat)\n")};
+  EXPECT_TRUE(HasUnsat(out)) << "got: " << out;
+}
+
+TEST(Bug002NegatedOde, GuardedIntegral_GuardFree_DeltaSat) {
+  const std::string out{RunSmt2String(
+      std::string(kDecayPreamble) +
+      "(declare-fun g () Bool)\n"
+      "(assert (or (not g) (= [x_t] (integral 0. time [x_0] flow_1))))\n"
+      "(assert (= x_0 100))\n"
+      "(assert (> x_t 95))\n"
+      "(check-sat)\n")};
+  EXPECT_TRUE(HasDeltaSat(out)) << "got: " << out;
+}
+
+TEST(Bug002NegatedOde, ImplicationConsequentForallT_Accepted) {
+  const std::string out{RunSmt2String(
+      std::string(kDecayPreamble) +
+      "(assert (= x_0 100))\n"
+      "(assert (= [x_t] (integral 0. time [x_0] flow_1)))\n"
+      "(assert (=> (= mode 1) (forall_t 1 [0 time] (<= x_t 150))))\n"
+      "(check-sat)\n")};
+  EXPECT_TRUE(HasDeltaSat(out)) << "got: " << out;
+}
+
+// Two negations around the integral cancel: it is positive, so no rejection
+// (a check for "any not above an ODE atom" would wrongly fire here).
+TEST(Bug002NegatedOde, DoubleNegationParity_Accepted) {
+  const std::string out{RunSmt2String(
+      std::string(kDecayPreamble) +
+      "(assert (= x_0 100))\n"
+      "(assert (not (and (not (= [x_t] (integral 0. time [x_0] flow_1))) (< x_t 0))))\n"
+      "(check-sat)\n")};
+  EXPECT_TRUE(HasDeltaSat(out)) << "got: " << out;
+}
+
+// =============================================================================
 // Group B — negated forall_t, genuine ∃-semantics (skipped; Axis 1).
+// Since 2026-10-05 these inputs are rejected (Group A3); the skipped tests keep
+// the semantics a future implementation would put in place of the rejection,
+// and their "current" notes describe the build before it.
 // =============================================================================
 
 // ¬(∀t. x ≤ 150) ≡ ∃t. x(t) > 150. Trajectory max is 100, gap 50 ≫ δ, so NO
@@ -339,12 +471,10 @@ TEST(Bug002NegatedOde, NegForallT_InvariantViolated_DeltaSat) {
 // Negated forall_t with NO positive integral ⇒ no trajectory tube for ∃ to range
 // over (see KEY STRUCTURAL FACT in the header). Open design corner: the fail-loud
 // choice is to RAISE ("forall_t with no companion integral"). Desired = raises.
-// CURRENT: silently dropped ⇒ returns delta-sat (x_0 pinned, x/x_t free).
+// Before 2026-10-05 it was silently dropped (delta-sat, x_0 pinned, x/x_t free).
 TEST(Bug002NegatedOde, NegForallT_NoIntegral_DesignGap) {
-  GTEST_SKIP() << "ASPIRATIONAL (BUG-002, Axis-1 design gap): desired RAISE "
-                  "(no trajectory), current delta-sat (silently dropped). "
-                  "Remove skip to exercise.";
-  EXPECT_ANY_THROW(RunSmt2String(
+  // LIVE since 2026-10-05 (Group A3): rejected for its negative polarity.
+  ExpectNonPositiveOdeRejected((
       std::string(kDecayPreamble) +
       "(assert (and\n"
       "  (= x_0 100)\n"
@@ -354,7 +484,8 @@ TEST(Bug002NegatedOde, NegForallT_NoIntegral_DesignGap) {
 }
 
 // =============================================================================
-// Group C — negated integral, BOTH rival semantics (skipped; Axis 2).
+// Group C — negated integral, BOTH rival semantics (skipped; Axis 2). Rejected
+// since 2026-10-05 (Group A3); see the Group B note.
 // Each scenario runs the SAME smt2 under both readings; the verdicts diverge.
 // =============================================================================
 
@@ -505,10 +636,8 @@ TEST(Bug002NegatedOde, Mixed_PosForallT_NegIntegral_Definitional_Unsat) {
 // regardless of the negated-integral reading — the integral axis becomes
 // verdict-irrelevant once ¬forall_t refutes.
 TEST(Bug002NegatedOde, Mixed_BothNegated_DesignGap) {
-  GTEST_SKIP() << "ASPIRATIONAL (BUG-002, mixed design gap): desired RAISE "
-                  "(¬forall_t has no trajectory; ¬integral degenerate), current "
-                  "delta-sat (both dropped). Remove skip to exercise.";
-  EXPECT_ANY_THROW(RunSmt2String(
+  // LIVE since 2026-10-05 (Group A3): rejected for its negative polarity.
+  ExpectNonPositiveOdeRejected((
       std::string(kDecayPreamble) +
       "(assert (and\n"
       "  (= x_0 100)\n"

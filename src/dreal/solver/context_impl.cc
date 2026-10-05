@@ -149,6 +149,44 @@ void RejectUnlinkedForallT(const ScopedVector<Formula>& stack) {
   }
 }
 
+// BUG-002. The theory solver enforces (integral …) and (forall_t …) only
+// positively: link_integral_invariants drops a negated ODE literal, which the
+// SAT solver produces legitimately for a positive-only atom, so that drop must
+// stay quiet (docs/decisions.md "Negated / unlinked ODE constraints"). An
+// assertion that puts an ODE atom in negative polarity — under `not`, an `=>`
+// antecedent, a Boolean `=`, `xor` or an ite condition, all of which reach here
+// as Not — or inside an NRA `forall` body (the theory solver skips such a forall
+// whole) would be solved without it. Reject it here, where the whole assertion
+// is in view. Polarity flips under Not and is kept by And/Or. The walk is
+// iterative and visits each (node, polarity) once: one-line asserts in the
+// corpus reach megabytes.
+void RejectNonPositiveOde(const Formula& f) {
+  if (!f.include_ode()) return;
+  std::unordered_set<Formula> seen[2];  // indexed by polarity, 1 = positive
+  vector<pair<Formula, bool>> todo{{f, true}};
+  while (!todo.empty()) {
+    const auto [g, positive] = todo.back();
+    todo.pop_back();
+    if (!g.include_ode() || !seen[positive].insert(g).second) continue;
+    if (is_negation(g)) {
+      todo.emplace_back(get_operand(g), !positive);
+    } else if (is_conjunction(g) || is_disjunction(g)) {
+      for (const Formula& op : get_operands(g)) todo.emplace_back(op, positive);
+    } else if (is_forall(g)) {
+      throw DREAL_RUNTIME_ERROR(
+          "(integral …)/(forall_t …) inside a (forall …) body is not "
+          "supported and would be silently ignored: {}",
+          g);
+    } else if (!positive) {
+      throw DREAL_RUNTIME_ERROR(
+          "(integral …)/(forall_t …) occurs in negative polarity (under not, an "
+          "=> antecedent, a Boolean =, xor, or an ite condition) and would be "
+          "silently ignored: dReal enforces ODE atoms only positively. Atom: {}",
+          g);
+    }
+  }
+}
+
 // Point-quantifier elimination. A positive top-level `forall` whose binder pins
 // a universal variable y to a single point c (lb == ub) is degenerate there:
 // dReal soundly over-approximates the strict domain-negation `(y>c) ∨ (y<c)`
@@ -325,6 +363,7 @@ void Context::Impl::Assert(const Formula& f) {
       AddToBox(ite_var);
     }
     const Formula normalized{pn_.Convert(no_ite)};
+    RejectNonPositiveOde(normalized);
     stack_.push_back(normalized);
     sat_solver_.AddFormula(normalized);
     return;

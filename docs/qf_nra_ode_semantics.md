@@ -420,32 +420,23 @@ state variables at the endpoints.
 
 ---
 
-## 6. Negated ODE Constraints: Semantically Ignored
+## 6. Negated ODE Constraints: rejected in the input, dropped in the search
 
-This is one of the most important semantic gotchas.
+### 6.1 The input rule (since 2026-10-05, BUG-002)
 
-### 6.1 Negated invariants in `Prune`
+dReal enforces `(integral …)` and `(forall_t …)` only **positively**. `Context::Impl::Assert`
+rejects an assertion that puts an ODE atom in negative or mixed polarity — under `not`, an `=>`
+antecedent, a Boolean `=`, `xor`, or an ite condition (the parser turns each into `Not`) — or
+inside an NRA `forall` body, with an error naming the atom (`RejectNonPositiveOde`,
+`context_impl.cc`). Positive occurrences under `or`, `and` or an `=>` consequent are accepted,
+for example s2d's implied integrals `(or (not G) I)` and dReach's mode-guarded invariants
+`(=> (= mode k) (forall_t …))`. Before 2026-10-05 such a formula was solved with the negated
+atom silently removed (a missed refutation).
 
-In `contractor_ode_lohner::Prune` (Step 3 of the invariant-checking code):
+### 6.2 Negated literals inside the search
 
-```cpp
-for (size_t i = 0; i < invs.size(); ++i) {
-    if (!is_negation(invs[i])) {
-        m_inv_ctcs[i].Prune(&cs_0);
-        // ... UNSAT detection
-    } else {
-        DREAL_LOG_WARN("contractor_ode_lohner::Prune - negated invariant ignored: {}", invs[i]);
-    }
-}
-```
-
-If a `forall_t` formula appears negated in the assertions (e.g., wrapped in `(not ...)` or
-arriving as a negated literal from the SAT solver), the contractor **does not prune** based on it.
-The negation is logged at `WARN` level and skipped.
-
-### 6.2 Negated ODE constraints in `link_integral_invariants`
-
-In the top-level loop inside `link_integral_invariants` (also called from `contractor_odes.h`):
+The SAT solver still assigns ODE atoms false during search, and `link_integral_invariants`
+(`contractor_odes.h`) drops such a literal (and an ODE formula nested inside a larger one):
 
 ```cpp
 else if (is_negation(f) && f.include_ode()) {
@@ -456,51 +447,26 @@ else if (f.include_ode()) {
 }
 ```
 
-If an `integral` or `forall_t` formula appears **negated** (inside a `not`), the entire constraint
-is **silently discarded** during contractor construction. It is not checked for satisfiability and
-does not contribute to UNSAT explanations. An `integral` nested inside a larger formula (not at
-top level in the conjunction) is also discarded.
+With the input rule this drop is exact, not a relaxation: every ODE atom occurs only positively,
+so the Boolean skeleton is monotone in it, and an assignment that satisfies the skeleton with the
+atom false also satisfies it with the atom true. Only positive `forall_t` atoms are linked to an
+integral, so the per-slice invariant check never sees a negation.
 
-### 6.3 Why this matters
+### 6.3 Why the rule is in the input and not at the drop
 
-Consider a formula like:
+A throw at the drop site would fire on legitimate search states (a negated literal of a
+positive-only atom, or a `forall_t` whose integral is not active in that node) and crashes valid
+BMC benchmarks; only the asserted formula tells malformed input from search. The semantics a
+negated ODE atom could be given instead (∃t ¬φ for `forall_t`; disequality or definitional
+binding for `integral`) are specified as skipped tests in `test/dreal/smt2/test/dreal_future.cc`.
 
-```smt2
-(assert (not (forall_t 1 [0 T] (>= x 0.0))))
-```
+### 6.4 `OdeFormulaEvaluator` returns valid by default
 
-This asserts that the invariant `x ≥ 0` does NOT hold for all time — i.e., there exists some
-`t ∈ [0, T]` where `x < 0`. In a complete solver, this would need different handling (existential
-quantification over trajectory time). In dReal4, this constraint is **ignored**: it contributes
-nothing to the contractor or the satisfiability result. The solver may return delta-SAT on a
-formula that is actually unsatisfiable because of such a negated ODE constraint.
-
-This is a **completeness limitation (incompleteness) for negated ODE formulas** — COMPLETENESS
-(the solver returns `delta-sat` / asserts φ^δ is *T-satisfiable* on a φ that is *T-unsatisfiable*
-because of the dropped negated-ODE constraint — a missed refutation). It is **not** a soundness
-violation: no false-`unsat` is produced (dropping a constraint can only *widen* the feasible set,
-never prune a real solution), consistent with the "sound … but incomplete" framing used for the
-CAPD-divergence skip later in this doc. It is
-documented at `WARN` level in the contractor, and at `DEBUG` level in the linking function. Users
-must not rely on negated ODE constraints being enforced. (See `docs/soundness-vs-completeness.md`.)
-
-### 6.4 `OdeFormulaEvaluator` also returns vacuously valid
-
-`ode_formula_evaluator.cc` (`OdeFormulaEvaluator::operator()`):
-
-```cpp
-FormulaEvaluationResult OdeFormulaEvaluator::operator()(const Box& box) const {
-  // TODO: IMPLEMENT CAPD STUFF HERE
-  return FormulaEvaluationResult{FormulaEvaluationResult::Type::VALID, Box::Interval(0.0, 0.0)};
-}
-```
-
-The formula evaluator for ODE formulas unconditionally returns `VALID`. This means the ICP loop
-never considers an `integral` or `forall_t` formula as a branching criterion — they do not drive
-bisection. The ODE contractor prunes domains through the normal contractor `Prune` path, but the
-formula evaluator does not detect whether the ODE constraint is actually satisfied in the current
-box. The `TODO` comment has been present since the original codebase; the CAPD-based implementation
-it references was never completed here.
+`ode_formula_evaluator.cc` (`OdeFormulaEvaluator::operator()`) returns `VALID` for every ODE atom
+unless `--refine-witness` is given (`docs/decisions.md`, "ODE formula evaluator"); a negated
+literal is `VALID` in both modes. So by default the ICP loop never branches on an ODE atom; the ODE
+contractor prunes domains through the normal `Prune` path, and a box that survives it is accepted
+at tube granularity.
 
 ---
 

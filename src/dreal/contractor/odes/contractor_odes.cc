@@ -456,7 +456,6 @@ namespace dreal
                         ibex::Interval(slice.state[i].first, slice.state[i].second);
                 bool violated = false;
                 for (size_t i = 0; i < m_inv_ctcs.size(); ++i) {
-                    if (is_negation(m_ctr.second[i])) continue;
                     m_inv_ctcs[i].Prune(cs_inv.get(), inv_scope.token());
                     if (cs_inv->box().empty()) { violated = true; break; }
                 }

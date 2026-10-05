@@ -322,14 +322,16 @@ checked per-slice in `contractor_ode_lohner` / `Kind::ODE_LOHNER`;
 docs were confused here once (a mislabeled contractor); grep `forall-vs-forall_t` for the
 anchored warnings, and `docs/forall-semantics.md` §7 for the canonical side-by-side.
 
-**Negated/unlinked ODE constraints (BUG-002):** a negated `integral`/`forall_t` is silently
-dropped in `link_integral_invariants` — a COMPLETENESS hazard (missed refutation, never
-false-`unsat`). This can't be made a throw there (it runs inside DPLL(T) on transient search
-literals; throwing crashes valid BMC benchmarks). An **unlinked positive `forall_t`** (invariant
+**Negated/unlinked ODE constraints (BUG-002):** a negated `integral`/`forall_t` literal is
+dropped in `link_integral_invariants`. That can't be a throw there (it runs inside DPLL(T) on
+transient search literals; throwing crashes valid BMC benchmarks), so since 2026-10-05 the
+user formula is checked instead: an ODE atom in negative or mixed polarity, or inside an NRA
+`forall` body, is **rejected** at assert time (`RejectNonPositiveOde`, `context_impl.cc`),
+which makes the in-loop drop exact. An **unlinked positive `forall_t`** (invariant
 must reference the endpoint var `x_t`, not the flow var `x`) is now **rejected loudly** at
 check-sat time, where the full assertion stack is in scope (`RejectUnlinkedForallT`,
 `context_impl.cc`; shared link predicate `forallt_links_to_integral`, `contractor_odes.h`).
-Negated-ODE semantics remain aspirational `GTEST_SKIP` tests in
+Semantics that could replace the rejection remain aspirational `GTEST_SKIP` tests in
 `test/dreal/smt2/test/dreal_future.cc`. Details: `docs/decisions.md` "Negated / unlinked ODE
 constraints", `docs/ode-integration.md`.
 
