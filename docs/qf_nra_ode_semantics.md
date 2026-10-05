@@ -110,17 +110,17 @@ Flows are stored in a `ScopedUnorderedMap<std::string, shared_ptr<const OdeFlow>
 For `forall_t` (see §5), the parser uses a numeric ID:
 
 ```
-'(' TK_FORALLT double_or_int_value '[' term term ']' term_list ')'
+'(' TK_FORALLT INT '[' term term ']' term_list ')'
     { ... forallT(driver.LookupOde($3), ...) }
 ```
 
-`LookupOde(double id)` in `driver.h` is:
+`LookupOde(std::int64_t id)` in `driver.h` is:
 
 ```cpp
-const std::shared_ptr<const OdeFlow>& LookupOde(const double id) {
-    DREAL_ASSERT(id >= 0);
-    DREAL_ASSERT(is_integer(id));
-    return LookupOde("flow_" + std::to_string(static_cast<int>(id)));
+const std::shared_ptr<const OdeFlow>& LookupOde(const std::int64_t id) {
+    if (id < 0)
+        throw DREAL_RUNTIME_ERROR("forall_t: the flow id must be non-negative, got {}", id);
+    return LookupOde("flow_" + std::to_string(id));
 }
 ```
 
@@ -215,10 +215,13 @@ Positions (token-numbered from `$1 = '('`):
 
 In `symbolic_odes.cc`, `FormulaIntegral::FormulaIntegral` enforces at construction time:
 
-1. `time_0` must be a variable, a constant, or a real-constant expression:
+1. `time_0` and `time_t` must each be a variable, a constant, or a real-constant expression:
    ```cpp
-   DREAL_ASSERT(is_variable(time_0_) || is_constant(time_0_) || is_real_constant(time_0_));
-   DREAL_ASSERT(is_variable(time_t_) || is_constant(time_t_) || is_real_constant(time_t_));
+   for (const Expression* t : {&time_0_, &time_t_}) {
+       if (!(is_variable(*t) || is_constant(*t) || is_real_constant(*t)))
+           throw DREAL_RUNTIME_ERROR(
+               "integral: a time bound must be a variable or a constant, got {}", ...);
+   }
    ```
 
 2. `vec_0.size() == vec_t.size()` — the initial and final vectors must have equal length.
@@ -228,9 +231,11 @@ In `symbolic_odes.cc`, `FormulaIntegral::FormulaIntegral` enforces at constructi
 
 4. Each element of `vec_0` and `vec_t` must be a single variable (not an expression):
    ```cpp
-   DREAL_ASSERT(is_variable(vec_0_[i]));
-   DREAL_ASSERT(is_variable(vec_t_[i]));
+   if (!is_variable(vec_0_[i]) || !is_variable(vec_t_[i]))
+       throw DREAL_RUNTIME_ERROR(
+           "integral: start and end entries must be variables, got {} and {}", ...);
    ```
+   (1) and (4) were `DREAL_ASSERT`s, compiled out in Release, until 2026-10-05.
 
 5. Each ODE variable in the flow is classified: the constructor splits the combined
    `(vec_0, vec_t)` pair into `(vars_0, vars_t)` for state variables and
@@ -254,16 +259,10 @@ The `integral` formula represents: _integrate `flow` from time `time_0` to time 
 at state `vec_0`, ending at state `vec_t`._
 
 In all current benchmarks, `time_0` is the literal constant `0.` and `time_t` is a variable
-(e.g., `time_0` in the problem). The constructor accepts any expression that satisfies invariant (1),
-but `contractor_odes.cc` (`Prune`) contains this check:
-
-```cpp
-if (!is_variable(icct)) return;
-```
-
-where `icct = icc->get_time_t()`. If `time_t` is not a variable (i.e., is a numeric constant),
-the ODE integration step is silently skipped. The parameter intersection and T=0 special cases still
-run.
+(e.g., `time_0` in the problem). The constructor accepts either time bound as a variable or a
+constant (invariant (1)), but the contractor integrates from t = 0 only: it throws unless `time_0`
+is the constant 0 (`contractor_odes.cc`, top of `Prune`). `time_t` may be a variable, a constant or
+a real-constant interval; `Prune` reads the integration window from whichever it is (§10.2).
 
 **T=0 special case** (`Prune`, Step 2):
 
@@ -597,8 +596,11 @@ sets are independent constraints and both are contracted.
 ```
 
 A constant end time is integrated like a variable whose box is that point: `Prune` reads the
-window from the constant (`contractor_odes.cc`, the `is_constant(icct)` branch, since
-`deab8ccae`). Any other time term (`(* 2 t)`) is rejected when the formula is built: the
+window from the constant (`contractor_odes.cc`, the `is_constant(icct)` branch). `deab8ccae`
+(2025-12-27) added that branch; the Codac rewrite dropped it (`331b20703`, 2026-04-27, then
+`a21b7a40d`'s `if (!is_variable(icct)) return;`, the line this section used to quote), and
+`5d619fe3f` (2026-06-22) restored it. Builds from 2026-04-27 to 2026-06-22 skipped a constant end
+time — COMPLETENESS (asserts φ^δ T-satisfiable on a T-unsatisfiable φ — missed refutation). Any other time term (`(* 2 t)`) is rejected when the formula is built: the
 `FormulaIntegral` constructor throws unless each time bound is a variable or a constant
 (an always-on check since 2026-10-05; it was a `DREAL_ASSERT`, compiled out in Release, and the
 contractor then skipped such an integral on every `Prune`).
@@ -655,9 +657,9 @@ to `(pow x 2)`.
 
 ### 10.8 Flow IDs in `forall_t` must be non-negative integers
 
-`driver.LookupOde(double id)` throws unless `id` is a non-negative integer. Until 2026-10-05
-this was a `DREAL_ASSERT`, compiled out in Release, so `(forall_t 1.5 …)` silently named
-`flow_1`.
+The grammar takes the id as an INT token and `driver.LookupOde(std::int64_t id)` throws on a
+negative one. Until 2026-10-05 the id was parsed as a double and checked by a `DREAL_ASSERT`,
+compiled out in Release, so a decimal id was truncated and silently named another flow.
 
 ### 10.9 CAPD integration divergence
 
@@ -665,10 +667,12 @@ If CAPD's `IOdeSolver` cannot maintain step-control (the trajectory tube is too 
 over-approximation explodes), it throws. The same happens, by the adapter's own check, when a
 start set, flow parameter, time window or computed slice has a bound CAPD cannot represent
 (non-finite, inverted, or beyond DBL_MAX/2). `integrate_tube_slices_impl` catches the exception
-and records its message in `CapdTubeResult::failure`. The contractor then narrows nothing for
-that `Prune` call and records the integral with that reason (`AddInconclusiveOde`), so a conflict
-explanation keeps it and a `delta-sat` verdict reached on such a box prints `WARNING: delta-sat
-while N ODE constraint(s) were not integrated …` on stderr. This is the one approved fallback on
+and records its message in `CapdTubeResult::failure`. The contractor then narrows nothing beyond
+Step 1's parameter intersection, which has already run, and records the integral with that reason
+(`AddInconclusiveOde`). A conflict explanation then keeps the integral when its variables meet the
+emptying witness (`GenerateExplanation`, `contractor_status.cc`), and a `delta-sat` verdict prints
+`WARNING: delta-sat while N ODE constraint(s) were not integrated on some box of this search …`
+on stderr when any box of the search recorded such a skip. This is the one approved fallback on
 the ODE path (`docs/decisions.md` "ODE inconclusive skip"; grep `FALLBACK(approved)`). It is
 COMPLETENESS only (asserts φ^δ T-satisfiable on a possibly T-unsatisfiable φ — missed
 refutation), never a false `unsat`. It can happen on long time horizons or highly nonlinear RHS.

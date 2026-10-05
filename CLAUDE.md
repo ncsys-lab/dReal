@@ -214,7 +214,7 @@ build wiring; `../ibex-fork/MIGRATION.md` for the ibex-fork patch catalog.
 |---|---|
 | `main` | stable CMake base; CaDiCaL, IBEX 2.8.9, core perf fixes |
 | `fmcad25-experiments` | first PM research; NN heuristic; SAR-ADC application |
-| `tacas26-odes` | ODE AST nodes (`Integral`, `ForallT`); CAPD contractor; dReal3 `.dr` compat |
+| `tacas26-odes` | ODE AST nodes (`Integral`, `ForallT`); CAPD contractor; dReal3 ODE syntax in the SMT2 parser |
 | `upgrade-ibex` **(current)** | post-Codac; IBEX fork (2.9.1; see `../ibex-fork/MIGRATION.md`); per-slice ODE tube |
 | `cav26` | DeBruijn PM; `substitution_tree`; symmetry filtering |
 

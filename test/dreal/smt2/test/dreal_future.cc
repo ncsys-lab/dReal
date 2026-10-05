@@ -29,7 +29,7 @@
 // Refutable and meaningful: negating an invariant that TRULY holds on the whole
 // trajectory is unsat (no witnessing t); negating one violated somewhere is
 // delta-sat. Implementation-wise this is the per-slice tube check (contractor_
-// odes.h step 4) with its accept/refute polarity inverted: a positive forall_t
+// odes.cc, Step 3) with its accept/refute polarity inverted: a positive forall_t
 // empties the box when SOME slice violates φ; a negated forall_t must empty the
 // box when EVERY slice satisfies φ.
 //

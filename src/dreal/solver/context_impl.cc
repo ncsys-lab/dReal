@@ -120,9 +120,9 @@ void RejectUnsupportedForall(const Formula& f) {
 // (another mode/step is active — throwing there crashes the github airplane
 // BMC family). Only here, against the full assertion stack, is "links to NO
 // integral anywhere" distinguishable from a transient search state. A forall_t
-// nested under a disjunction/negation is not collected by the conjunction
-// traversal and keeps the documented BUG-002 silent-drop behavior (design
-// axes 1–2 in test/dreal/smt2/test/dreal_future.cc).
+// nested under a disjunction is not collected by the conjunction traversal and
+// keeps the silent drop; one under a negation never gets here
+// (RejectNonPositiveOde, at assert time).
 void RejectUnlinkedForallT(const ScopedVector<Formula>& stack) {
   vector<Formula> int_ctrs;
   vector<Formula> inv_ctrs;

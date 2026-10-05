@@ -184,8 +184,8 @@ var `x` instead of `x_t`). The link predicate is shared with the linker:
 normal product of search — so a throw there crashes valid multi-step BMC benchmarks (github
 `airplane`/`gen`). Distinguishing malformed *user input* from a valid transient state needs the
 global problem scope — hence the rejection lives in `Context::Impl::CheckSat`, which sees the
-full assertion stack (a `forall_t` nested under a disjunction/negation is not collected there
-and keeps the silent-drop behavior). These drops are **COMPLETENESS** hazards (missed refutation
+full assertion stack (a `forall_t` nested under a disjunction is not collected there and keeps
+the silent-drop behavior; one under a negation is rejected at assert time since 2026-10-05). These drops are **COMPLETENESS** hazards (missed refutation
 / false `delta-sat`), never soundness (a removed constraint only enlarges the box). Full
 transient-literal mechanism: `docs/ode-integration.md` §"Constraint forms accepted, and the
 silent drops (BUG-002)".

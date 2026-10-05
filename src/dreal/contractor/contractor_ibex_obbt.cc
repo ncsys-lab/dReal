@@ -139,7 +139,7 @@ void ContractorIbexObbt::Prune(ContractorStatus* cs,
 
   // The X-Taylor cut coefficients (interval-gradient endpoints, interval rhs)
   // and the Neumaier-Shcherbina certificates (the interval product Aᵀy in
-  // neumaier_shcherbina_postprocessing and _infeasibilitytest, rigorous since
+  // neumaier_shcherbina_postprocessing and _infeasibility_test, rigorous since
   // the fork's BUG-019 fix, docs/dreal-bugs.md) run gaol interval arithmetic, sound
   // only under FE_UPWARD. The mode is established once per ICP phase by the
   // caller's UpwardRoundingScope and witnessed by `ur` (no per-call

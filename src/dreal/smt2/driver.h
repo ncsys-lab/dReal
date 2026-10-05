@@ -159,7 +159,7 @@ class Smt2Driver {
   const std::shared_ptr<const OdeFlow>& LookupOde(const std::int64_t id) {
       if (id < 0)
           throw DREAL_RUNTIME_ERROR("forall_t: the flow id must be non-negative, got {}", id);
-      return LookupOde("flow_" + std::to_string(id));
+      return LookupOde("flow_" + std::to_string(id));  // lint: allow int
   }
 
   static Variable ParseVariableSort(const std::string& name, Sort s);
