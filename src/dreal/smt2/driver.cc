@@ -145,39 +145,29 @@ void Smt2Driver::CheckSat() {
 
     // --visualize
     if (context_.config().visualize()) {
-      try {
-        const auto filename = streamname_ + ".json";
-        std::ofstream nra_json_out;
-        nra_json_out.open(filename, std::ofstream::out | std::ofstream::trunc);
-        if (nra_json_out.fail()) {
-          cout << "Cannot create a file: " << filename << '\n';
-          exit(1);
-        }
-
-        json traces = {};
-        // Need to run ODE pruning operator once again to generate a trace
-        const auto odes = link_integral_invariants(context_.assertions());
-        for (const auto& ctr : odes) {
-          Contractor fwd_full = mk_contractor_ode_lohner(*model, ctr, ode_direction::FWD, context_.config(), 0.0);
-          ContractorStatus cs(*model);
-          json trace = to_ode_lohner(fwd_full)->generate_trace(/*copy*/cs);
-          traces.push_back(trace);
-        }
-        json vis_json;
-        vis_json["traces"] = traces;
-
-        // nlohmann serializes the trajectory doubles to decimal here; route
-        // through the token-gated dump_json so FE_TONEAREST is proven.
-        nra_json_out << dump_json(vis_json, nr) << '\n';
-      } catch (std::exception const & e) {
-        DREAL_LOG_CRITICAL("The following exception is generated while computing "
-                           "a trace (visualization).");
-        DREAL_LOG_CRITICAL(e.what());
-        DREAL_LOG_CRITICAL("This indicates that this delta-sat result is not "
-                           "properly checked by ODE pruning operators.");
-        DREAL_LOG_CRITICAL("Please try with a smaller precision using the "
-                           "--precision option (current precision = {}).", context_.config().precision());
+      const auto filename = streamname_ + ".json";
+      std::ofstream nra_json_out;
+      nra_json_out.open(filename, std::ofstream::out | std::ofstream::trunc);
+      if (nra_json_out.fail()) {
+        cout << "Cannot create a file: " << filename << '\n';
+        exit(1);
       }
+
+      json traces = {};
+      // Need to run ODE pruning operator once again to generate a trace
+      const auto odes = link_integral_invariants(context_.assertions());
+      for (const auto& ctr : odes) {
+        Contractor fwd_full = mk_contractor_ode_lohner(*model, ctr, ode_direction::FWD, context_.config(), 0.0);
+        ContractorStatus cs(*model);
+        json trace = to_ode_lohner(fwd_full)->generate_trace(/*copy*/cs);
+        traces.push_back(trace);
+      }
+      json vis_json;
+      vis_json["traces"] = traces;
+
+      // nlohmann serializes the trajectory doubles to decimal here; route
+      // through the token-gated dump_json so FE_TONEAREST is proven.
+      nra_json_out << dump_json(vis_json, nr) << '\n';
     }
 
   } else {

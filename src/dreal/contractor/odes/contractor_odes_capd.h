@@ -173,9 +173,11 @@ namespace dreal
     // forward = true  → integrate f(x)  (cache->fn_fwd)
     // forward = false → integrate -f(x) (cache->fn_bwd) for reverse-time view
     //
-    // Returns succeeded=false if the cache is null or the integrator diverges
-    // before reaching t_ub. The points actually recorded up to the divergence
-    // are still populated so partial traces remain visualizable.
+    // Throws std::logic_error on a call the caller must not make: a null cache,
+    // no state variables, t_ub or n_steps not positive, or u0 not sized to the
+    // state. Returns succeeded=false if the integrator fails before reaching
+    // t_ub. The points recorded up to the failure (possibly none) are still
+    // populated so partial traces remain visualizable.
     CapdTraceResult run_capd_trace(
         const std::shared_ptr<CapdOdeCache>& cache,
         const std::vector<std::pair<double, double>>& u0,

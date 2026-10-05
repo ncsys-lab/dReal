@@ -740,11 +740,16 @@ namespace dreal
         // Contain CAPD's directed-mode clobber so this adapter is nearest-in /
         // nearest-out. See ExpectClobber in rounding.h.
         const NearestRoundingScope capd_clobber{expect_clobber};
-        CapdTraceResult result;
-        if (!cache) return result;
+        // generate_trace establishes these before calling (the trivial-flow
+        // short-circuit, a positive end time); reaching here without them is a
+        // bug. So an empty trace means CAPD failed before its first point.
+        if (!cache || cache->n_state_vars == 0 || t_ub <= 0.0 || n_steps <= 0 ||
+            u0.size() != static_cast<size_t>(cache->n_state_vars))
+            throw std::logic_error("run_capd_trace: called without a CAPD map, "
+                                   "state variables, a positive end time and step "
+                                   "count, or a start set of the state's size");
         const int n = cache->n_state_vars;
-        if (n == 0 || t_ub <= 0.0 || n_steps <= 0) return result;
-        if (u0.size() != static_cast<size_t>(n)) return result;
+        CapdTraceResult result;
 
         // Twin of the integrate_tube_slices dispatch — pick the C0 set type.
         switch (params.c0_set) {

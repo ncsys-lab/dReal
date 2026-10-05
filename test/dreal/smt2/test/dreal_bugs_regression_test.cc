@@ -24,8 +24,8 @@
 // negated integral) are specified as aspirational GTEST_SKIP tests in the
 // sibling file dreal_future.cc. The --visualize bugs (BUG-004 empty JSON,
 // BUG-007 step field) are exercised at the generate_trace level in
-// contractor_capd_test.cc, since the --visualize file-write path is not
-// reachable through parse_string.
+// contractor_capd_test.cc; the driver's --visualize path is reached here
+// through parse_string's stream name, the JSON file's stem.
 
 #include "dreal/smt2/driver.h"
 
@@ -646,6 +646,30 @@ TEST(DrealBugsRegression, Perf001_FollowedDurationBranchedFirst) {
     EXPECT_EQ(c.offered, std::vector<std::string>{"d1"});
   }
   EXPECT_GT(checked, 0) << "no branch was taken while d1 could be split";
+}
+
+// --visualize: an error drawing the trace propagates out of (check-sat), after
+// the verdict is printed. The driver used to catch it, log it at CRITICAL and
+// leave an empty JSON file. Here the integral's time window ends below 0: the
+// solve skips the integral as inconclusive (delta-sat), and the trace refuses
+// it. parse_string's stream name is the JSON file's stem.
+TEST(DrealBugsRegression, Visualize_TraceErrorPropagates) {
+  Config config;
+  config.mutable_visualize().set_from_command_line(true);
+  Smt2Driver driver{Context{config}};
+  std::ostringstream captured;
+  const CoutRedirect redirect{captured.rdbuf()};
+  EXPECT_THROW(driver.parse_string("(set-logic QF_NRA_ODE)\n"
+                                   "(declare-fun x () Real [-10, 10])\n"
+                                   "(declare-fun x0 () Real [1, 2])\n"
+                                   "(declare-fun xt () Real [-10, 10])\n"
+                                   "(declare-fun t () Real [-2, -1])\n"
+                                   "(define-ode flow_1 ((= d/dt[x] (- x))))\n"
+                                   "(assert (= [xt] (integral 0. t [x0] flow_1)))\n"
+                                   "(check-sat)\n",
+                                   ::testing::TempDir() + "visualize_trace_error"),
+               std::runtime_error);
+  EXPECT_NE(captured.str().find("delta-sat"), std::string::npos) << captured.str();
 }
 
 // BUG-015 (dreal4-cmake docs/dreal-bugs.md) — an integral whose start variable

@@ -111,6 +111,21 @@ namespace dreal
         return true;
     }
 
+    // The integration end time as an interval: a variable's box interval, a real
+    // constant's bounds, or the point [c, c] of a constant c (cav26 accepted all
+    // three). FormulaIntegral's constructor admits only these forms. Prune and
+    // generate_trace both read the window here.
+    static ibex::Interval end_time_window(const Expression& time_t, const Box& b) {
+        if (is_variable(time_t)) return b[get_variable(time_t)];
+        if (is_real_constant(time_t))
+            return ibex::Interval(get_lb_of_real_constant(time_t),
+                                  get_ub_of_real_constant(time_t));
+        if (is_constant(time_t)) return ibex::Interval(get_constant_value(time_t));
+        throw DREAL_RUNTIME_ERROR(
+            "contractor_ode_lohner: integral end time {} is neither a "
+            "variable nor a constant", fmt::streamed(time_t));
+    }
+
     // ---------------------------------------------------------------------------
     // contractor_ode_lohner — constructor
     // ---------------------------------------------------------------------------
@@ -191,10 +206,13 @@ namespace dreal
             // keeps Prune off the cold per-flow translation path. If the RHS
             // cannot be translated/parsed, make_capd_ode_cache *raises* (rather
             // than silently returning a no-op contractor); it returns null only
-            // when there is no flow at all, which the Prune/trace null-checks
-            // still guard.
+            // when there is no flow at all, which raises here, so Prune and
+            // generate_trace never see a missing map.
             m_capd_cache = make_capd_ode_cache(icc->get_flow(), m_ode_state_vars);
         }
+        if (!m_capd_cache)
+            throw DREAL_RUNTIME_ERROR("contractor_ode_lohner: no CAPD map for {}",
+                                      fmt::streamed(ic));
 
         // Resolve the runtime CAPD knobs for this instance. A lohner contractor
         // is single-direction, so the Taylor order comes from the matching flag
@@ -307,36 +325,13 @@ namespace dreal
         // as inconclusive (spliced into explanations, reported at a delta-sat
         // verdict). There is no other backend to fall back to.
 
-        // make_capd_ode_cache throws on an untranslatable right-hand side, so a
-        // missing map is a bug, not an input.
-        if (!m_capd_cache)
-            throw DREAL_RUNTIME_ERROR("contractor_ode_lohner: no CAPD map for {}",
-                                      fmt::streamed(ic));
-
-        // Integration-time window [win_lb, win_ub]. cav26 accepted a time that
-        // is a variable, a real-constant interval, or an exact constant; the
-        // rewrite had narrowed this to is_variable only, silently skipping the
-        // ODE for a literal duration (a latent false delta-sat). Restore all
-        // three. (T == 0 was already handled in Step 2.)
-        double win_lb, win_ub;
-        bool time_is_var = false;
-        Variable time_var;
-        if (is_variable(icct)) {
-            time_is_var = true;
-            time_var = get_variable(icct);
-            win_lb = cs->box()[time_var].lb();
-            win_ub = cs->box()[time_var].ub();
-        } else if (is_real_constant(icct)) {
-            win_lb = get_lb_of_real_constant(icct);
-            win_ub = get_ub_of_real_constant(icct);
-        } else if (is_constant(icct)) {
-            win_lb = win_ub = get_constant_value(icct);
-        } else {
-            // FormulaIntegral's constructor admits only these three forms.
-            throw DREAL_RUNTIME_ERROR(
-                "contractor_ode_lohner: integral end time {} is neither a "
-                "variable nor a constant", fmt::streamed(icct));
-        }
+        // Integration-time window [win_lb, win_ub]. The rewrite had read only a
+        // variable end time, silently skipping the ODE for a literal duration (a
+        // latent false delta-sat); end_time_window reads all three forms. (T == 0
+        // was already handled in Step 2.)
+        const ibex::Interval win = end_time_window(icct, cs->box());
+        const double win_lb = win.lb();
+        const double win_ub = win.ub();
         // FALLBACK(approved): negative time window -> inconclusive ODE — see docs/decisions.md "ODE inconclusive skip"
         if (win_ub <= 0.0) {
             cs->AddInconclusiveOde(ic, "the integration time window ends below 0");
@@ -533,7 +528,8 @@ namespace dreal
                 changed = true;
             }
         }
-        if (time_is_var) {
+        if (is_variable(icct)) {
+            const Variable time_var = get_variable(icct);
             const ibex::Interval old_t = cs->box()[time_var];
             const ibex::Interval new_t = old_t & ibex::Interval(keep_t_lb, keep_t_ub);
             if (!new_t.is_empty() && new_t != old_t) {
@@ -568,17 +564,21 @@ namespace dreal
         const auto* const icc = to_integral(ic);
         Box& b = cs_copy.mutable_box();
 
-        // Intersect parameters before tracing.
+        // Intersect parameters before tracing. Disjoint start and end values
+        // mean the box does not satisfy this integral: no trajectory to draw.
         bool params_narrowed = false;
-        if (!intersect_params(&cs_copy, icc, &params_narrowed)) return json::array();
+        if (!intersect_params(&cs_copy, icc, &params_narrowed))
+            throw DREAL_RUNTIME_ERROR(
+                "generate_trace: a flow parameter of {} has disjoint start and "
+                "end values", fmt::streamed(ic));
 
-        // Time variable.
-        const Expression& time_expr = icc->get_time_t();
-        if (!is_variable(time_expr)) return json::array();
-        const Variable time_var = get_variable(time_expr);
-        const double t_lb = b[time_var].lb();
-        const double t_ub = b[time_var].ub();
-        if (t_ub <= 0.0) return json::array();
+        // The integration window, read as Prune reads it. A window ending below
+        // 0, which Prune skips as inconclusive, has no trajectory to draw.
+        const ibex::Interval win = end_time_window(icc->get_time_t(), b);
+        if (win.ub() < 0.0)
+            throw DREAL_RUNTIME_ERROR(
+                "generate_trace: the integration time window of {} ends below 0",
+                fmt::streamed(ic));
 
         // Initial condition for integration (direction-adjusted: m_vars_0 is start).
         std::vector<std::pair<double, double>> u0_bounds;
@@ -587,8 +587,6 @@ namespace dreal
             const ibex::Interval& iv = b[var];
             u0_bounds.emplace_back(iv.lb(), iv.ub());
         }
-
-        if (!m_capd_cache) return json::array();
 
         // Flow parameters (d/dt == 0 vars), ordered to match the cache's
         // par_names; bound into the CAPD map's par: section before tracing.
@@ -599,11 +597,15 @@ namespace dreal
             par_bounds.emplace_back(iv.lb(), iv.ub());
         }
 
-        const bool forward = (m_dir == ode_direction::FWD);
-        const CapdTraceResult trace = run_capd_trace(
-            m_capd_cache, u0_bounds, par_bounds, t_ub, forward, m_capd_params, g.token());
-
-        if (trace.points.empty()) return json::array();
+        // No trajectory points over a zero-length window (Prune's Step 2) or for
+        // a trivial flow, whose every variable is a parameter (Prune's
+        // short-circuit; m_vars_0 is empty). Otherwise CAPD's enclosures over
+        // [0, win.ub()]; a CAPD failure keeps the points before it, possibly none.
+        std::vector<CapdTracePoint> points;
+        if (win.ub() > 0.0 && !capd_ode_cache_is_trivial(m_capd_cache))
+            points = run_capd_trace(m_capd_cache, u0_bounds, par_bounds, win.ub(),
+                                    m_dir == ode_direction::FWD, m_capd_params,
+                                    g.token()).points;
 
         json ret = json::array();
         const std::string& mode_name = icc->get_flow()->name;
@@ -617,7 +619,7 @@ namespace dreal
             entry["mode"]   = mode_name;
             entry["step"]   = ode_step_from_name(name);
             entry["values"] = json::array();
-            for (const auto& pt : trace.points) {
+            for (const auto& pt : points) {
                 json value;
                 value["time"]      = {pt.t_lb, pt.t_ub};
                 value["enclosure"] = {pt.var_enclosures[i].first,
@@ -639,7 +641,7 @@ namespace dreal
             json v_begin, v_end;
             v_begin["time"]      = {0.0, 0.0};
             v_begin["enclosure"] = {iv.lb(), iv.ub()};
-            v_end["time"]        = {t_lb, t_ub};
+            v_end["time"]        = {win.lb(), win.ub()};
             v_end["enclosure"]   = {iv.lb(), iv.ub()};
             entry["values"].push_back(v_begin);
             entry["values"].push_back(v_end);

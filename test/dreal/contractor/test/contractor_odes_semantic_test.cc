@@ -1280,5 +1280,77 @@ TEST_F(RestingAffineTest, Controls_ZeroFixedPointAndOffPoint) {
   EXPECT_LT(off[xt_].ub(), off_true + 1e-9) << off[xt_];
 }
 
+// =============================================================================
+// The --visualize trace (generate_trace) reads the integration window as Prune
+// does. It draws no trajectory points over a zero-length window, or when CAPD
+// fails before its first point (the approved fallback keeps the points before a
+// failure); every other case it cannot draw raises. Each case below used to
+// return an empty array, so --visualize silently drew nothing for the integral.
+// =============================================================================
+
+// generate_trace as the --visualize driver calls it: a FWD contractor on the
+// model box, inside a NearestRoundingScope.
+nlohmann::json Trace(const Formula& ic, const Box& box) {
+  const auto ctc = mk_contractor_ode_lohner(box, {ic, {}}, ode_direction::FWD,
+                                            Config{}, 0.0);
+  const NearestRoundingScope g;
+  return to_ode_lohner(ctc)->generate_trace(ContractorStatus{box});
+}
+
+// A constant end time is traced to that constant: x(1) = x0·e^-1, x0 ∈ [1, 2].
+TEST_F(DecayFlowTest, Trace_ConstantTime_EndsAtTheConstant) {
+  SetBounds(1.0, 2.0, 0.3, 0.8, 5.0);  // the time variable is not the end time
+  const nlohmann::json trace =
+      Trace(integral(0.0, Expression{1.0}, {x0_}, {xt_}, ode_), box_);
+  ASSERT_EQ(trace.size(), 1u);
+  ASSERT_FALSE(trace[0]["values"].empty());
+  const nlohmann::json& last = trace[0]["values"].back();
+  EXPECT_EQ(last["time"][1].get<double>(), 1.0);
+  const double lb = last["enclosure"][0].get<double>();
+  const double ub = last["enclosure"][1].get<double>();
+  EXPECT_LE(lb, std::exp(-1.0));
+  EXPECT_GE(ub, 2.0 * std::exp(-1.0));
+  EXPECT_GT(lb, std::exp(-1.0) - 1e-3);
+  EXPECT_LT(ub, 2.0 * std::exp(-1.0) + 1e-3);
+}
+
+// A window ending below 0: the solve records the integral as inconclusive, and
+// the trace has nothing to draw.
+TEST_F(DecayFlowTest, Trace_NegativeTimeWindow_Throws) {
+  SetBounds(1.0, 2.0, 0.3, 0.8, 1.0);
+  box_[t0_] = Box::Interval(-2.0, -1.0);
+  EXPECT_THROW(Trace(MakeIc(), box_), std::runtime_error);
+}
+
+// A zero-length window (T = 0): the state entry has no points.
+TEST_F(DecayFlowTest, Trace_ZeroTimeWindow_EntryWithNoPoints) {
+  SetBounds(1.0, 2.0, 1.0, 2.0, 0.0);
+  const nlohmann::json trace = Trace(MakeIc(), box_);
+  ASSERT_EQ(trace.size(), 1u);
+  EXPECT_EQ(trace[0]["key"].get<std::string>(), "decay_x_0_0");
+  EXPECT_TRUE(trace[0]["values"].empty());
+}
+
+// CAPD refuses an unbounded start set, so it fails before its first point: the
+// state entry has no points.
+TEST_F(DecayFlowTest, Trace_CapdFailsBeforeFirstPoint_EntryWithNoPoints) {
+  const double inf = std::numeric_limits<double>::infinity();
+  SetBounds(-inf, inf, 0.3, 0.8, 1.0);
+  const nlohmann::json trace = Trace(MakeIc(), box_);
+  ASSERT_EQ(trace.size(), 1u);
+  EXPECT_TRUE(trace[0]["values"].empty());
+}
+
+// Every variable of a trivial flow is a parameter, so the trace is that
+// parameter's start and end values. (It used to hand CAPD a start set sized
+// for no state variables.)
+TEST_F(TrivialFlowTest, Trace_DrawsTheParameter) {
+  SetBounds(0.0, 1.0, 0.0, 1.0, 1.0);
+  const nlohmann::json trace = Trace(MakeIc(), box_);
+  ASSERT_EQ(trace.size(), 1u);
+  EXPECT_EQ(trace[0]["key"].get<std::string>(), "trivial_x_0_0");
+  EXPECT_EQ(trace[0]["values"].size(), 2u);
+}
+
 }  // namespace
 }  // namespace dreal

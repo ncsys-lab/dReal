@@ -20,6 +20,7 @@ along with dReal. If not, see <http://www.gnu.org/licenses/>.
 // ported from dReal3.
 
 #include "dreal/contractor/odes/contractor_odes.h"
+#include "dreal/contractor/odes/contractor_odes_capd.h"
 
 #include <cfenv>
 #include <iostream>
@@ -359,6 +360,24 @@ namespace dreal
             EXPECT_LT(cs.box()[xt_].diam(), 0.2);
         }
 
+        // A parameter's start and end values must agree. Disjoint values mean the
+        // box does not satisfy the integral, so the --visualize trace has no
+        // trajectory to draw. (generate_trace used to return an empty array.)
+        TEST_F(ContractorCapdParamTest, Trace_DisjointParameterValues_Throws) {
+            box_[x_]  = Box::Interval(-100.0, 100.0);
+            box_[x0_] = Box::Interval(0.0);
+            box_[xt_] = Box::Interval(-100.0, 100.0);
+            box_[a_]  = Box::Interval(1.0, 2.0);
+            box_[a0_] = Box::Interval(1.0);
+            box_[at_] = Box::Interval(2.0);
+            box_[t0_] = Box::Interval(2.0);
+            const auto ctc = mk_contractor_ode_lohner(
+                box_, {MakeIntegralConstraint(), {}}, ode_direction::FWD, Config{}, 0.0);
+            const NearestRoundingScope g;
+            EXPECT_THROW(to_ode_lohner(ctc)->generate_trace(ContractorStatus{box_}),
+                         std::runtime_error);
+        }
+
         // --visualize regression for the non-conventional state-var naming the
         // translator emits (`x_k<step>` rather than dReal's `<base>_<step>_{0,t}`).
         // generate_trace's per-entry `key`/`step` come from the start variable
@@ -418,6 +437,20 @@ namespace dreal
             ASSERT_FALSE(trace.empty());
             EXPECT_EQ(trace[0]["step"].get<int>(), 1)
                 << "BUG-007: x_k1's segment must report step 1, not 0";
+        }
+
+        // run_capd_trace refuses a call its caller must not make (here a start set
+        // sized for no state variables) instead of returning no points, so an
+        // empty trace means CAPD failed. (It used to return an empty result.)
+        TEST_F(ContractorCapdNonConvNameTest, RunCapdTrace_MismatchedStartSet_Throws) {
+            const Config c;
+            const CapdSolverParams params{c.ode_taylor_order(), c.ode_abs_tol(),
+                                          c.ode_rel_tol(), c.ode_hull_grid(),
+                                          c.ode_c0_set(), c.ode_max_step()};
+            const NearestRoundingScope g;
+            const auto cache = make_capd_ode_cache(ode_, {x_});
+            EXPECT_THROW(run_capd_trace(cache, {}, {}, 1.0, true, params, g.token()),
+                         std::logic_error);
         }
     } // namespace
 } // namespace dreal

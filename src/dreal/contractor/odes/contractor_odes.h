@@ -64,7 +64,8 @@ namespace dreal
 
         // Generate a JSON trace of the ODE trajectory for visualization
         // (the `--visualize` flag). Uses CAPD step-by-step IOdeSolver
-        // (one enclosure per slice).
+        // (one enclosure per slice). Raises when the box has no trajectory to
+        // draw: disjoint parameter values, or a time window ending below 0.
         nlohmann::json generate_trace(ContractorStatus cs_copy);
 
         void Prune(ContractorStatus* cs, const UpwardRounding& ur) const override;
@@ -88,10 +89,9 @@ namespace dreal
         // m_vars_0/m_vars_t). Precomputed in the constructor so Prune() doesn't
         // rebuild it on every call.
         std::vector<Variable> m_ode_state_vars;
-        // Cached capd::IMap (fwd + bwd via -f(x)) for this flow. Null if the
-        // RHS contains an Expression kind we don't translate to CAPD's
-        // string format, or the capd::IMap parser rejects the result. When
-        // null, Prune() runs steps 1-4 only (no ODE narrowing).
+        // Cached capd::IMap (fwd + bwd via -f(x)) for this flow. Never null: the
+        // constructor raises when the flow cannot be translated or no map comes
+        // back.
         std::shared_ptr<CapdOdeCache> m_capd_cache;
     };
 

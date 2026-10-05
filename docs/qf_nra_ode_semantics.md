@@ -262,7 +262,8 @@ In all current benchmarks, `time_0` is the literal constant `0.` and `time_t` is
 (e.g., `time_0` in the problem). The constructor accepts either time bound as a variable or a
 constant (invariant (1)), but the contractor integrates from t = 0 only: it throws unless `time_0`
 is the constant 0 (`contractor_odes.cc`, top of `Prune`). `time_t` may be a variable, a constant or
-a real-constant interval; `Prune` reads the integration window from whichever it is (§10.2).
+a real-constant interval; `Prune` and the `--visualize` trace both read the integration window from
+whichever it is through `end_time_window` (§10.2).
 
 **T=0 special case** (`Prune`, Step 2):
 
@@ -707,8 +708,20 @@ When `--visualize` is set, `driver.cc` calls `link_integral_invariants` on the m
 ```
 
 One entry per ODE state variable and one per parameter. The `step` field is parsed from the
-variable name by `extract_step` — it extracts the middle component of `<name>_<step>_{0,t}`.
-Parameters have only two time points (start and end) since they are constant.
+variable name by `ode_step_from_name`: the middle component of `<name>_<step>_{0,t}`, or the
+`<step>` of `<name>_k<step>`. Parameters have only two time points (start and end) since they are
+constant.
+
+The trace reads the integration window as `Prune` does (§4.4), so a constant end time is traced up to
+that constant. A state variable's `values` are empty in two cases: the window has length zero
+(T = 0), or CAPD fails before its first point. A CAPD failure keeps the points before it (the
+approved fallback, §10.9). A trivial flow, whose every variable is a parameter, has only parameter
+entries. `generate_trace` raises in two cases, because there is no trajectory to draw: a parameter's
+start and end values are disjoint, or the window ends below 0 (which `Prune` skips as
+inconclusive). Before 2026-10-05 every case in this paragraph returned an empty array for the
+integral. The driver does not catch the error, so `dreal --visualize` prints the verdict and then
+terminates with it. It used to log the error at CRITICAL, invisible at the default verbosity, and
+leave an empty JSON file.
 
 ---
 
