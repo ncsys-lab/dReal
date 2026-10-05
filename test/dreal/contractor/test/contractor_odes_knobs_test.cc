@@ -386,14 +386,47 @@ TEST_F(KnobsDecayTest, BackwardOrder_IsTheBwdKnob_TaylorOrderIgnored) {
       << "] — the knob looks like a silent no-op";  // INTEGRATION-VERIFY: bit-level difference expected from order-2 vs order-12 step sequences (same coincidence caveat as the (a)/(c) pins)
 }
 
+// BUG-013 (docs/dreal-bugs.md): X_0 = [1,2], t ∈ [0,1], gate X_t = [0.3, 0.35],
+// which lies below the tube minimum e^-1 ≈ 0.368 by 0.018. At order 16/20 or
+// tolerances ≥ 1e-6 CAPD's first step covers the whole horizon, the last
+// sub-slice is [0.75, 1], and the mean-value tube over that slice reaches below
+// 0.3 for the interval start, so the gate survived — COMPLETENESS (asserts φ^δ
+// T-satisfiable on a T-unsatisfiable φ — missed refutation). CAPD does not fail
+// there: the Prune narrows time to [0.75, 1]. The default knobs take a 0.75 +
+// 0.25 step sequence and refute; they are the control.
+TEST_F(KnobsDecayTest, Bug013_LongStepTube_RefutesDisjointGate) {
+  struct Knob {
+    const char* name;
+    void (*set)(Config*);
+  };
+  const Knob knobs[] = {
+      {"default", [](Config*) {}},
+      {"order 16", [](Config* c) { c->mutable_ode_taylor_order().set_from_command_line(16); }},
+      {"order 20", [](Config* c) { c->mutable_ode_taylor_order().set_from_command_line(20); }},
+      {"abs_tol 1e-6", [](Config* c) { c->mutable_ode_abs_tol().set_from_command_line(1e-6); }},
+      {"abs_tol 1e-2", [](Config* c) { c->mutable_ode_abs_tol().set_from_command_line(1e-2); }},
+      {"rel_tol 1e-6", [](Config* c) { c->mutable_ode_rel_tol().set_from_command_line(1e-6); }},
+      {"rel_tol 1e-2", [](Config* c) { c->mutable_ode_rel_tol().set_from_command_line(1e-2); }},
+  };
+  for (const Knob& knob : knobs) {
+    box_[x_] = Box::Interval(-100.0, 100.0);
+    box_[x0_] = Box::Interval(1.0, 2.0);
+    box_[xt_] = Box::Interval(0.3, 0.35);
+    box_[t0_] = Box::Interval(0.0, 1.0);
+    Config config;
+    knob.set(&config);
+    const Box b = Prune(config, ode_direction::FWD);
+    EXPECT_TRUE(b.empty()) << knob.name << ": the gate [0.3, 0.35] survived as x_t = "
+                           << b[xt_] << " at time " << b[t0_] << " [COMPLETENESS GATE, BUG-013]";
+  }
+}
+
 // (b) SOUNDNESS sweep over the Taylor order: at EVERY order the enclosure is
 // an outward over-approximation, so the SAT instance must stay non-empty and
 // the narrowed X_t must retain the closed-form endpoint band [e^-1, 2e^-1].
 // A knob-induced empty here would be SOUNDNESS (asserts φ T-unsatisfiable on
 // a T-satisfiable φ — false unsat). Higher order = tighter enclosure = the
-// direction the lane guards ("tighter must never falsely empty"). At orders
-// 16/20 CAPD diverges on this interval-IC instance and the prune is inert —
-// pinned below (docs/dreal-bugs.md #BUG-013).
+// direction the lane guards ("tighter must never falsely empty").
 TEST_F(KnobsDecayTest, OrderSweep_NeverFalselyEmpties) {
   SetFeasibleBounds();
   for (const int order : {2, 4, 8, 12, 16, 20}) {
@@ -414,24 +447,11 @@ TEST_F(KnobsDecayTest, OrderSweep_NeverFalselyEmpties) {
     // surviving-slice hull lifts X_t.lb to ~e^-1 ≈ 0.368 (the tube minimum,
     // at t=1 from x0=1); X_t.ub stays exactly 0.8 by gate clipping, so only
     // the lb detects narrowing.
-    if (order <= 12) {
-      EXPECT_GT(b[xt_].lb(), 0.35)
-          << "order " << order
-          << " did not narrow X_t.lb toward e^-1 — CAPD integration did not "
-             "run (inconclusive skip), so this sweep value proved nothing";  // INTEGRATION-VERIFY: 0.35 assumes enclosure excess below e^-1 stays < 0.018 at every swept order (order 2 -> ~1e-15/step over ~35k steps by the StepControl trace)
-    } else {
-      // KNOWN GAP (docs/dreal-bugs.md #BUG-013): CAPD diverges at these knob
-      // values on interval-IC instances; the ODE prune is inert (COMPLETENESS
-      // — asserts φ^δ T-satisfiable on a possibly T-unsatisfiable φ; missed
-      // refutation, never a false unsat). When CAPD/step-control handling
-      // improves, these pins should flip — tighten back to the narrowing
-      // assertion.
-      EXPECT_EQ(b[xt_].lb(), 0.3)
-          << "order " << order
-          << " no longer leaves the gate untouched — CAPD divergence behavior "
-             "changed; re-verify and tighten this pin back to "
-             "EXPECT_GT(lb, 0.35) (see docs/dreal-bugs.md #BUG-013)";
-    }
+    EXPECT_GT(b[xt_].lb(), 0.35)
+        << "order " << order
+        << " did not narrow X_t.lb toward e^-1 — either CAPD integration did "
+           "not run (inconclusive skip) or the tube is too loose (BUG-013), so "
+           "this sweep value proved nothing";  // INTEGRATION-VERIFY: 0.35 assumes enclosure excess below e^-1 stays < 0.018 at every swept order (order 2 -> ~1e-15/step over ~35k steps by the StepControl trace)
   }
 }
 
@@ -443,9 +463,7 @@ TEST_F(KnobsDecayTest, OrderSweep_NeverFalselyEmpties) {
 // Consumption of the tolerances is pinned by (b') in Fixture 1 — retention
 // alone holds on an untouched gate — so each block below also carries the
 // order sweep's integration-ran guard (X_t.lb lifted past 0.35 toward e^-1;
-// the ub stays 0.8 by gate clipping and cannot detect narrowing). At tols
-// 1e-6/1e-2 CAPD diverges on this interval-IC instance and the prune is
-// inert — pinned below (docs/dreal-bugs.md #BUG-013).
+// the ub stays 0.8 by gate clipping and cannot detect narrowing).
 TEST_F(KnobsDecayTest, TolSweep_NeverFalselyEmpties) {
   SetFeasibleBounds();
   for (const double tol : {1e-14, 1e-10, 1e-6, 1e-2}) {
@@ -460,23 +478,10 @@ TEST_F(KnobsDecayTest, TolSweep_NeverFalselyEmpties) {
           << "abs_tol " << tol << " over-pruned x_t below 1*e^-1";
       EXPECT_GE(b[xt_].ub(), 2.0 * std::exp(-1.0))
           << "abs_tol " << tol << " over-pruned x_t above 2*e^-1";
-      if (tol <= 1e-10) {
-        EXPECT_GT(b[xt_].lb(), 0.35)
-            << "abs_tol " << tol
-            << " did not narrow — inconclusive skip, sweep value vacuous";
-      } else {
-        // KNOWN GAP (docs/dreal-bugs.md #BUG-013): CAPD diverges at these
-        // knob values on interval-IC instances; the ODE prune is inert
-        // (COMPLETENESS — asserts φ^δ T-satisfiable on a possibly
-        // T-unsatisfiable φ; missed refutation, never a false unsat). When
-        // CAPD/step-control handling improves, these pins should flip —
-        // tighten back to the narrowing assertion.
-        EXPECT_EQ(b[xt_].lb(), 0.3)
-            << "abs_tol " << tol
-            << " no longer leaves the gate untouched — CAPD divergence "
-               "behavior changed; re-verify and tighten this pin back to "
-               "EXPECT_GT(lb, 0.35) (see docs/dreal-bugs.md #BUG-013)";
-      }
+      EXPECT_GT(b[xt_].lb(), 0.35)
+          << "abs_tol " << tol
+          << " did not narrow — inconclusive skip or loose tube, sweep value "
+             "vacuous";
     }
     {
       Config config;
@@ -489,19 +494,10 @@ TEST_F(KnobsDecayTest, TolSweep_NeverFalselyEmpties) {
           << "rel_tol " << tol << " over-pruned x_t below 1*e^-1";
       EXPECT_GE(b[xt_].ub(), 2.0 * std::exp(-1.0))
           << "rel_tol " << tol << " over-pruned x_t above 2*e^-1";
-      if (tol <= 1e-10) {
-        EXPECT_GT(b[xt_].lb(), 0.35)
-            << "rel_tol " << tol
-            << " did not narrow — inconclusive skip, sweep value vacuous";
-      } else {
-        // KNOWN GAP (docs/dreal-bugs.md #BUG-013) — same pin as the abs_tol
-        // block above.
-        EXPECT_EQ(b[xt_].lb(), 0.3)
-            << "rel_tol " << tol
-            << " no longer leaves the gate untouched — CAPD divergence "
-               "behavior changed; re-verify and tighten this pin back to "
-               "EXPECT_GT(lb, 0.35) (see docs/dreal-bugs.md #BUG-013)";
-      }
+      EXPECT_GT(b[xt_].lb(), 0.35)
+          << "rel_tol " << tol
+          << " did not narrow — inconclusive skip or loose tube, sweep value "
+             "vacuous";
     }
   }
 }

@@ -8,8 +8,9 @@
 > T-satisfiable φ — false unsat), e.g. `x' = 0.1x`, x0 ∈ [1,2], `x_t ≥ 2.205` → `unsat`. CAPD
 > fixed it in `2a2263c7` (2026-09-14); dReal pins `03dc5628`. The Measured outcome's github
 > 0.19× / tacas 0.60× PAR2 was taken on the unsound tube; see the correction's A/B in BUG-018.
-> The claim that hull-grid "is no longer completeness-load-bearing" holds for thin initial sets
-> only (BUG-013). The body is kept as the record.
+> The claim that hull-grid "is no longer completeness-load-bearing" held for thin initial sets
+> only: on an interval start a long step left the tube too loose (BUG-013), now fixed for
+> components monotone on a sub-slice by a monotone-in-time hull. The body is kept as the record.
 
 **Soundness vs. completeness:** the failure mode here is **COMPLETENESS**
 (missed refutation / false-`delta-sat`), **not** SOUNDNESS (false-`unsat`). The

@@ -372,9 +372,10 @@ class Config {
   // (HULL_COMPLETENESS.md "Resolution"), so for a thin initial set the tube stays
   // near CAPD precision whatever the step size (the GravityInvariantTest F1
   // sharp-interior case refutes at this hull-4 default). For an interval initial
-  // set the mean-value correction grows with the set's spread, and a finer
-  // hull-grid still refutes more (BUG-013). Tolerances 1e-10 (not step-limiting
-  // here).
+  // set the mean-value correction grows with the set's spread; the monotone
+  // hull removes it for a component monotone on the sub-slice (BUG-013), and
+  // otherwise a finer hull-grid still refutes more. Tolerances 1e-10 (not
+  // step-limiting here).
   static constexpr int kDefaultOdeTaylorOrder{12};
   static constexpr int kDefaultOdeBackwardOrder{12};
   static constexpr double kDefaultOdeAbsTol{1e-10};
