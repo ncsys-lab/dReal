@@ -417,6 +417,9 @@ bool IcpParallel::CheckSat(const Contractor& contractor,
 
   if (found_delta_sat >= 0) {
     cs->mutable_box() = status_vector_[found_delta_sat].box();
+    if (!cs->inconclusive_odes().empty()) {
+      WarnInconclusiveOdeDeltaSat(*cs);
+    }
     return true;
   } else {
     DREAL_ASSERT(found_delta_sat == -1);

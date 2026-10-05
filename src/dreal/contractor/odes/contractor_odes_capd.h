@@ -49,6 +49,7 @@ namespace dreal
     struct CapdTubeResult {
         std::vector<CapdTubeSlice> slices;
         bool found{false};
+        std::string failure;  // why found is false (CAPD's what(), or the adapter's)
     };
 
     // Opaque cache holding the per-flow capd::IMap (and the negated -f(x)

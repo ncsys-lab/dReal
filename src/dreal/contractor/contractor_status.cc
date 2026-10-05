@@ -103,9 +103,10 @@ void ContractorStatus::AddUsedConstraint(const vector<Formula>& formulas) {
   }
 }
 
-void ContractorStatus::AddInconclusiveOde(const Formula& f) {
-  DREAL_LOG_DEBUG("ContractorStatus::AddInconclusiveOde({})", f);
-  inconclusive_odes_.insert(f);
+void ContractorStatus::AddInconclusiveOde(const Formula& f,
+                                          const std::string& reason) {
+  DREAL_LOG_DEBUG("ContractorStatus::AddInconclusiveOde({}): {}", f, reason);
+  inconclusive_odes_.emplace(f, reason);
 }
 
 void ContractorStatus::AddUnsatWitness(const Variable& var) {
@@ -115,7 +116,7 @@ void ContractorStatus::AddUnsatWitness(const Variable& var) {
 
 FormulaSet GenerateExplanation(const Variables& unsat_witness,
                                  const FormulaSet& used_constraints,
-                                 const FormulaSet& inconclusive_odes) {
+                                 const FormulaMap<std::string>& inconclusive_odes) {
   static ContractorStatusStat stat(DREAL_LOG_INFO_ENABLED);
   stat.increase_num_explanation_generation();
   TimerGuard timer_guard(&stat.timer_explanation_generation_, stat.enabled());
@@ -175,7 +176,7 @@ FormulaSet GenerateExplanation(const Variables& unsat_witness,
   // constraints can only shrink the solution set of `R ∧ E`, never make a sound
   // ¬E unsound — so the witness tie is validated by the no-flip + auditor oracles,
   // not assumed minimal.
-  for (const Formula& f : inconclusive_odes) {
+  for (const auto& [f, reason] : inconclusive_odes) {
     if (HaveIntersection(unsat_witness, f.GetFreeVariables())) {
       explanation.insert(f);
     }

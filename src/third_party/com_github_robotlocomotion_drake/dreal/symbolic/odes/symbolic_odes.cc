@@ -203,8 +203,15 @@ namespace dreal::drake::symbolic
           vec_0_{std::move(vec_0)},
           vec_t_{std::move(vec_t)},
           flow_{flow} {
-        DREAL_ASSERT(is_variable(time_0_) || is_constant(time_0_) || is_real_constant(time_0_));
-        DREAL_ASSERT(is_variable(time_t_) || is_constant(time_t_) || is_real_constant(time_t_));
+        // The ODE contractor reads a time bound only as a variable or a
+        // constant, and the start and end vectors only as variables; anything
+        // else would be skipped on every Prune, or read as a variable it is not
+        // (get_variable on a non-variable is a bare static_cast). Always on.
+        for (const Expression* t : {&time_0_, &time_t_}) {
+            if (!(is_variable(*t) || is_constant(*t) || is_real_constant(*t)))
+                throw DREAL_RUNTIME_ERROR(
+                    "integral: a time bound must be a variable or a constant, got {}", fmt::streamed(*t));
+        }
 
         if (vec_0_.size() != vec_t_.size())
             throw DREAL_RUNTIME_ERROR("vec_0.size() != vec_t.size()");
@@ -212,8 +219,10 @@ namespace dreal::drake::symbolic
             throw DREAL_RUNTIME_ERROR("vec_0_.size() != flow->ode_list.size()");
 
         for (size_t i = 0; i < flow_->ode_list.size(); ++i) {
-            DREAL_ASSERT(is_variable(vec_0_[i]));
-            DREAL_ASSERT(is_variable(vec_t_[i]));
+            if (!is_variable(vec_0_[i]) || !is_variable(vec_t_[i]))
+                throw DREAL_RUNTIME_ERROR(
+                    "integral: start and end entries must be variables, got {} and {}",
+                    fmt::streamed(vec_0_[i]), fmt::streamed(vec_t_[i]));
             DREAL_ASSERT(flow_->is_var(flow->ode_list[i].first) xor flow_->is_par(flow->ode_list[i].first));
             if (flow_->is_par(flow->ode_list[i].first)) {
                 pars_0_.emplace_back(get_variable(vec_0_[i]));

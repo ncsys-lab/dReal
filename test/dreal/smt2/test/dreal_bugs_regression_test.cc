@@ -12,6 +12,8 @@
 //   BUG-008  endpoint asserted below its true value          -> unsat (not false delta-sat)
 //   BUG-009  seed pre-pass on a constraint that folds to True -> delta-sat (not a crash)
 //   BUG-011  --model witness of a free integral endpoint-time -> contains the true crossing
+//   BUG-015  integral start variable with no box, sin flow   -> delta-sat + warning (not SIGSEGV)
+//   BUG-016  thin start exactly on a nonzero fixed point     -> endpoint contracts (not skipped)
 //   BUG-018  interval initial condition near the tube edge   -> delta-sat (not unsat)
 //
 // BUG-002 is NOT here: the silent drop of a negated (integral …)/(forall_t …)
@@ -25,7 +27,10 @@
 
 #include "dreal/smt2/driver.h"
 
+#include <unistd.h>
+
 #include <cstdio>
+#include <cstdlib>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -198,7 +203,8 @@ TEST(DrealBugsRegression, Bug008_SubTrueEndpoint_Unsat) {
 // malformed.
 bool ParseModelInterval(const std::string& out, const std::string& var,
                         double* lb, double* ub) {
-  const std::string key{var + " : "};
+  // Anchored at a line start, so "x : " does not match inside "tx : ".
+  const std::string key{"\n" + var + " : "};
   const std::size_t pos{out.find(key)};
   if (pos == std::string::npos) return false;
   char open{};
@@ -491,6 +497,118 @@ TEST(DrealBugsRegression, Bug018_ProjectileTubeEdge_DeltaSat) {
       "(check-sat)\n")};
   EXPECT_NE(out.find("delta-sat"), std::string::npos)
       << "v_0 = 1.5, time = 0.5 gives x_t = 0.625; got: " << out;
+}
+
+// BUG-015 (dreal4-cmake docs/dreal-bugs.md) — an integral whose start variable
+// has no box and whose flow has sin crashed with SIGSEGV: CAPD splits the start
+// [-inf, inf] into a NaN center, and its interval sin recurses on NaN until the
+// stack overflows. Post-fix the adapter refuses the non-finite start, the ODE is
+// inconclusive (COMPLETENESS only — asserts φ^δ T-satisfiable on a possibly
+// T-unsatisfiable φ — missed refutation), and delta-sat comes with the
+// inconclusive-ODE warning on stderr. Run in a re-executed child so the
+// pre-fix crash fails the test instead of the suite.
+class DrealBugsRegressionDeathTest : public ::testing::Test {
+ protected:
+  void SetUp() override { GTEST_FLAG_SET(death_test_style, "threadsafe"); }
+  static void ExpectDeltaSatOrExit(const std::string& smt2) {
+    alarm(30);
+    const std::string out{RunSmt2String(smt2)};
+    std::_Exit(out.find("delta-sat") != std::string::npos ? 0 : 1);
+  }
+};
+
+TEST_F(DrealBugsRegressionDeathTest, Bug015_UnboundedSinStart_DeltaSatWithWarning) {
+  EXPECT_EXIT(ExpectDeltaSatOrExit("(set-logic QF_NRA_ODE)\n"
+                                   "(declare-fun x () Real)\n"
+                                   "(declare-fun x0 () Real)\n"
+                                   "(declare-fun xt () Real)\n"
+                                   "(declare-fun t () Real [0, 1])\n"
+                                   "(define-ode flow_1 ((= d/dt[x] (sin x))))\n"
+                                   "(assert (= [xt] (integral 0. t [x0] flow_1)))\n"
+                                   "(check-sat)\n"),
+              ::testing::ExitedWithCode(0), "not integrated");
+}
+
+// The same with d/dt[x] = -x. A control: it answered delta-sat before the fix
+// too (CAPD threw on the NaN center instead of looping in sin).
+TEST_F(DrealBugsRegressionDeathTest, Bug015_UnboundedDecayStart_DeltaSat) {
+  EXPECT_EXIT(ExpectDeltaSatOrExit("(set-logic QF_NRA_ODE)\n"
+                                   "(declare-fun x () Real)\n"
+                                   "(declare-fun x0 () Real)\n"
+                                   "(declare-fun xt () Real)\n"
+                                   "(declare-fun t () Real [0, 1])\n"
+                                   "(define-ode flow_1 ((= d/dt[x] (- x))))\n"
+                                   "(assert (= [xt] (integral 0. t [x0] flow_1)))\n"
+                                   "(check-sat)\n"),
+              ::testing::ExitedWithCode(0), "");
+}
+
+// BUG-016 (simulink-to-dreal docs/dreal-bugs.md) — a thin start exactly on a
+// nonzero fixed point (x__k0 = 1, d/dt[x] = 10(1 - x)) made CAPD throw "minimal
+// time step reached" on its first step; the integral was skipped and x__k1 kept
+// its declared box — COMPLETENESS (asserts φ^δ T-satisfiable on a
+// T-unsatisfiable φ — missed refutation). The true endpoint is exactly 1.
+// Text: bug016_rest_trigger.smt2.
+TEST(DrealBugsRegression, Bug016_RestingFixedPoint_EndpointContracts) {
+  Config config;
+  config.mutable_produce_models().set_from_command_line(true);
+  const std::string out{RunSmt2String(
+      "(set-logic QF_NRA_ODE)\n"
+      "(declare-fun x () Real)\n"
+      "(declare-fun x__k0 () Real)\n"
+      "(declare-fun x__k1 () Real)\n"
+      "(assert (>= x__k1 (- 1000000.0))) (assert (<= x__k1 1000000.0))\n"
+      "(assert (= x__k0 1.0))\n"
+      "(declare-fun time_k0 () Real)\n"
+      "(assert (= time_k0 0.05))\n"
+      "(define-ode flow_1 ((= d/dt[x] (* 10.0 (+ 1.0 (- x))))))\n"
+      "(assert (= [x__k1] (integral 0. time_k0 [x__k0] flow_1)))\n"
+      "(check-sat)\n",
+      config)};
+  ASSERT_NE(out.find("delta-sat"), std::string::npos) << "got: " << out;
+  double lb{};
+  double ub{};
+  ASSERT_TRUE(ParseModelInterval(out, "x__k1", &lb, &ub)) << "got: " << out;
+  EXPECT_GT(lb, 1.0 - 1e-6) << "got: " << out;
+  EXPECT_LT(ub, 1.0 + 1e-6) << "got: " << out;
+}
+
+// One resting component made the whole vector inconclusive: y (d/dt[y] = -y,
+// y__k0 = 1) lost its endpoint too. True y__k1 = e^-0.05 = 0.951229…
+// Text: bug016_rest_vector.smt2.
+TEST(DrealBugsRegression, Bug016_RestingFixedPoint_VectorKeepsMovingState) {
+  Config config;
+  config.mutable_produce_models().set_from_command_line(true);
+  const std::string out{RunSmt2String(
+      "(set-logic QF_NRA_ODE)\n"
+      "(declare-fun x () Real)\n"
+      "(declare-fun y () Real)\n"
+      "(declare-fun x__k0 () Real)\n"
+      "(assert (>= x__k0 (- 1000000.0)))\n"
+      "(assert (<= x__k0 1000000.0))\n"
+      "(declare-fun x__k1 () Real)\n"
+      "(assert (>= x__k1 (- 1000000.0)))\n"
+      "(assert (<= x__k1 1000000.0))\n"
+      "(assert (= x__k0 1.0))\n"
+      "(declare-fun y__k0 () Real)\n"
+      "(assert (>= y__k0 (- 1000000.0)))\n"
+      "(assert (<= y__k0 1000000.0))\n"
+      "(declare-fun y__k1 () Real)\n"
+      "(assert (>= y__k1 (- 1000000.0)))\n"
+      "(assert (<= y__k1 1000000.0))\n"
+      "(assert (= y__k0 1.0))\n"
+      "(declare-fun time_k0 () Real)\n"
+      "(assert (= time_k0 0.05))\n"
+      "(define-ode flow_1 ((= d/dt[x] (* 10.0 (+ 1.0 (- x)))) (= d/dt[y] (- y))))\n"
+      "(assert (= [x__k1 y__k1] (integral 0. time_k0 [x__k0 y__k0] flow_1)))\n"
+      "(check-sat)\n",
+      config)};
+  ASSERT_NE(out.find("delta-sat"), std::string::npos) << "got: " << out;
+  double lb{};
+  double ub{};
+  ASSERT_TRUE(ParseModelInterval(out, "y__k1", &lb, &ub)) << "got: " << out;
+  EXPECT_GT(lb, 0.951229 - 1e-5) << "got: " << out;
+  EXPECT_LT(ub, 0.951230 + 1e-5) << "got: " << out;
 }
 
 }  // namespace

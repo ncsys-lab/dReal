@@ -144,4 +144,9 @@ optional<DynamicBitset> EvaluateBox(
 /// byte (stdout is consumed by downstream substring checks).
 void WarnDegenerateDeltaSat(const std::string& reason, const Box& box);
 
+/// stderr warning for a delta-sat theory check during which at least one ODE
+/// constraint could not be integrated on some box (the approved inconclusive
+/// skip, docs/decisions.md "ODE inconclusive skip"). Verdict unchanged.
+void WarnInconclusiveOdeDeltaSat(const ContractorStatus& cs);
+
 }  // namespace dreal

@@ -74,20 +74,31 @@ namespace dreal
         return {f};
     }
 
-    // Intersect pars_0 and pars_t in-place.
-    static bool intersect_params(Box& b, const FormulaIntegral* icc) {
+    // Intersect pars_0 and pars_t in place (a flow parameter is constant along
+    // the trajectory). Returns false if a pair is disjoint (box emptied). Sets the
+    // output bit of every parameter it narrows and reports in *narrowed whether it
+    // narrowed any, so the caller can record the ODE as a used constraint.
+    static bool intersect_params(ContractorStatus* cs, const FormulaIntegral* icc,
+                                 bool* narrowed) {
+        Box& b = cs->mutable_box();
         const auto& pars_0 = icc->get_pars_0();
         const auto& pars_t = icc->get_pars_t();
+        *narrowed = false;
         for (size_t i = 0; i < pars_0.size(); ++i) {
-            ibex::Interval& iv_0 = b[pars_0[i]];
-            const ibex::Interval  iv_t = b[pars_t[i]];
-            ibex::Interval intersected = iv_0 & iv_t;
+            const ibex::Interval iv_0 = b[pars_0[i]];
+            const ibex::Interval iv_t = b[pars_t[i]];
+            const ibex::Interval intersected = iv_0 & iv_t;
             if (intersected.is_empty()) {
                 b.set_empty();
                 return false;
             }
-            b[pars_0[i]] = intersected;
-            b[pars_t[i]] = intersected;
+            for (const auto& [v, before] : {std::pair{pars_0[i], iv_0}, std::pair{pars_t[i], iv_t}}) {
+                if (intersected != before) {
+                    b[v] = intersected;
+                    cs->mutable_output().set(b.index(v));
+                    *narrowed = true;
+                }
+            }
         }
         return true;
     }
@@ -212,12 +223,21 @@ namespace dreal
         const auto* const icc = to_integral(ic);
 
         // --- Step 1: Intersect parameters (pars_0 ∩ pars_t) ---
-        if (!intersect_params(cs->mutable_box(), icc)) {
+        // A parameter narrowing is a contraction like any other, so it is
+        // recorded here whatever the rest of the Prune does: otherwise a conflict
+        // that rests on it gets an explanation without this ODE (the class of
+        // docs/constraint-order-explanation-soundness.md — a false unsat).
+        bool params_narrowed = false;
+        if (!intersect_params(cs, icc, &params_narrowed)) {
             for (const auto& v : icc->get_pars_0()) cs->mutable_output().set(cs->box().index(v));
             for (const auto& v : icc->get_pars_t()) cs->mutable_output().set(cs->box().index(v));
             cs->AddUsedConstraint(ic);
             cs->AddUsedConstraint(m_ctr.second);
             return;
+        }
+        if (params_narrowed) {
+            cs->AddUsedConstraint(ic);
+            cs->AddUsedConstraint(m_ctr.second);
         }
 
         // --- Step 2: T=0 special case ---
@@ -270,12 +290,17 @@ namespace dreal
         //     (states whose forward trajectory reaches X_t), intersected with
         //     m_vars_t (= original X_0). Sound by construction.
         //
-        // If CAPD diverges (step-control failure), the run returns found=false
-        // and we skip narrowing this pass; a genuine integrator error is raised
-        // inside the adapter (cav26's exception differentiation). There is no
-        // other backend to fall back to.
+        // If CAPD fails — any exception out of the integrator, or a start set,
+        // parameter, time window or enclosure CAPD cannot represent — the run
+        // returns found=false and this pass narrows nothing; the ODE is recorded
+        // as inconclusive (spliced into explanations, reported at a delta-sat
+        // verdict). There is no other backend to fall back to.
 
-        if (!m_capd_cache) { cs->AddInconclusiveOde(ic); return; }  // RHS not translatable to capd::IMap
+        // make_capd_ode_cache throws on an untranslatable right-hand side, so a
+        // missing map is a bug, not an input.
+        if (!m_capd_cache)
+            throw DREAL_RUNTIME_ERROR("contractor_ode_lohner: no CAPD map for {}",
+                                      fmt::streamed(ic));
 
         // Integration-time window [win_lb, win_ub]. cav26 accepted a time that
         // is a variable, a real-constant interval, or an exact constant; the
@@ -296,10 +321,16 @@ namespace dreal
         } else if (is_constant(icct)) {
             win_lb = win_ub = get_constant_value(icct);
         } else {
-            cs->AddInconclusiveOde(ic);
-            return;  // unsupported time term
+            // FormulaIntegral's constructor admits only these three forms.
+            throw DREAL_RUNTIME_ERROR(
+                "contractor_ode_lohner: integral end time {} is neither a "
+                "variable nor a constant", fmt::streamed(icct));
         }
-        if (win_ub <= 0.0) { cs->AddInconclusiveOde(ic); return; }
+        // FALLBACK(approved): negative time window -> inconclusive ODE — see docs/decisions.md "ODE inconclusive skip"
+        if (win_ub <= 0.0) {
+            cs->AddInconclusiveOde(ic, "the integration time window ends below 0");
+            return;
+        }
 
         const int n = static_cast<int>(m_vars_0.size());
 
@@ -363,7 +394,11 @@ namespace dreal
         // — divergence carries no information, whereas a successful integration
         // whose tube is disjoint from the gate (or whose interior violates the
         // invariant) IS infeasibility and is refuted below.
-        if (!res.found) { cs->AddInconclusiveOde(ic); return; }
+        // FALLBACK(approved): CAPD failure -> inconclusive ODE, no narrowing — see docs/decisions.md "ODE inconclusive skip"
+        if (!res.found) {
+            cs->AddInconclusiveOde(ic, res.failure);
+            return;
+        }
 
         // --- Per-slice filter (cav26 compute_enclosures terminal-window filter
         //     + check_invariant), done here where the box and invariant
@@ -524,7 +559,8 @@ namespace dreal
         Box& b = cs_copy.mutable_box();
 
         // Intersect parameters before tracing.
-        if (!intersect_params(b, icc)) return json::array();
+        bool params_narrowed = false;
+        if (!intersect_params(&cs_copy, icc, &params_narrowed)) return json::array();
 
         // Time variable.
         const Expression& time_expr = icc->get_time_t();

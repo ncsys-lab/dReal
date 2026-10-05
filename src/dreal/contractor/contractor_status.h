@@ -16,6 +16,7 @@
 #pragma once
 
 #include <set>
+#include <string>
 #include <vector>
 
 #include "dreal/symbolic/symbolic.h"
@@ -68,7 +69,14 @@ class ContractorStatus {
   /// see docs/constraint-order-explanation-soundness.md). Unlike
   /// AddUsedConstraint it never seeds the unsat witness (divergence does not
   /// empty the box); it is spliced into the explanation as a non-expanding leaf.
-  void AddInconclusiveOde(const Formula& f);
+  /// @p reason says why the pass was inconclusive; the first reason recorded for
+  /// a formula is kept.
+  void AddInconclusiveOde(const Formula& f, const std::string& reason);
+
+  /// ODE constraints left un-narrowed by an inconclusive pass, with the reason.
+  const FormulaMap<std::string>& inconclusive_odes() const {
+    return inconclusive_odes_;
+  }
 
   /// Add a variable @p var which is directly responsible for the unsat.
   void AddUnsatWitness(const Variable& var);
@@ -104,7 +112,7 @@ class ContractorStatus {
   // non-expanding leaves so only those touching the relational refutation
   // footprint enter the lemma (avoids dragging in the whole densely-chained
   // BMC ODE web). See AddInconclusiveOde and GenerateExplanation.
-  FormulaSet inconclusive_odes_;
+  FormulaMap<std::string> inconclusive_odes_;
 
   // A set of variables directly responsible for the unsat result. This
   // is used to generate an explanation.

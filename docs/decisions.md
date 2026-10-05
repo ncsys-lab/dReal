@@ -196,6 +196,40 @@ definitional binding (negated `integral`) — specified as aspirational `GTEST_S
 live: `PosForallT_NoIntegral_ShouldReject`, `PosForallT_InvariantOverFlowVar_ShouldReject`). Full
 mechanism: `docs/ode-integration.md` §"Constraint forms accepted, and the silent drops (BUG-002)".
 
+## ODE inconclusive skip: an approved fallback, reported at the verdict
+
+**Decision (owner, 2026-10-05):** when the ODE contractor cannot integrate on a box, that Prune
+narrows nothing and records the integral as *inconclusive*; it does not raise. The causes:
+any exception out of CAPD (step-control divergence, a mid-enclosure singularity such as the
+sigmoid-inverter "possible division by zero", "minimal time step reached"), a value CAPD cannot
+represent (a start set, flow parameter or integration end time with a non-finite or inverted
+bound or one beyond DBL_MAX/2, or such an enclosure coming back —
+`require_capd_representable`), and a time window ending below 0. The `--visualize` trace
+(`run_capd_trace`) shares the catch: a failure there keeps the trace points before it. Every
+site carries `// FALLBACK(approved): … — see docs/decisions.md "ODE inconclusive skip"`.
+
+**Substituted behavior:** that Prune narrows nothing but the flow parameters' start/end
+intersection (step 1, which is recorded as a used constraint like any contraction);
+`ContractorStatus::AddInconclusiveOde(f, reason)` records the formula and the reason, the
+formula is spliced into unsat explanations (`docs/constraint-order-explanation-soundness.md`),
+and a delta-sat theory check that recorded any prints one stderr line naming the count and one
+of the reasons (`WarnInconclusiveOdeDeltaSat`, `icp.cc`). The line over-approximates: an ODE
+skipped on one box and integrated on a later one is still counted. Never a false `unsat`; the cost
+is COMPLETENESS (asserts φ^δ T-satisfiable on a possibly T-unsatisfiable φ — missed
+refutation).
+
+**Alternatives rejected:** raising on a CAPD failure — this architecture has no ICP-level
+catch, so a throw ends the whole solve, and rethrowing crashed `uniform_inverter` instances
+that the skip solves; raising on a non-finite start — a legal query (an unboxed Integrator
+state, s2d `d4cc8e5`) would become an error depending on contractor order. The previous form
+of the skip logged only at DEBUG, so a skipped integral was invisible.
+
+**Narrowed causes:** BUG-016 (a thin start on a nonzero fixed point) no longer reaches the
+skip — the start set is widened by one ulp (`to_capd_interval`); BUG-015 (an unboxed start
+with `sin`, SIGSEGV) now reaches it instead of crashing.
+
+---
+
 ## ODE formula evaluator: δ-tight witnesses are flag-gated (`--refine-witness`, default off)
 
 **Decision:** `OdeFormulaEvaluator::operator()` (`src/dreal/solver/odes/ode_formula_evaluator.cc`)

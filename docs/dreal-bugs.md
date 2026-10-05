@@ -222,7 +222,7 @@ matrix, isolation battery, lldb logs): `/private/tmp/claude-501/…/tmp/{repro1,
 
 ---
 
-## BUG-015 — SIGSEGV: an `integral` whose start variable has no box and whose flow has `sin`/`cos` sends CAPD's interval `sin` a [NaN, NaN] argument, on which `scaledSin1` recurses until the stack is exhausted (LIVE, 2026-10-04)
+## BUG-015 — SIGSEGV: an `integral` whose start variable has no box and whose flow has `sin`/`cos` sends CAPD's interval `sin` a [NaN, NaN] argument, on which `scaledSin1` recurses until the stack is exhausted (fixed 2026-10-05)
 
 **Symptom / Description**
 
@@ -306,14 +306,54 @@ the trigger above is that with one component.
   enclosure). A finite box on `x0` removes it; where in CAPD the NaN first appears was not
   traced.
 
-**Workaround**
+**Root cause, refined (2026-10-05).** The NaN appears before any integration step: CAPD's
+`Interval::split` (`Interval_Base.h`) computes the center (lb+ub)/2, which is NaN for
+[-inf, inf] and infinite for a half-line, when the initial `C0Rect2Set` is built from the box.
+`C0DoubletonSet::move` then evaluates the Taylor coefficients at that center. A half-line start
+gives an infinite center instead; for `[-inf, 0]` that is the negative branch of `sin`'s range
+reduction, whose guard can never fire (BUG-020). The same unguarded
+boundary also copied CAPD enclosures into the box without a finiteness check, and a NaN bound
+reads as an EMPTY ibex interval, which the per-slice filter takes as a refutation: a latent
+false-`unsat` path, not observed.
 
-Give every `integral` start variable whose flow uses `sin`/`cos` a finite box. s2d does not
-(by decision, s2d `docs/decisions.md`, "no default box on a defined signal or on an
-Integrator's state"); its six affected parity rows stay DREAL_ERROR. Candidate fixes, both
-untested: refuse a non-finite initial set in dReal's CAPD adapter before integrating
-(treat it as an inconclusive skip, like the other CAPD failures), or make CAPD's `sin`/`cos`
-return `[-1, 1]` for a non-finite argument.
+**Fix (2026-10-05)**
+
+`contractor_odes_capd.cc` checks every value that crosses into CAPD (start set, flow
+parameters, integration end time) and every enclosure that comes back
+(`require_capd_representable`): each bound must be finite and at most DBL_MAX/2 in magnitude,
+so CAPD's (lb+ub)/2 cannot overflow, and an interval must not be inverted (which ibex reads as
+EMPTY). A violation makes the integration inconclusive: no narrowing for that Prune, the ODE
+recorded via `AddInconclusiveOde` with the reason, and a stderr warning if the theory check
+ends `delta-sat` (the approved fallback, `docs/decisions.md` §"ODE inconclusive skip").
+COMPLETENESS only (asserts φ^δ T-satisfiable on a possibly T-unsatisfiable φ — missed
+refutation). After the fix the trigger answers `delta-sat` in milliseconds with
+
+```
+WARNING: delta-sat while 1 ODE constraint(s) were not integrated on some box of this search
+(e.g. the integration's start set has a non-finite or inverted bound, or one beyond DBL_MAX/2, in …)
+```
+
+Tests: `NonFiniteCapdInputTest.*` in `contractor_odes_semantic_test.cc` (run in re-executed
+children; each also checks that the boundary check recorded the ODE: before the fix the
+unbounded `sin`/`cos` starts, FWD and BWD, died by signal 11 and the unbounded-time case by
+SIGALRM; the `-x`, huge-start and unbounded-parameter cases left the box unchanged because
+CAPD itself threw) and `DrealBugsRegressionDeathTest.Bug015_*`. A start set inside ±DBL_MAX/2
+whose midpoint is below about −5.8e19 still hangs in CAPD's `sin`; that is BUG-020.
+
+The same change widens every start-set interval by one ulp, which fixes s2d's BUG-016 (a thin
+start on a nonzero fixed point), and records a flow parameter's start/end intersection as a
+used constraint (it was unrecorded on the inconclusive exits — an explanation gap of the
+`docs/constraint-order-explanation-soundness.md` class, not reproduced end to end;
+`NonFiniteCapdInputTest.ParameterNarrowing_IsRecorded`). ODE-family A/B against the Phase-1
+build (`benchmark/results/ab_20261005_023503`, 119 jobs, CPU time): no SAT/UNSAT
+disagreement, 0.96× CPU on the 103 jobs both solved (median 0.99×); the solve-set differences
+are four saradc k70 jobs killed by the memory daemon on one side or the other (excluded,
+blacklisted) and `battery-double k2`, `unsat` in 44 s on the new build and a timeout on the
+old.
+
+**Workaround (before the fix)**
+
+Give every `integral` start variable whose flow uses `sin`/`cos` a finite box.
 
 **Binary**
 
@@ -441,7 +481,8 @@ ODE-family A/B, old pin vs new (`benchmark/results/ab_20261005_005735`, 119 jobs
 PAR2 0.98×, 107/119 solved on both sides, no SAT/UNSAT disagreement. The solve sets differ in
 one job each way: `github_oct5_0hz_k4_battery_battery-double-sat` timed out on the old pin and
 is `delta-sat` in 78 s on the new one, and `github_oct5_0hz_k2_battery_battery-double` was
-`unsat` in 110 s on the old pin and timed out on the new one. Whether the lost `unsat` is a contention timeout or a lost refutation is being re-run alone on the new pin and on `dreal4_cav26`.
+`unsat` in 110 s on the old pin and timed out on the new one. Re-run alone on the new pin (900 s cap), battery-double k2 is `unsat` in 717 s CPU: the same
+verdict, about 6.5× slower on that instance, not a lost refutation.
 
 Any `unsat` obtained before the bump on a query with an interval start variable should be
 re-checked on a binary built after it.
@@ -451,6 +492,70 @@ re-checked on a binary built after it.
 Reproduced on `gcc_build/dreal4` (Commit `6f02d4010`, CAPD `b353e170`, built 2026-10-05 against
 the MacOSX 26.5 SDK) and `dreal_popl27` (Commit `c294eb435`, built 2026-07-13). Fixed on
 `gcc_build/dreal4` with CAPD `03dc5628`.
+
+---
+
+## BUG-020 — CAPD's interval `sin` never returns for an argument below about −5.8e19 (its negative-overflow guard can never fire); an `integral` started there hangs (LIVE, 2026-10-05)
+
+**Symptom / Description**
+
+An `integral` whose flow applies `sin` (or `cos`, which CAPD computes as `sin(π/2 − x)`) to
+a state that starts at a huge negative value never returns. `x0 = -1e20` hangs; `x0 = 1e20`
+answers at once. CAPD evaluates the Taylor coefficients at the center of the start set, so
+HYPOTHESIS (not run): any start set whose center is below about −5.8e19, such as
+`[-1e21, 0]`, hangs the same way. Loud only through a timeout. COMPLETENESS-shaped (the run
+is lost; no verdict is produced). Reachable from bisection of a variable with an unbounded or
+huge box, so after BUG-015's fix rejects the unbounded start it is the remaining way into
+CAPD's `sin` range reduction with a bad argument.
+
+**Reproducer(s)**
+
+`bug020_sin_huge_negative_baseline.smt2` and `bug020_sin_huge_negative_trigger.smt2` differ
+only in the sign of `x0`:
+```smt2
+(set-logic QF_NRA_ODE)
+(declare-fun x () Real [-1e21, 1e21])
+(declare-fun x0 () Real [-1e21, 1e21])
+(declare-fun xt () Real [-1e21, 1e21])
+(declare-fun t () Real [0, 1])
+(define-ode flow_1 ((= d/dt[x] (sin x))))
+(assert (= x0 -1e20))
+(assert (= [xt] (integral 0. t [x0] flow_1)))
+(check-sat)
+```
+
+`timeout 20 <bin> --ode-backward false <file>` on `gcc_build/dreal4` with CAPD `03dc5628` and
+with CAPD `b353e170` (the same on both, and with default flags):
+
+| file | output |
+|---|---|
+| baseline (`1e20`) | `delta-sat with delta = 0.001` in 0.00 s ✓ |
+| trigger (`-1e20`) | no output, killed by the 20 s timeout ✗ |
+
+**Root cause / Design notes**
+
+ESTABLISHED (CAPD source, `capdAlg/include/capd/intervals/Interval_Fun.hpp`, unchanged on
+upstream master 2026-10-05): `sin` reduces its argument by k·2π with k from `toLongInt`. For a
+positive argument it guards the conversion with `if (temp > std::numeric_limits<long>::max())
+return [-1, 1]` (`:440`). For a negative argument it computes `temp = (-x.leftBound()) / 2π + 1`,
+which is at least 1, and guards with `if (temp < std::numeric_limits<long>::min())` (`:447`),
+which is never true. `toLongInt` is a bare `static_cast`, so for |x| beyond about 5.8e19 the
+conversion overflows, `y = x − k·2π` stays near x, and `while (y.leftBound() < 0.) y += pi2;`
+(`:454`) adds 2π to a value whose ulp is far larger than 2π, so it never terminates. HYPOTHESIS
+(not run): the guard was meant to read `temp > std::numeric_limits<long>::max()`, mirroring
+`:440`; with it the argument returns `[-1, 1]`.
+
+**Workaround**
+
+Bound every state that feeds `sin`/`cos` to a moderate magnitude. Candidate fixes, untested:
+patch the one guard in CAPD (dReal pins CAPD with no `PATCH_COMMAND` today) and report it
+upstream, or bound the magnitude of values handed to CAPD below about 5e19 in
+`require_capd_representable` (a magic constant).
+
+**Binary**
+
+`gcc_build/dreal4` (Commit `57953403b` + the BUG-015/016 working tree, CAPD `03dc5628`, built
+2026-10-05) and the same source with CAPD `b353e170`.
 
 ---
 

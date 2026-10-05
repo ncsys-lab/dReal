@@ -14,7 +14,9 @@
 #include "to_capd_string.h"
 
 #include <algorithm>
+#include <cmath>
 #include <exception>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -112,6 +114,48 @@ namespace dreal
     // -------------------------------------------------------------------------
 
     namespace {
+        // Every value that crosses into CAPD, and every enclosure that comes
+        // back, must be finite and at most DBL_MAX/2 in magnitude. CAPD splits
+        // each interval into a center (lb+ub)/2 and a remainder: an infinite
+        // bound makes the center NaN or infinite — CAPD's interval sin then
+        // recurses on NaN until the stack overflows (BUG-015) — and a bound
+        // beyond DBL_MAX/2 overflows the sum. On the way back a NaN bound reads
+        // as an EMPTY ibex interval, which the per-slice filter would take as a
+        // refutation, and so would an inverted pair lo > hi. A violation throws
+        // into the integrator's catch, so the whole run is inconclusive and no
+        // slice of it is used.
+        void require_capd_representable(const double lo, const double hi,
+                                        const char* what) {
+            constexpr double kLimit = std::numeric_limits<double>::max() / 2;
+            // Every comparison with NaN is false, so NaN fails too.
+            if (!(std::fabs(lo) <= kLimit && std::fabs(hi) <= kLimit && lo <= hi))
+                throw std::domain_error(
+                    std::string(what) +
+                    " has a non-finite or inverted bound, or one beyond DBL_MAX/2");
+        }
+
+        void require_capd_representable(const capd::IVector& v, const char* what) {
+            for (int i = 0; i < v.dimension(); ++i)
+                require_capd_representable(v[i].leftBound(), v[i].rightBound(), what);
+        }
+
+        // A start-set interval as a CAPD interval, widened outward by one ulp per
+        // bound. CAPD cannot integrate a thin start exactly on a nonzero fixed
+        // point of its flow (BUG-016): predictNextEnclosure seeds the remainder
+        // with an absolute 1e-300 while outward rounding widens the predicted
+        // enclosure by ulp(|x|), so the inclusion test fails at every step size
+        // and CAPD throws "minimal time step reached". A set one ulp wider
+        // integrates, and it contains the box interval, so every enclosure stays
+        // sound. std::nextafter is exact in every rounding mode. Flow parameters
+        // are not widened: CAPD evaluates a parameter-only subexpression such as
+        // sqrt(p) directly, and widening p = [0, c] below 0 would make it throw.
+        capd::interval to_capd_interval(const double lo, const double hi) {
+            const double wlo = std::nextafter(lo, -std::numeric_limits<double>::infinity());
+            const double whi = std::nextafter(hi, std::numeric_limits<double>::infinity());
+            require_capd_representable(wlo, whi, "the integration's start set");
+            return capd::interval(wlo, whi);
+        }
+
         struct ImapStrings {
             std::string fwd;
             std::string bwd;
@@ -236,10 +280,13 @@ namespace dreal
             // come from this flow's parameter list, in ode_list order). A
             // mismatch is a programming error, not a runtime condition to
             // tolerate, so we index par_bounds directly.
-            for (size_t i = 0; i < par_names.size(); ++i)
+            for (size_t i = 0; i < par_names.size(); ++i) {
+                require_capd_representable(par_bounds[i].first, par_bounds[i].second,
+                                           "a flow parameter");
                 m.setParameter(par_names[i],
                                capd::interval(par_bounds[i].first,
                                               par_bounds[i].second));
+            }
             return m;
         }
 
@@ -342,7 +389,7 @@ namespace dreal
         capd::IVector to_ivector(const std::vector<std::pair<double, double>>& v) {
             capd::IVector out(static_cast<int>(v.size()));
             for (size_t i = 0; i < v.size(); ++i)
-                out[static_cast<int>(i)] = capd::interval(v[i].first, v[i].second);
+                out[static_cast<int>(i)] = to_capd_interval(v[i].first, v[i].second);
             return out;
         }
 
@@ -409,7 +456,7 @@ namespace dreal
         // caller's decision.
         //
         // Walks CAPD's adaptive steps (stopAfterStep) and sub-grids each step's
-        // time domain for tightness. Returns false (a sound skip, NOT
+        // time domain for tightness. Sets found = false (a sound skip, NOT
         // infeasibility) on ANY CAPD exception — both step-control divergence
         // (range_error / ISolverException) and a mid-enclosure singularity
         // (capd::IntervalError "possible division by zero", thrown e.g. by the
@@ -424,15 +471,21 @@ namespace dreal
         // the caller checks found==false and discards out_slices, so a tube
         // truncated by an exception is never used for refutation.)
         template <typename SetT>
-        bool integrate_tube_slices_impl(
-            capd::IMap& map,
+        void integrate_tube_slices_impl(
+            const capd::IMap& base_map,
+            const std::vector<std::string>& par_names,
+            const std::vector<std::pair<double, double>>& par_bounds,
             const std::vector<std::pair<double, double>>& u0,
             double win_lb, double t_ub, int n,
             const CapdSolverParams& params,
-            std::vector<CapdTubeSlice>& out_slices)
+            CapdTubeResult& result)
         {
             const int kHullGrid = params.hull_grid;  // sub-intervals per step
+            std::vector<CapdTubeSlice>& out_slices = result.slices;
             try {
+                capd::IMap& map = with_params(base_map, par_names, par_bounds);
+                // win_lb only clips the window below; CAPD integrates over [0, t_ub].
+                require_capd_representable(0.0, t_ub, "the integration time window");
                 capd::IOdeSolver solver(map, params.taylor_order);
                 configure_capd_solver(solver, params);
                 capd::ITimeMap time_map(solver);
@@ -462,6 +515,7 @@ namespace dreal
                             (k == kHullGrid - 1) ? d_hi : d_lo + (k + 1) * dd);
                         const capd::interval slice_time = prev_time + sub;
                         const capd::IVector v = centered_curve_range(curve, sub);
+                        require_capd_representable(v, "a CAPD tube enclosure");
                         CapdTubeSlice s;
                         s.t_lb = slice_time.leftBound();
                         s.t_ub = slice_time.rightBound();
@@ -481,6 +535,7 @@ namespace dreal
                         if (gd_lo <= gd_hi) {
                             const capd::IVector gv =
                                 centered_curve_range(curve, capd::interval(gd_lo, gd_hi));
+                            require_capd_representable(gv, "a CAPD tube enclosure");
                             s.gate_state.reserve(static_cast<size_t>(n));
                             for (int i = 0; i < n; ++i)
                                 s.gate_state.emplace_back(gv[i].leftBound(),
@@ -490,7 +545,7 @@ namespace dreal
                     }
                     prev_time = time_map.getCurrentTime();
                 } while (!time_map.completed());
-                return true;
+                result.found = true;
             }
             // Any exception out of CAPD's integrator is a soundness-neutral
             // numerical event — step-control divergence (ISolverException /
@@ -504,9 +559,12 @@ namespace dreal
             // whole solve (confirmed: it crashed uniform_inverter instances the
             // pre-rewrite code solved). Catch-all-skip is the sound, non-fatal
             // behavior — fail-loud is not worth aborting a solve on a recoverable
-            // integrator singularity.
-            catch (const std::exception&) {
-                return false;
+            // integrator singularity. The adapter's own boundary checks
+            // (require_capd_representable) land here too.
+            // FALLBACK(approved): CAPD failure -> inconclusive ODE, no narrowing — see docs/decisions.md "ODE inconclusive skip"
+            catch (const std::exception& e) {
+                result.found = false;
+                result.failure = e.what();
             }
         }
 
@@ -515,25 +573,30 @@ namespace dreal
         // small explicit switch over the enum; the loop body lives once in
         // integrate_tube_slices_impl<SetT>. (run_capd_trace has the twin switch
         // for the visualization path.)
-        bool integrate_tube_slices(
-            capd::IMap& map,
+        CapdTubeResult integrate_tube_slices(
+            const capd::IMap& base_map,
+            const std::vector<std::string>& par_names,
+            const std::vector<std::pair<double, double>>& par_bounds,
             const std::vector<std::pair<double, double>>& u0,
             double win_lb, double t_ub, int n,
-            const CapdSolverParams& params,
-            std::vector<CapdTubeSlice>& out_slices)
+            const CapdSolverParams& params)
         {
+            CapdTubeResult result;
             switch (params.c0_set) {
                 case OdeC0SetType::Tripleton:
-                    return integrate_tube_slices_impl<capd::C0TripletonSet>(
-                        map, u0, win_lb, t_ub, n, params, out_slices);
+                    integrate_tube_slices_impl<capd::C0TripletonSet>(
+                        base_map, par_names, par_bounds, u0, win_lb, t_ub, n, params, result);
+                    return result;
                 case OdeC0SetType::HORect2:
-                    return integrate_tube_slices_impl<capd::C0HORect2Set>(
-                        map, u0, win_lb, t_ub, n, params, out_slices);
+                    integrate_tube_slices_impl<capd::C0HORect2Set>(
+                        base_map, par_names, par_bounds, u0, win_lb, t_ub, n, params, result);
+                    return result;
                 case OdeC0SetType::Rect2:
                     break;
             }
-            return integrate_tube_slices_impl<capd::C0Rect2Set>(
-                map, u0, win_lb, t_ub, n, params, out_slices);
+            integrate_tube_slices_impl<capd::C0Rect2Set>(
+                base_map, par_names, par_bounds, u0, win_lb, t_ub, n, params, result);
+            return result;
         }
 
     } // namespace
@@ -560,13 +623,13 @@ namespace dreal
         // Contain CAPD's directed-mode clobber so this adapter is nearest-in /
         // nearest-out. See ExpectClobber in rounding.h.
         const NearestRoundingScope capd_clobber{expect_clobber};
-        CapdTubeResult result;
-        if (!cache) return result;
-        const int n = cache->n_state_vars;
-        if (n == 0 || t_ub <= 0.0) return result;
-        capd::IMap& map_fwd = with_params(cache->fn_fwd, cache->par_names, par_bounds);
-        result.found = integrate_tube_slices(map_fwd, u0_bounds, win_lb, t_ub, n, params, result.slices);
-        return result;
+        // Prune establishes these before calling (no CAPD map, the trivial-flow
+        // short-circuit, the time window); reaching here without them is a bug.
+        if (!cache || cache->n_state_vars == 0 || t_ub <= 0.0)
+            throw std::logic_error("run_capd_fwd: called without a CAPD map, "
+                                   "state variables, or a positive end time");
+        return integrate_tube_slices(cache->fn_fwd, cache->par_names, par_bounds,
+                                     u0_bounds, win_lb, t_ub, cache->n_state_vars, params);
     }
 
     // -------------------------------------------------------------------------
@@ -590,13 +653,13 @@ namespace dreal
         // Contain CAPD's directed-mode clobber so this adapter is nearest-in /
         // nearest-out. See ExpectClobber in rounding.h.
         const NearestRoundingScope capd_clobber{expect_clobber};
-        CapdTubeResult result;
-        if (!cache) return result;
-        const int n = cache->n_state_vars;
-        if (n == 0 || t_ub <= 0.0) return result;
-        capd::IMap& map_bwd = with_params(cache->fn_bwd, cache->par_names, par_bounds);
-        result.found = integrate_tube_slices(map_bwd, Xt_bounds, win_lb, t_ub, n, params, result.slices);
-        return result;
+        // Prune establishes these before calling (no CAPD map, the trivial-flow
+        // short-circuit, the time window); reaching here without them is a bug.
+        if (!cache || cache->n_state_vars == 0 || t_ub <= 0.0)
+            throw std::logic_error("run_capd_bwd: called without a CAPD map, "
+                                   "state variables, or a positive end time");
+        return integrate_tube_slices(cache->fn_bwd, cache->par_names, par_bounds,
+                                     Xt_bounds, win_lb, t_ub, cache->n_state_vars, params);
     }
 
     // -------------------------------------------------------------------------
@@ -626,6 +689,7 @@ namespace dreal
                 capd::IMap& chosen_map = with_params(
                     forward ? cache->fn_fwd : cache->fn_bwd,
                     cache->par_names, par_bounds);
+                require_capd_representable(0.0, t_ub, "the trace time window");
                 capd::IOdeSolver solver(chosen_map, params.taylor_order);
                 configure_capd_solver(solver, params);
                 capd::ITimeMap time_map(solver);
@@ -640,6 +704,7 @@ namespace dreal
                     const double t_i = (i == n_steps) ? t_ub
                                                       : static_cast<double>(i) * dt;
                     const capd::IVector encl = time_map(t_i, set);
+                    require_capd_representable(encl, "a CAPD trace enclosure");
 
                     CapdTracePoint pt;
                     pt.t_lb = t_prev;
@@ -653,7 +718,9 @@ namespace dreal
                     t_prev = t_i;
                 }
                 result.succeeded = true;
-            } catch (const std::exception&) {
+            }
+            // FALLBACK(approved): CAPD failure -> --visualize trace keeps the points before it — see docs/decisions.md "ODE inconclusive skip"
+            catch (const std::exception&) {
                 // Partial trace remains in result.points; succeeded stays false.
             }
         }

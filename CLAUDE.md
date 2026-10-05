@@ -254,6 +254,12 @@ build dir is never exercised.
 
 ## Key Design Notes
 
+**Known fallbacks** (grep `FALLBACK(approved)`): the ODE inconclusive skip — a CAPD failure,
+a value CAPD cannot represent, or a negative time window makes that Prune narrow nothing; the
+integral is recorded (explanations, and a stderr warning at a delta-sat verdict); the
+`--visualize` trace keeps the points before a CAPD failure. COMPLETENESS only.
+`docs/decisions.md` §"ODE inconclusive skip".
+
 **SMT-LIB push/pop is formally unsupported.** `(push N)`/`(pop N)` and `Context::Push/Pop`
 throw a documented rejection before any state mutation (CaDiCaL can't retract clauses;
 learned theory lemmas are box-relative). Incrementality is encoder-side: one self-contained

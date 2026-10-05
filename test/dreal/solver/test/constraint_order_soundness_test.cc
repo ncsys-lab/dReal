@@ -68,7 +68,7 @@ TEST(ExplanationInconclusiveOde, RelevantOdeReachesExplanation) {
   RecordEmptyingConstraint(&cs, emptying);
 
   const Formula ode = (t + x <= 1.0);             // shares witness var t
-  cs.AddInconclusiveOde(ode);
+  cs.AddInconclusiveOde(ode, "test");
 
   const FormulaSet e = cs.Explanation();
   EXPECT_EQ(e.count(emptying), 1u);
@@ -85,7 +85,7 @@ TEST(ExplanationInconclusiveOde, IrrelevantOdeExcluded) {
   RecordEmptyingConstraint(&cs, emptying);
 
   const Formula ode_disjoint = (z == 3.0);        // no witness var
-  cs.AddInconclusiveOde(ode_disjoint);
+  cs.AddInconclusiveOde(ode_disjoint, "test");
 
   EXPECT_EQ(cs.Explanation().count(ode_disjoint), 0u);
 }
@@ -109,7 +109,7 @@ TEST(ExplanationInconclusiveOde, SplicedOnWitnessNotClosure) {
   RecordEmptyingConstraint(&cs, emptying);
 
   const Formula ode_closure_only = (u == 3.0);    // touches seen (u) but not witness
-  cs.AddInconclusiveOde(ode_closure_only);
+  cs.AddInconclusiveOde(ode_closure_only, "test");
 
   const FormulaSet e = cs.Explanation();
   EXPECT_EQ(e.count(linking), 1u);                // closure still works for relational

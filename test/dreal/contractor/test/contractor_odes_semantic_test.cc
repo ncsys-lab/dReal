@@ -35,7 +35,11 @@
 
 #include "dreal/contractor/odes/contractor_odes.h"
 
+#include <unistd.h>
+
 #include <cmath>
+#include <cstdlib>
+#include <limits>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -231,6 +235,21 @@ TEST_F(DecayFlowTest, BwdInfeasible_BoxEmpties) {
   EXPECT_TRUE(cs.box().empty())
       << "decay infeasible (BWD): backward tube [2.5,8.15] over τ∈[0,1] is "
          "disjoint from X_0=[1,2]; box must empty [COMPLETENESS GATE, BUG-006]";
+}
+
+// An integral end time that is neither a variable nor a constant (here 2·t) was
+// accepted — the check was a DREAL_ASSERT, compiled out in Release — and every
+// Prune then skipped the ODE without a word (COMPLETENESS: asserts φ^δ
+// T-satisfiable on a possibly T-unsatisfiable φ — missed refutation). It must
+// be rejected when the integral is built.
+TEST_F(DecayFlowTest, NonVariableTimeTerm_Throws) {
+  EXPECT_THROW(integral(0.0, 2.0 * t0_, {x0_}, {xt_}, ode_), std::runtime_error);
+}
+
+// A start or end entry that is not a variable was read with get_variable, a
+// bare static_cast in Release — undefined behavior. It must be rejected.
+TEST_F(DecayFlowTest, NonVariableStartEntry_Throws) {
+  EXPECT_THROW(integral(0.0, t0_, {Expression{1.0}}, {xt_}, ode_), std::runtime_error);
 }
 
 // =============================================================================
@@ -933,6 +952,298 @@ TEST_F(IntervalIcSpreadTest, Projectile_KeepsTubeEdge) {
   ExpectPruneKeepsWitness(
       box, integral(0.0, t0_, {x0_, v0_}, {xt_, vt_}, projectile_),
       {{v0_, 1.5}, {xt_, 0.62}});
+}
+
+// =============================================================================
+// BUG-015: values CAPD cannot represent. CAPD splits every start interval into
+// a center (lb+ub)/2 and a remainder: for [-inf,inf] the center is NaN, a
+// half-line gives an infinite center, and |bound| > DBL_MAX/2 overflows the
+// sum. CAPD's interval sin then recurses on NaN until the stack overflows
+// (SIGSEGV) or loops on an infinite argument, and a NaN that comes back reads
+// as an EMPTY ibex interval — a refutation. The adapter must refuse such
+// inputs before integrating: the Prune is inconclusive and leaves the box as it
+// was (COMPLETENESS only — asserts φ^δ T-satisfiable on a possibly
+// T-unsatisfiable φ — missed refutation; never a false unsat).
+// Each case runs in a re-executed child (EXPECT_EXIT), so a crash fails the
+// test instead of killing the suite and alarm() turns a hang into SIGALRM.
+// =============================================================================
+
+class NonFiniteCapdInputTest : public ::testing::Test {
+ protected:
+  void SetUp() override { GTEST_FLAG_SET(death_test_style, "threadsafe"); }
+
+  inline static const Variable x_{"nf_x", Variable::Type::CONTINUOUS};
+  inline static const Variable p_{"nf_p", Variable::Type::CONTINUOUS};
+  inline static const Variable x0_{"nf_x_0_0", Variable::Type::CONTINUOUS};
+  inline static const Variable p0_{"nf_p_0_0", Variable::Type::CONTINUOUS};
+  inline static const Variable xt_{"nf_x_0_t", Variable::Type::CONTINUOUS};
+  inline static const Variable pt_{"nf_p_0_t", Variable::Type::CONTINUOUS};
+  inline static const Variable t0_{"nf_time_0", Variable::Type::CONTINUOUS};
+  inline static const std::shared_ptr<const OdeFlow> sin_ = make_shared<OdeFlow>(
+      "nf_sin", vector<std::pair<Variable, Expression>>{{x_, sin(x_)}});
+  inline static const std::shared_ptr<const OdeFlow> cos_ = make_shared<OdeFlow>(
+      "nf_cos", vector<std::pair<Variable, Expression>>{{x_, cos(x_)}});
+  inline static const std::shared_ptr<const OdeFlow> decay_ = make_shared<OdeFlow>(
+      "nf_decay", vector<std::pair<Variable, Expression>>{{x_, -x_}});
+  inline static const std::shared_ptr<const OdeFlow> scaled_ = make_shared<OdeFlow>(
+      "nf_scaled", vector<std::pair<Variable, Expression>>{
+                       {x_, p_ * x_}, {p_, Expression::Zero()}});
+
+  static constexpr double kInf = std::numeric_limits<double>::infinity();
+  static constexpr double kMax = std::numeric_limits<double>::max();
+
+  // Child body: one Prune, then exit 0 iff the box is non-empty and unchanged
+  // and the ODE was recorded as inconclusive by the boundary check; 2 if the
+  // box is unchanged but the ODE was not recorded for that reason.
+  static void PruneAndExit(const Formula& ic, const ode_direction dir,
+                           const Box& box) {
+    alarm(20);
+    ContractorStatus cs{box};
+    const auto ctc = mk_contractor_ode_lohner(box, {ic, {}}, dir, Config{}, 0.0);
+    { const UpwardRoundingScope rms_; ctc.Prune(&cs, rms_.token()); }
+    bool unchanged = !cs.box().empty();
+    for (int i = 0; unchanged && i < box.size(); ++i) {
+      unchanged = cs.box()[i] == box[i];
+    }
+    const auto it = cs.inconclusive_odes().find(ic);
+    const bool rejected =
+        it != cs.inconclusive_odes().end() &&
+        it->second.find("non-finite or inverted bound, or one beyond DBL_MAX/2") !=
+            std::string::npos;
+    std::_Exit(!unchanged ? 1 : rejected ? 0 : 2);
+  }
+
+  static Box StartBox(const Box::Interval& x0, const Box::Interval& xt,
+                      const Box::Interval& t) {
+    Box box{vector<Variable>{x_, x0_, xt_, t0_}};
+    box[x_] = Box::Interval(-kInf, kInf);
+    box[x0_] = x0;
+    box[xt_] = xt;
+    box[t0_] = t;
+    return box;
+  }
+
+  static Formula Ic(const std::shared_ptr<const OdeFlow>& ode) {
+    return integral(0.0, t0_, {x0_}, {xt_}, ode);
+  }
+};
+
+// Exit codes: 0 = refused by the boundary check (the fix); 1 = the box changed
+// or emptied (a NaN read as a refutation); 2 = unchanged, but not refused by
+// the boundary check; signal 11 = the scaledSin1 recursion (BUG-015); signal 14
+// (SIGALRM) = a hang. Before the fix the sin/cos cases died by signal 11 and
+// the unbounded-time case by signal 14; the decay, huge and parameter cases
+// left the box unchanged because CAPD itself threw.
+TEST_F(NonFiniteCapdInputTest, UnboundedStart_Sin_Fwd) {
+  EXPECT_EXIT(PruneAndExit(Ic(sin_), ode_direction::FWD,
+                           StartBox({-kInf, kInf}, {-kInf, kInf}, {0.0, 1.0})),
+              ::testing::ExitedWithCode(0), "");
+}
+
+TEST_F(NonFiniteCapdInputTest, UnboundedStart_Cos_Fwd) {
+  EXPECT_EXIT(PruneAndExit(Ic(cos_), ode_direction::FWD,
+                           StartBox({-kInf, kInf}, {-kInf, kInf}, {0.0, 1.0})),
+              ::testing::ExitedWithCode(0), "");
+}
+
+// BWD integrates from X_t, so an unbounded X_t is the start set here.
+TEST_F(NonFiniteCapdInputTest, UnboundedEnd_Sin_Bwd) {
+  EXPECT_EXIT(PruneAndExit(Ic(sin_), ode_direction::BWD,
+                           StartBox({-1.0, 1.0}, {-kInf, kInf}, {0.0, 1.0})),
+              ::testing::ExitedWithCode(0), "");
+}
+
+TEST_F(NonFiniteCapdInputTest, PositiveHalfLineStart_Sin_Fwd) {
+  EXPECT_EXIT(PruneAndExit(Ic(sin_), ode_direction::FWD,
+                           StartBox({0.0, kInf}, {-kInf, kInf}, {0.0, 1.0})),
+              ::testing::ExitedWithCode(0), "");
+}
+
+TEST_F(NonFiniteCapdInputTest, NegativeHalfLineStart_Sin_Fwd) {
+  EXPECT_EXIT(PruneAndExit(Ic(sin_), ode_direction::FWD,
+                           StartBox({-kInf, 0.0}, {-kInf, kInf}, {0.0, 1.0})),
+              ::testing::ExitedWithCode(0), "");
+}
+
+// Finite, but (lb+ub)/2 overflows to -inf: a finiteness-only check passes it
+// and CAPD's sin then loops on the infinite center.
+TEST_F(NonFiniteCapdInputTest, BeyondHalfMaxStart_Sin_Fwd) {
+  EXPECT_EXIT(PruneAndExit(Ic(sin_), ode_direction::FWD,
+                           StartBox({-0.75 * kMax, -0.6 * kMax}, {-kInf, kInf},
+                                    {0.0, 1.0})),
+              ::testing::ExitedWithCode(0), "");
+}
+
+TEST_F(NonFiniteCapdInputTest, UnboundedStart_Decay_Fwd) {
+  EXPECT_EXIT(PruneAndExit(Ic(decay_), ode_direction::FWD,
+                           StartBox({-kInf, kInf}, {-kInf, kInf}, {0.0, 1.0})),
+              ::testing::ExitedWithCode(0), "");
+}
+
+// Finite but beyond DBL_MAX/2: CAPD's (lb+ub)/2 overflows to -inf.
+TEST_F(NonFiniteCapdInputTest, HugeStart_Decay_Fwd) {
+  EXPECT_EXIT(PruneAndExit(Ic(decay_), ode_direction::FWD,
+                           StartBox({-kMax, -kMax / 2}, {-kInf, kInf}, {0.0, 1.0})),
+              ::testing::ExitedWithCode(0), "");
+}
+
+// An unbounded integration time: CAPD would integrate toward +inf.
+TEST_F(NonFiniteCapdInputTest, UnboundedTime_Decay_Fwd) {
+  EXPECT_EXIT(PruneAndExit(Ic(decay_), ode_direction::FWD,
+                           StartBox({1.0, 2.0}, {-kInf, kInf}, {0.0, kInf})),
+              ::testing::ExitedWithCode(0), "");
+}
+
+// A flow parameter (d/dt[p] = 0) with no box: CAPD binds it unsplit.
+TEST_F(NonFiniteCapdInputTest, UnboundedParameter_Fwd) {
+  Box box{vector<Variable>{x_, p_, x0_, p0_, xt_, pt_, t0_}};
+  box[x_] = Box::Interval(-kInf, kInf);
+  box[p_] = Box::Interval(-kInf, kInf);
+  box[x0_] = Box::Interval(1.0, 2.0);
+  box[p0_] = Box::Interval(-kInf, kInf);
+  box[xt_] = Box::Interval(-kInf, kInf);
+  box[pt_] = Box::Interval(-kInf, kInf);
+  box[t0_] = Box::Interval(0.0, 1.0);
+  EXPECT_EXIT(PruneAndExit(integral(0.0, t0_, {x0_, p0_}, {xt_, pt_}, scaled_),
+                           ode_direction::FWD, box),
+              ::testing::ExitedWithCode(0), "");
+}
+
+// Step 1 of every Prune intersects each flow parameter's start and end boxes
+// (p0 ∩ pt). That is a contraction like any other: if it is not recorded (output
+// bit + used constraint), a later conflict that rests on it gets an explanation
+// without this ODE, and the learned clause can cut a satisfiable branch — the
+// SOUNDNESS class of docs/constraint-order-explanation-soundness.md (asserts φ
+// T-unsatisfiable on a T-satisfiable φ — false unsat). It went unrecorded when
+// the Prune then exited inconclusive (here: an unbounded x0) or integrated
+// without changing X_t or the time.
+TEST_F(NonFiniteCapdInputTest, ParameterNarrowing_IsRecorded) {
+  Box box{vector<Variable>{x_, p_, x0_, p0_, xt_, pt_, t0_}};
+  box[x_] = Box::Interval(-kInf, kInf);
+  box[p_] = Box::Interval(-kInf, kInf);
+  box[x0_] = Box::Interval(-kInf, kInf);
+  box[p0_] = Box::Interval(-100.0, 100.0);
+  box[xt_] = Box::Interval(-kInf, kInf);
+  box[pt_] = Box::Interval(-1.0, 1.0);
+  box[t0_] = Box::Interval(0.0, 1.0);
+  const Formula ic = integral(0.0, t0_, {x0_, p0_}, {xt_, pt_}, scaled_);
+  ContractorStatus cs{box};
+  const auto ctc =
+      mk_contractor_ode_lohner(box, {ic, {}}, ode_direction::FWD, Config{}, 0.0);
+  { const UpwardRoundingScope rms_; ctc.Prune(&cs, rms_.token()); }
+  ASSERT_EQ(cs.box()[p0_], Box::Interval(-1.0, 1.0)) << "p0 ∩ pt";
+  EXPECT_TRUE(cs.output()[cs.box().index(p0_)]) << "the narrowed p0 has no output bit";
+  EXPECT_EQ(cs.UsedConstraints().count(ic), 1u)
+      << "the ODE narrowed p0 but is not a used constraint";
+}
+
+// =============================================================================
+// BUG-016: a thin start exactly on a nonzero fixed point of its flow,
+// x' = k(c - x) with x0 = [c, c]. CAPD's predictNextEnclosure seeds the
+// remainder with an absolute 1e-300 while outward rounding widens the predicted
+// enclosure by ulp(|c|), so its inclusion test fails for every step and CAPD
+// throws "minimal time step reached"; the Prune was then inconclusive and X_t
+// kept its declared box — COMPLETENESS (asserts φ^δ T-satisfiable on a
+// T-unsatisfiable φ — missed refutation). A start set one ulp wider integrates.
+// All bounds finite; polynomial flows only.
+// =============================================================================
+
+class RestingAffineTest : public ::testing::Test {
+ protected:
+  inline static const Variable x_{"ra_x", Variable::Type::CONTINUOUS};
+  inline static const Variable y_{"ra_y", Variable::Type::CONTINUOUS};
+  inline static const Variable x0_{"ra_x_0_0", Variable::Type::CONTINUOUS};
+  inline static const Variable y0_{"ra_y_0_0", Variable::Type::CONTINUOUS};
+  inline static const Variable xt_{"ra_x_0_t", Variable::Type::CONTINUOUS};
+  inline static const Variable yt_{"ra_y_0_t", Variable::Type::CONTINUOUS};
+  inline static const Variable t0_{"ra_time_0", Variable::Type::CONTINUOUS};
+
+  static std::shared_ptr<const OdeFlow> Rest(const double k, const double c) {
+    return make_shared<OdeFlow>(
+        "ra_rest", vector<std::pair<Variable, Expression>>{{x_, k * (c - x_)}});
+  }
+
+  // One Prune of x' = k(c - x) from the box; returns the pruned box.
+  static Box Prune(const std::shared_ptr<const OdeFlow>& ode,
+                   const ode_direction dir, const Box::Interval& x0,
+                   const Box::Interval& xt, const double t) {
+    Box box{vector<Variable>{x_, x0_, xt_, t0_}};
+    box[x_] = Box::Interval(-1e6, 1e6);
+    box[x0_] = x0;
+    box[xt_] = xt;
+    box[t0_] = Box::Interval(t, t);
+    ContractorStatus cs{box};
+    const auto ctc = mk_contractor_ode_lohner(
+        box, {integral(0.0, t0_, {x0_}, {xt_}, ode), {}}, dir, Config{}, 0.0);
+    { const UpwardRoundingScope rms_; ctc.Prune(&cs, rms_.token()); }
+    return cs.box();
+  }
+};
+
+TEST_F(RestingAffineTest, FwdThinFixedPoint_NarrowsToRest) {
+  for (const double c : {1.0, 3.0, 0.5, -1.0}) {
+    for (const double k : {0.01, 1.0, 10.0}) {
+      SCOPED_TRACE(::testing::Message() << "c " << c << " k " << k);
+      const Box b = Prune(Rest(k, c), ode_direction::FWD, {c, c}, {-1e6, 1e6}, 0.05);
+      ASSERT_FALSE(b.empty()) << "x(t) = c is reachable [SOUNDNESS GATE]";
+      EXPECT_GT(b[xt_].lb(), c - 1e-9) << b[xt_] << " [COMPLETENESS GATE, BUG-016]";
+      EXPECT_LT(b[xt_].ub(), c + 1e-9) << b[xt_] << " [COMPLETENESS GATE, BUG-016]";
+    }
+  }
+}
+
+// x stays at 1, so X_t = [1.5, 2] is unreachable and the box must empty.
+TEST_F(RestingAffineTest, FwdThinFixedPoint_DisjointGate_BoxEmpties) {
+  const Box b = Prune(Rest(10.0, 1.0), ode_direction::FWD, {1.0, 1.0}, {1.5, 2.0}, 0.05);
+  EXPECT_TRUE(b.empty()) << b << " [COMPLETENESS GATE, BUG-016]";
+}
+
+// BWD integrates -f from the thin X_t = [1, 1]: the same failure, the same fix.
+TEST_F(RestingAffineTest, BwdThinFixedPoint_NarrowsStart) {
+  const Box b = Prune(Rest(10.0, 1.0), ode_direction::BWD, {-1e6, 1e6}, {1.0, 1.0}, 0.05);
+  ASSERT_FALSE(b.empty()) << "x0 = 1 reaches x_t = 1 [SOUNDNESS GATE]";
+  EXPECT_GT(b[x0_].lb(), 1.0 - 1e-9) << b[x0_] << " [COMPLETENESS GATE, BUG-016]";
+  EXPECT_LT(b[x0_].ub(), 1.0 + 1e-9) << b[x0_] << " [COMPLETENESS GATE, BUG-016]";
+}
+
+// One resting component made the whole vector inconclusive: y lost its box too.
+TEST_F(RestingAffineTest, FwdThinFixedPoint_VectorKeepsMovingComponent) {
+  const auto ode = make_shared<OdeFlow>(
+      "ra_rest_vector", vector<std::pair<Variable, Expression>>{
+                            {x_, 10.0 * (1.0 - x_)}, {y_, -y_}});
+  Box box{vector<Variable>{x_, y_, x0_, y0_, xt_, yt_, t0_}};
+  box[x_] = Box::Interval(-1e6, 1e6);
+  box[y_] = Box::Interval(-1e6, 1e6);
+  box[x0_] = Box::Interval(1.0, 1.0);
+  box[y0_] = Box::Interval(1.0, 1.0);
+  box[xt_] = Box::Interval(-1e6, 1e6);
+  box[yt_] = Box::Interval(-1e6, 1e6);
+  box[t0_] = Box::Interval(0.05, 0.05);
+  ContractorStatus cs{box};
+  const auto ctc = mk_contractor_ode_lohner(
+      box, {integral(0.0, t0_, {x0_, y0_}, {xt_, yt_}, ode), {}},
+      ode_direction::FWD, Config{}, 0.0);
+  { const UpwardRoundingScope rms_; ctc.Prune(&cs, rms_.token()); }
+  ASSERT_FALSE(cs.box().empty()) << "[SOUNDNESS GATE]";
+  const double y_true = std::exp(-0.05);
+  EXPECT_GT(cs.box()[yt_].lb(), y_true - 1e-9) << cs.box()[yt_] << " [BUG-016]";
+  EXPECT_LT(cs.box()[yt_].ub(), y_true + 1e-9) << cs.box()[yt_] << " [BUG-016]";
+}
+
+// Controls that hold before and after the fix: the zero fixed point of -x
+// (0 ± 1e-300 is representable, so CAPD's floor never dominates), and a start
+// off the fixed point.
+TEST_F(RestingAffineTest, Controls_ZeroFixedPointAndOffPoint) {
+  const auto decay = make_shared<OdeFlow>(
+      "ra_decay", vector<std::pair<Variable, Expression>>{{x_, -x_}});
+  const Box zero = Prune(decay, ode_direction::FWD, {0.0, 0.0}, {-1e6, 1e6}, 0.05);
+  ASSERT_FALSE(zero.empty());
+  EXPECT_LE(zero[xt_].ub() - zero[xt_].lb(), 1e-9) << zero[xt_];
+  const Box off = Prune(Rest(10.0, 1.0), ode_direction::FWD, {0.99, 0.99}, {-1e6, 1e6}, 0.05);
+  ASSERT_FALSE(off.empty());
+  const double off_true = 1.0 - 0.01 * std::exp(-0.5);
+  EXPECT_GT(off[xt_].lb(), off_true - 1e-9) << off[xt_];
+  EXPECT_LT(off[xt_].ub(), off_true + 1e-9) << off[xt_];
 }
 
 }  // namespace

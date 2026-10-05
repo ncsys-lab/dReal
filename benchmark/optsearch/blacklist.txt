@@ -10,3 +10,7 @@
 1mhz_k90_saradc_4b_box_10a_100000e
 github_oct5_0hz_k256_thermostat_thermostat-triple-network-sat.drh.n
 github_oct5_0hz_k128_quad_quad2-1.drh.o
+1mhz_k70_saradc_3b_nonlinear_10a_100000e
+1mhz_k70_saradc_3b_nonlinear_10a_14e
+1mhz_k70_saradc_3b_nonlinear_10a_15e
+1mhz_k70_saradc_3b_nonlinear_10a_31e

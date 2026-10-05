@@ -56,6 +56,18 @@ void WarnDegenerateDeltaSat(const std::string& reason, const Box& box) {
             << box << "\n";
 }
 
+void WarnInconclusiveOdeDeltaSat(const ContractorStatus& cs) {
+  const NearestRoundingScope print_scope;  // formulas print decimals
+  const auto& [formula, reason] = *cs.inconclusive_odes().begin();
+  std::cerr << "WARNING: delta-sat while " << cs.inconclusive_odes().size()
+            << " ODE constraint(s) were not integrated on some box of this "
+               "search (e.g. "
+            << reason << ", in " << formula
+            << "). The tube was skipped there, so the delta-sat verdict may be "
+               "a missed refutation (COMPLETENESS; the verdict itself is "
+               "unchanged).\n";
+}
+
 optional<DynamicBitset> EvaluateBox(
     const vector<FormulaEvaluator>& formula_evaluators, const Box& box,
     const double precision, ContractorStatus* const cs,
