@@ -420,6 +420,56 @@ alternation comment in `Worker`).
 
 ---
 
+## Branching on followed integral durations first (PERF-001)
+
+**Problem.** A free integral duration d ∈ [0, H] competed with every other box dimension by
+width. In s2d's queries the derived signals are orders of magnitude wider than a duration, so
+largest-first split them while the duration that decides the trajectory stayed unresolved, and
+the queries timed out. Adding `u = 10⁶·d` (a variable that constrains nothing) decided them in
+seconds, because it made the duration the widest dimension (simulink-to-dreal
+`docs/dreal-bugs.md` PERF-001).
+
+**Rule.** While a *followed* duration can still be split, it is the only branching candidate,
+and the configured brancher picks among such durations; otherwise branching is unchanged. An
+integral's duration is followed when its end state is, by the same variable, an integral's start
+state. A duration nothing follows (the last segment's) is left alone. Code:
+`FollowedDurations` and the branching step of `Worker`, `src/dreal/solver/icp_parallel.cc`.
+Variable choice never moves a verdict, so this is a COMPLETENESS/performance lever only.
+
+**Alternatives measured** (2026-10-05). The case study's alias round (s2d `bf507df`, 120 s
+CPU cap, `--model --precision 0.001 --ode-backward false --ode-hull-grid 1`), on a
+partial-SAT-model build like the case study's `dreal_partial_models`. "Pairs" are the 63 queries
+the case study asked with and without the alias; "controls" are 214 last-step queries that carry
+no alias (one more was excluded after a memory kill).
+
+| candidates while any is splittable | pairs solved (alias deleted) | controls solved |
+|---|---|---|
+| none (old behaviour) | 20 | 208 |
+| every duration wider than δ | not run on the round (on a full-model build it solved both PERF-001 reproducers, async_u7 in 262 s against the alias's 26 s) | — |
+| every duration until unsplittable | 47 | 200 (loses 8 last-window queries) |
+| followed durations wider than δ | 36 (1 of the alias's 20 witnesses) | 208 |
+| **followed durations until unsplittable** | **56** | **208** |
+| the alias, old behaviour | 55 | — |
+
+So the last segment's duration is what stalls the controls, and witnesses need the duration
+refined below δ. The chosen rule and the alias differ on 5 pairs (3 one way, 2 the other); on the
+53 both solve the rule takes 1.11× the alias's CPU (geometric mean). On a full-model build the
+async reproducer still takes 162 s against the alias's 26 s; that gap is in the SAT↔theory loop
+(5,718 rounds with 266-literal lemmas against 1,173 with 132 under the alias), not in branching,
+and is not isolated.
+
+**Gate.** ODE-family A/B (103 jobs): PAR2 0.99×, identical solve sets, no verdict flip. The
+saradc rows came out 1.19–1.26× slower, but saradc has no followed durations; run alone and
+interleaved, the gap was 3 %, the cost of copying the candidate bitset per branch. The buffer is
+now reused (7.06 s before, 7.05 s after). The rest is attributed to contention, not isolated:
+another session's solver runs overlapped the B arm, and the load average reached 14.7. By a 40-file sample per family, followed durations occur in about
+half the github family and in none of tacas or saradc: the shared-variable test is syntactic, and
+dReach encodings that chain steps through reset equalities (`(= x_1_0 x_0_t)`) do not trigger it.
+Test: `DrealBugsRegression.Perf001_FollowedDurationBranchedFirst` (a recording brancher on a
+two-segment query).
+
+---
+
 ## SMT-LIB push/pop: formally unsupported
 
 **Decision (2026-07-22):** `(push N)` / `(pop N)` — and `Context::Push/Pop` — are formally

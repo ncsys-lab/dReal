@@ -132,6 +132,11 @@ per-project for odeexpr only. Mechanism:
 `docs/architecture.md` §Branching. A/B: `OPTIMIZATION_LOG.md` §odeexpr. Code:
 `src/dreal/solver/brancher_smear.{h,cc}`.
 
+**Followed-duration branching (always on, PERF-001):** while an integral duration whose end
+state starts another integral can still be split, it is the only branching candidate. It replaces
+s2d's `u = 10⁶·d` alias (56 vs 55 of 63 case-study queries; ODE-family A/B PAR2 0.99×, no flips).
+`docs/decisions.md` §"Branching on followed integral durations first".
+
 **Forall pre-pruner (`--forall-pre-prune`, default off):** a sound, COMPLETENESS-only IBEX
 `ibex::CtcForAll` proj-intersection pre-pruner (`ContractorIbexForall`) that runs *beside* —
 never instead of — the δ-complete CEGIS `ContractorForall` in the forall fixpoint, shrinking

@@ -25,6 +25,7 @@
 #include "dreal/solver/brancher_smear.h"
 #include "dreal/solver/icp_stat.h"
 #include "dreal/solver/seed/seed.h"
+#include "dreal/symbolic/odes/symbolic_odes_cell.h"
 #include "dreal/util/assert.h"
 #include "dreal/util/cds.h"
 #include "dreal/util/interrupt.h"
@@ -39,6 +40,38 @@ using std::vector;
 namespace dreal {
 
 namespace {
+
+// PERF-001 (simulink-to-dreal docs/dreal-bugs.md): the box dimensions of the
+// integral durations that another integral follows, i.e. an integral whose end
+// state is, by the same variable, an integral's start state. Largest-first
+// left such a duration to compete by width with derived signals far wider than
+// it, so the search split those signals while the duration that decides the
+// trajectory stayed unresolved, and s2d's queries timed out unless a 10⁶-scaled
+// alias made the duration the widest. A duration no integral follows (the last
+// segment's) is left alone: branching on it first stalled last-window queries.
+// Measured on the case study's 2026-10-04 alias round; docs/decisions.md
+// "Branching on followed integral durations".
+DynamicBitset FollowedDurations(const vector<FormulaEvaluator>& formula_evaluators,
+                                const Box& box) {
+  vector<const FormulaIntegral*> integrals;
+  Variables starts;
+  for (const FormulaEvaluator& fe : formula_evaluators) {
+    if (!is_integral(fe.formula())) continue;
+    integrals.push_back(to_integral(fe.formula()));
+    starts.insert(integrals.back()->get_vars_0().begin(), integrals.back()->get_vars_0().end());
+  }
+  DynamicBitset dims(box.size());
+  for (const FormulaIntegral* ic : integrals) {
+    if (!is_variable(ic->get_time_t())) continue;
+    for (const Variable& v : ic->get_vars_t()) {
+      if (starts.include(v)) {
+        dims.set(box.index(get_variable(ic->get_time_t())));
+        break;
+      }
+    }
+  }
+  return dims;
+}
 
 bool ParallelBranch(const SmearBrancher* const smear_brancher,
                     const BrancherAbs* const abs_brancher,
@@ -85,6 +118,7 @@ bool ParallelBranch(const SmearBrancher* const smear_brancher,
 
 void Worker(const Contractor& contractor, const Config& config,
             const vector<FormulaEvaluator>& formula_evaluators,
+            const DynamicBitset& followed_durations,
             const SmearBrancher* const smear_brancher,
             BrancherAbs* const abs_brancher, const int id,
             const bool main_thread,
@@ -128,6 +162,10 @@ void Worker(const Contractor& contractor, const Config& config,
   // The forall contractor seeds the starting side via
   // config.stack_left_box_first().
   bool stack_left_box_first{config.stack_left_box_first()};
+
+  // The branching candidates among the followed durations, refilled per branch
+  // (assignment keeps the storage, so a branch allocates nothing).
+  DynamicBitset durations{followed_durations};
 
   // `current_box` always points to the box in the contractor status
   // as a mutable reference.
@@ -230,10 +268,17 @@ void Worker(const Contractor& contractor, const Config& config,
     }
     eval_timer_guard.pause();
 
-    // 3.2.3. This box is bigger than delta. Need branching.
+    // 3.2.3. This box is bigger than delta. Need branching. While a followed
+    // integral duration can still be split, it is the only candidate
+    // (FollowedDurations above); the configured brancher picks among them.
     branch_timer_guard.resume();
+    durations = followed_durations;
+    for (auto i = durations.find_first(); i != DynamicBitset::npos; i = durations.find_next(i)) {
+      if (!current_box[static_cast<int>(i)].is_bisectable()) durations.reset(i);
+    }
     if (!ParallelBranch(smear_brancher, abs_brancher, config.brancher(),
-                        *evaluation_result, stack_left_box_first, &current_box,
+                        durations.any() ? durations : *evaluation_result,
+                        stack_left_box_first, &current_box,
                         &current_branching_point, global_stack,
                         number_of_boxes, ur)) {
       DREAL_LOG_DEBUG(
@@ -392,15 +437,17 @@ bool IcpParallel::CheckSat(const Contractor& contractor,
     status_vector_.push_back(*cs);
   }
 
+  const DynamicBitset followed_durations{FollowedDurations(formula_evaluators, cs->box())};
+
   for (int i = 0; i < number_of_jobs - 1; ++i) {
     results_.push_back(pool_.enqueue(
-        Worker, contractor, config(), formula_evaluators, brancher_for(i),
+        Worker, contractor, config(), formula_evaluators, followed_durations, brancher_for(i),
         abs_brancher_for(i), i, false /* not main thread */, &global_stack,
         &status_vector_[i], &found_delta_sat, &number_of_boxes));
   }
 
   const int last_index{number_of_jobs - 1};
-  Worker(contractor, config(), formula_evaluators, brancher_for(last_index),
+  Worker(contractor, config(), formula_evaluators, followed_durations, brancher_for(last_index),
          abs_brancher_for(last_index), last_index, true /* main thread */,
          &global_stack, &status_vector_[last_index], &found_delta_sat,
          &number_of_boxes);

@@ -36,11 +36,14 @@
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include <gtest/gtest.h>
 
+#include "dreal/solver/brancher.h"
 #include "dreal/solver/config.h"
 #include "dreal/solver/context.h"
 
@@ -532,6 +535,58 @@ TEST(DrealBugsRegression, ForallTDecimalFlowId_Rejected) {
     EXPECT_NE(std::string{e.what()}.find("flow id"), std::string::npos) << e.what();
   }
   EXPECT_NE(RunSmt2String(ForallTQuery("1")).find("delta-sat"), std::string::npos);
+}
+
+// PERF-001 (simulink-to-dreal docs/dreal-bugs.md) — a free integral duration
+// that another integral follows (its end state starts the next integral)
+// competed with every other dimension by width, so ICP split wide derived
+// signals while the duration that decides the trajectory stayed unresolved;
+// s2d's queries timed out unless a 10⁶-scaled alias of the duration made it the
+// widest. While such a duration can still be split it is now the only branching
+// candidate. d1 below is followed, d2 (the last segment) is not, and s is a wide
+// derived signal that largest-first would otherwise pick.
+TEST(DrealBugsRegression, Perf001_FollowedDurationBranchedFirst) {
+  struct Call {
+    bool d1_bisectable{false};
+    std::vector<std::string> offered;
+  };
+  auto calls = std::make_shared<std::vector<Call>>();
+  Config config;
+  config.mutable_brancher() = [calls](const Box& box, const DynamicBitset& active,
+                                      Box* const left, Box* const right,
+                                      const UpwardRounding& ur) {
+    Call c;
+    for (int i = 0; i < box.size(); ++i) {
+      if (box.variable(i).get_name() == "d1") c.d1_bisectable = box[i].is_bisectable();
+      if (active[i]) c.offered.push_back(box.variable(i).get_name());
+    }
+    calls->push_back(c);
+    return BranchLargestFirst(box, active, left, right, ur);
+  };
+  const std::string out{RunSmt2String(
+      "(set-logic QF_NRA_ODE)\n"
+      "(declare-fun x () Real [-100, 100])\n"
+      "(declare-fun x_0 () Real [1, 1])\n"
+      "(declare-fun x_1 () Real [-100, 100])\n"
+      "(declare-fun x_2 () Real [-100, 100])\n"
+      "(declare-fun d1 () Real [0, 1])\n"
+      "(declare-fun d2 () Real [0, 1])\n"
+      "(declare-fun s () Real [-1000, 1000])\n"
+      "(define-ode flow_1 ((= d/dt[x] (* -1 x))))\n"
+      "(assert (= [x_1] (integral 0. d1 [x_0] flow_1)))\n"
+      "(assert (= [x_2] (integral 0. d2 [x_1] flow_1)))\n"
+      "(assert (= s (* 1000 x_2)))\n"
+      "(assert (<= x_2 0.5))\n"
+      "(check-sat)\n",
+      config)};
+  EXPECT_NE(out.find("delta-sat"), std::string::npos) << out;
+  int checked = 0;
+  for (const Call& c : *calls) {
+    if (!c.d1_bisectable) continue;
+    ++checked;
+    EXPECT_EQ(c.offered, std::vector<std::string>{"d1"});
+  }
+  EXPECT_GT(checked, 0) << "no branch was taken while d1 could be split";
 }
 
 // BUG-015 (dreal4-cmake docs/dreal-bugs.md) — an integral whose start variable
