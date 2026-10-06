@@ -74,9 +74,7 @@ dr_yycolumn += yyleng;
 
  /*** BEGIN - lexer rules ***/
 
-"#".*[\n\r]+ {
-    dr_yycolumn=1;
-}
+"#".* { }
 
 "var"                   { return DrParser::token::TK_VAR; }
 "cost"                  { return DrParser::token::TK_COST; }

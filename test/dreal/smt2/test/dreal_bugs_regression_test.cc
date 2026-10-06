@@ -39,6 +39,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -518,25 +519,47 @@ TEST(DrealBugsRegression, Bug018_ProjectileTubeEdge_DeltaSat) {
 // included) had not, and dreal exited 0, often with no verdict. A failed parse
 // now throws — a syntax error, a rule that aborts on an undeclared name, and a
 // file that cannot be opened — in both front ends.
+using FrontEnd = void (*)(const std::string&, const Config&, bool, bool);
+
+// Run a front end on `input` as its --in stdin; return what it printed.
+std::string RunOnStdin(const FrontEnd front_end, const std::string& input) {
+  std::istringstream in{input};
+  std::ostringstream captured;
+  const CinRedirect cin_redirect{in.rdbuf()};
+  const CoutRedirect cout_redirect{captured.rdbuf()};
+  front_end("", Config{}, false, false);
+  return captured.str();
+}
+
 TEST(DrealBugsRegression, ParseFailure_Throws) {
-  using FrontEnd = void (*)(const std::string&, const Config&, bool, bool);
-  const auto run_on_stdin = [](const FrontEnd front_end, const std::string& input) {
-    std::istringstream in{input};
-    const CinRedirect redirect{in.rdbuf()};
-    front_end("", Config{}, false, false);
-  };
   for (const std::string smt2 :
        {"(set-logic QF_NRA)\n(declare-fun x () Real)\n(assert (> x 0)\n",
         "(set-logic QF_NRA)\n(declare-fun x () Real)\n(assert (> y 0))\n(check-sat)\n"}) {
-    EXPECT_THROW(run_on_stdin(RunSmt2, smt2), std::runtime_error) << smt2;
+    EXPECT_THROW(RunOnStdin(RunSmt2, smt2), std::runtime_error) << smt2;
   }
   for (const std::string dr : {"var:\n[0, 1] x;\nctr:\nx > ;\n",
                                "var:\n[0, 1] x;\nctr:\ny > 0;\n"}) {
-    EXPECT_THROW(run_on_stdin(RunDr, dr), std::runtime_error) << dr;
+    EXPECT_THROW(RunOnStdin(RunDr, dr), std::runtime_error) << dr;
   }
   for (const FrontEnd front_end : {RunSmt2, RunDr}) {
     EXPECT_THROW(front_end("/nonexistent/dreal-input", Config{}, false, false),
                  std::runtime_error);
+  }
+}
+
+// A comment runs to the end of its line or of the input. The comment rules
+// required a newline, so a final comment without one lexed as a stray `;` or
+// `#`, and the script — already solved — then failed to parse
+// (test/dreal/test/dr/paper-147.dr).
+TEST(DrealBugsRegression, FinalCommentWithoutNewline_Parses) {
+  for (const auto& [front_end, input] : std::vector<std::pair<FrontEnd, std::string>>{
+           {RunSmt2,
+            "(set-logic QF_NRA)\n(declare-fun x () Real [0, 1])\n(assert (> x 0.5))\n"
+            "(check-sat)\n; no newline"},
+           {RunDr, "var:\n[0, 1] x;\nctr:\nx > 0.5;\n# no newline"}}) {
+    std::string out;
+    EXPECT_NO_THROW(out = RunOnStdin(front_end, input)) << input;
+    EXPECT_NE(out.find("delta-sat"), std::string::npos) << input << "\n" << out;
   }
 }
 

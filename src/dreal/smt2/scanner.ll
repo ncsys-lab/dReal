@@ -88,9 +88,7 @@ simple_symbol   {sym_begin}{sym_continue}*
 
  /*** BEGIN - lexer rules ***/
 
-";".*[\n\r]+ {
-    smt2_yycolumn=1;
-}
+";".* { }
 
 "!"                     { return Smt2Parser::token::TK_EXCLAMATION; }
 "BINARY"                { return Smt2Parser::token::TK_BINARY; }
