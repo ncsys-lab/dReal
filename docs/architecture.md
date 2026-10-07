@@ -92,7 +92,7 @@ The `CaDiCaL::Learner` interface is used by the pattern-matching layer (CAV26 re
 3. Delegates to an `Icp` implementation (sequential or parallel) to run the ICP loop.
 4. Returns `true` (delta-SAT with model in `model_`) or `false` (UNSAT with explanation in `explanation_`).
 
-Caches are keyed by formula identity (`std::unordered_map<Formula, Contractor>`). Three separate caches exist for forward ODE contractors, backward ODE contractors, and constraint contractors.
+Caches are keyed by formula identity (`FormulaUnorderedMap<Contractor>`). Three separate caches exist for forward ODE contractors, backward ODE contractors, and constraint contractors.
 
 ---
 
