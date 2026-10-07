@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `docs/ode-integration.md` — CAPD ODE contractor mechanism, soundness invariants, input formats
 - `docs/pattern-matching.md` — DeBruijn canonicalization, substitution_tree, symmetry filtering (CAV26)
 - `docs/rounding.md` — FPU rounding regimes, phase-hoisting, typed doubles, source-hygiene lint rules
-- `docs/benchmarking.md` — benchmark infrastructure, families, A/B, sweep, cross-solver comparison
+- `docs/benchmarking.md` — local co-run spot checks (`corun.sh`, `measure.py`: E-cores, CPU cap, ratios only) vs Sherlock runs, families/weighting, thresholds, choosing the cap, cross-solver comparison
 - `docs/soundness-vs-completeness.md` — T-relation definitions, dReal guarantees, worked F1 example
 - `docs/forall-semantics.md` — ∃∀ fragment: syntax, CE-guided contractor, nested-forall crash, QE limits, nested-quantifier project guide
 - `exists_forall_perf.md` (repo-root **worklog**, not docs) — ∃∀ machinery notes: the durable solver findings (`--forall-pre-prune` is sound but its speedup is **encoding-fragile** and doesn't address the existential-isolation wall; `--forall-polytope` needs SoPlex and can *hurt*; CE-domain fix; lemma-PM is ground-only) plus a **correction header** — the odeexpr_v2 family was regenerated 2026-07-01 — a second same-day regen now (25 `forall/` + 25 `exists_forall/`, δ pinned **0.01**), so the older δ=0.0005 / "SAT-by-construction" body is superseded: only `sign_agreement` admits the zero witness, while the strict-margin `average_descends`/`both_descend` files are genuine UNSAT/separation targets; the symbolic-rewrite avenue (SymPy-verified `sig2tanh`/`factor`/`simplify` of the descent body) was tested & **rejected 2026-07-02** — UNSAT-null, `factor`/`simplify` only an N1-delta-sat artifact (net-negative + `simplify` hangs on N2), so don't re-try it (§2026-07-02)
@@ -240,8 +240,10 @@ same hardware, same core type — and only as a ratio, never an absolute time. L
 P-cores), with a CPU-seconds cap, so compiling during a spot check is fine.
 `docs/benchmarking.md` §"Comparison rule".
 
-**Thresholds:** test/control PAR2 ratio > 1.5 = regression; < 0.6 = exceptional; SAT↔UNSAT
-flip = immediate escalation. CPU time (user+sys), not wall clock.
+**Thresholds:** test/control PAR2 ratio > 1.5 = regression; < 0.6 = exceptional. Immediate
+escalation: any test verdict that contradicts `baseline.csv` ground truth (even where the control
+agrees), or a SAT↔UNSAT flip with no ground truth (`docs/benchmarking.md` §Thresholds). CPU time
+(user+sys) on the E-cores, not wall clock.
 
 **Benchmark sources** (three content-addressed manifest families + three flat dirs):
 - `~/Documents/expressivity/v1/benchmarks/` — `odeexpr_v1` family (NRA-only,

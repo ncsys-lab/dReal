@@ -50,7 +50,7 @@ Be terse. Only return the summary and the table — no narration.
 
 ## Notes
 - A spot check runs on the 4 E-cores (macOS can't pin to P-cores), where a dReal run takes
-  2–5× the CPU time it would on a P-core, under a CPU-seconds cap (`TIMEOUT`, default 120;
+  2.2–5.5× (median 3.3×) the CPU time it would on a P-core, under a CPU-seconds cap (`TIMEOUT`, default 120;
   ~5 min). It is load-proof: the user may compile or work while it runs.
 - If the change also needs a Sherlock run, push it and start the Sherlock builds before the spot
   check, and stop them if it fails (`docs/benchmarking.md` §"Where a run happens").

@@ -8,9 +8,9 @@
 #   JOBS : TSV (csv_name <TAB> filepath), at most 12 benchmarks. Anything bigger is not a spot
 #          check: run it on Sherlock (../dreal-stanford-benchmarking).
 #   ARM  : label=<binary> [flags...], e.g.  control=benchmark/bin/dreal4-abc123
-#          test="gcc_build/dreal4 --ode-taylor-order 12"
+#          test="gcc_build/dreal4 --ode-taylor-order 20"
 # Env: TIMEOUT  CPU-seconds cap per run, a whole number (default 120: on the spot-check mix it
-#               keeps ~86% of the informative results of 600 in ~30% of the time —
+#               keeps ~90% of the informative results of 600 in ~30% of the time —
 #               docs/benchmarking.md §"Choosing the cap")
 #      MAXJOBS  solver processes at once (default: the E-core count)
 #

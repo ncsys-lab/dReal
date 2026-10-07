@@ -5,10 +5,12 @@ kill, aggregate.py appends it) and the static OOM risks.
 Default mode: 8 family-weighted random.
   python3 select_jobs.py [--n N] [--seed SEED]
 
-Family-subset mode (for A/B over a targeted family, e.g. the ODE families —
+Family-subset mode (a spot check aimed at some families, e.g. the ODE families —
 the random weighting favours odeexpr, which has no ODEs):
-  python3 select_jobs.py --family github,tacas,saradc --all   # every job in those
+  python3 select_jobs.py --family github,tacas,saradc --n 8   # 8 weighted from those
   python3 select_jobs.py --family github --n 6                 # 6 random from github
+--all lists whole families, which is more than corun.sh's 12; a family-wide run is a Sherlock
+experiment over the registered set.
 
 Prints TSV (csv_name <TAB> filepath), one per line, to stdout.
 """
@@ -115,8 +117,8 @@ def main():
                              "restricts the corpus to those families before selection")
     parser.add_argument("--all", action="store_true",
                         help="emit EVERY benchmark of the (filtered) corpus, deterministically "
-                             "sorted, no random sampling. Intended for an "
-                             "A/B over a fixed family set (e.g. --family github,tacas,saradc --all)")
+                             "sorted, no random sampling — more than corun.sh's 12 for any whole "
+                             "family; cut it or run the family on Sherlock")
     args = parser.parse_args()
 
     baseline_csv = os.path.join(SCRIPT_DIR, "baseline.csv")

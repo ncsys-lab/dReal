@@ -2,17 +2,17 @@
 """Record one optsearch sweep round into the cross-round leaderboard.
 
 The autonomous odeexpr config search ran its rounds through benchmark/do_sweep.sh
-(retired 2026-10-07: rounds that size now run on Sherlock, and a local corun.sh run
-has the same per-arm summary.csv layout); this script ingests a round's per-config
-summary.csv files and:
+(retired 2026-10-07; rounds that size now run on Sherlock); this script ingests a
+round's per-config summary.csv files and:
 
   1. Computes per-config solved-count and PAR2 (CPU time if solved, else
      2*timeout) and the PAR2 ratio vs the `base` (current-default) config.
   2. Detects SAT<->UNSAT verdict flips vs base -- the load-bearing correctness
      signal (a flip is an integration bug or a delta-boundary completeness
      shift; NEVER an accepted win -- see project CLAUDE.md soundness framing).
-  3. Harvests any SIGKILL/OOM (exit 137 / solver_result OOM -- the user's
-     oom/swap daemons kill >8GB) into benchmark/optsearch/blacklist.txt so the
+  3. Harvests any SIGKILL/OOM (exit 137 / solver_result OOM -- the oom_killer
+     daemon kills a process over 10 GB, or the largest past 87.5% of RAM) into
+     benchmark/optsearch/blacklist.txt so the
      benchmark is excluded from future rounds and never restarted.
   4. Appends a row per config to benchmark/optsearch/leaderboard.csv and prints
      a ranked table for the /loop coordinator to read.

@@ -3,8 +3,8 @@
 Run `/benchmark` after every meaningful code change — the primary regression-detection mechanism.
 Run proactively at natural breakpoints even if the user doesn't ask.
 
-**Where a run happens.** A spot check — at most 12 benchmarks, about 15 minutes — runs on this
-Mac (`/benchmark`, or `benchmark/corun.sh` by hand). Anything larger (a family-wide A/B, a flag
+**Where a run happens.** A spot check — at most 12 benchmarks; `/benchmark`'s 8 take ~5 min at
+the 120 s cap — runs on this Mac (`/benchmark`, or `benchmark/corun.sh` by hand). Anything larger (a family-wide A/B, a flag
 sweep, a pre-merge gate) runs on Sherlock through `../dreal-stanford-benchmarking`: write an
 `experiments/<id>.py` spec and follow that repo's CLAUDE.md workflow. `corun.sh` refuses a job set
 over 12.
@@ -77,6 +77,8 @@ All ratios are test/control within one co-run. PAR2 = CPU seconds if solved, 2×
   (e.g. 12/50 odeexpr TIM for every config ≈ 92% of the sum), diluting a real win to near-zero.
   Report PAR2 over the subset solvable by *either* arm (≈ CPU on commonly-solved) as the honest
   speedup, alongside the raw aggregate — a win concentrated in a few benchmarks is otherwise hidden.
+  `OUT/compare.txt` (`compare_solvers.py`) scores that subset; `aggregate.py`'s `family_ratios`,
+  the table `/benchmark` reports, are the raw aggregate (both-TIM benchmarks included).
 
 ---
 
@@ -101,8 +103,8 @@ families (`MANIFEST_FAMILIES`, `FAMILY_WEIGHTS`, `family_of`, `load_manifest_nam
   being hard: about a third timed out where they were recorded; v2's manifest schema).  Written by `python -m
   pipeline.benchmarks` in that repo, whose docstring says how a query is picked.  The queries
   were asked there with other options, but the family runs at dReal's defaults.  The longest
-  queries run to 82 steps, and a 71-step one peaked near 5.7 GB there, so `--family s2d --all`
-  at 12 jobs can cross the OOM daemon's total watermark.
+  queries run to 82 steps, and a 71-step one peaked near 5.7 GB there; the whole family
+  (`--family s2d --all`) is more than a spot check, so it runs on Sherlock (set `s2d`).
 - `~/Documents/new_dreal/nraode_to_nra/drealgithub_sunoct5/rolled/` — `github_oct5_` family
 - `~/Documents/new_dreal/nraode_to_nra/VNAMSCwI_satoct11/rolled/` — `tacas_c2e2_` family
 - `~/Documents/new_dreal/AMS-verification-bundle-of-sticks/saradc/rolled/` — `1mhz_` family
@@ -122,21 +124,25 @@ families (`MANIFEST_FAMILIES`, `FAMILY_WEIGHTS`, `family_of`, `load_manifest_nam
 - `do_benchmark.sh CONTROL` — the `/benchmark` driver: `select_jobs.py` → `corun.sh` (control vs
   `gcc_build/dreal4`) → `aggregate.py`
 - `stash.sh` — builds HEAD (`BUILD.sh`) and keeps the binary as `bin/dreal4-<sha>`, a control for
-  later spot checks; refuses when `src/`, `cmake/` or `CMakeLists.txt` differ from HEAD.
-  `bin/` is gitignored
+  later spot checks; refuses when `src/`, `cmake/` or `CMakeLists.txt` differ from HEAD, or when
+  `gcc_build`'s IBEX/CAPD checkouts differ from the `CMakeLists.txt` pins. `bin/` is gitignored
 - `baseline.csv` — the flat families' corpus index (`select_jobs.py` reads its names) and their
-  `ground_truth` annotations (`aggregate.py` classifies flips with them). Its DRPM_0L times are
-  a record from another machine, not a reference
-- `odeexpr.py` — registry for all families: `MANIFEST_FAMILIES` (the `odeexpr_v*` content-addressed
-  families, each `(name, root, rev_file_key)`), `FAMILY_WEIGHTS`, `family_of`, `weight_of`,
+  `ground_truth` annotations (`aggregate.py` checks every test verdict against them). Its time
+  columns (DRPM_0L, DRPM_16L_200ms, dReal3) are a record from another machine, not a reference
+- `odeexpr.py` — registry for all families: `MANIFEST_FAMILIES` (the content-addressed families
+  `odeexpr_v1`, `odeexpr_v2`, `s2d`, each `(name, root, rev_file_key)`), `FAMILY_WEIGHTS`, `family_of`, `weight_of`,
   manifest-based `load_manifest_names`/`resolve_manifest`, `--all [FAMILY]` TSV dump
 - `state.json` — a log of past spot checks (arms, counts); `aggregate.py` appends to it. Nothing
   carries between runs: a regression is a regression against that run's control
 - `select_jobs.py` — picks 8 **family-weighted** random benchmarks, never a blacklisted one; outputs
   TSV (csv_name TAB filepath). `--family a,b,c` restricts corpus to those families
   (`odeexpr_v1,odeexpr_v2,s2d,saradc,github,tacas`); `--all` emits every benchmark of the filtered
-  corpus deterministically (no random) — for a Sherlock set, or cut to ≤12 for
-  `corun.sh`.
+  corpus deterministically (no random) — cut it to ≤12 for `corun.sh`. A family-wide run on
+  Sherlock names the registered set instead (`Experiment.benchmark_sets`, from
+  `../dreal-stanford-benchmarking/benchmarks/registry.py`): `odeexpr_v1` → `expressivity_v1`,
+  `odeexpr_v2` → `expressivity_v2` (not Sherlock's older `odeexpr_v2` set, a different corpus),
+  `s2d` → `s2d`, `saradc` → `saradc`, `github` → `github_dreach`, `tacas` → `tacas_c2e2`
+  (the flat-family sets are whole source directories, larger than `baseline.csv`'s rows).
   **OOM exclusion** (`_is_oom_risk`): github/tacas `_k<N>_` with N ≥ 1024, saradc `_<N>b_` with
   N ≥ 9 — these crash the OS; the filter applies inside `load_benchmarks`
 - `parse_results.py` — parses one arm dir (`.rusage` + solver stdout) into `summary.csv`;
@@ -153,8 +159,8 @@ families (`MANIFEST_FAMILIES`, `FAMILY_WEIGHTS`, `family_of`, `load_manifest_nam
 - `compare_solvers.py --cap N` — the same comparison for any number of arms of one co-run
   (`corun.sh` writes it to `compare.txt`); excludes a memory-killed benchmark
 - `baseline_odeexpr_cav26.csv`, `baseline_odeexpr_dreal3.csv`, `baseline_quant.csv`,
-  `odeexpr_solver_comparison.txt`, `optsearch/` — records of past runs; not comparable with a
-  new run
+  `odeexpr_solver_comparison.txt`, `optsearch/` (except `optsearch/blacklist.txt`, the live
+  memory-kill blacklist) — records of past runs; not comparable with a new run
 - `results/` — per-run output directories (gitignored)
 
 ---
@@ -191,8 +197,7 @@ The metric is **CPU time (user+sys)** on the E-cores, as a ratio within one co-r
 **120 CPU seconds** (`RLIMIT_CPU`; a capped run exits 152 and parses as TIM), so machine load
 lengthens a spot check without turning solves into timeouts. Batches leave dReal's own `-j`/`--jobs` at its default
 **1** on purpose: pool width is the parallelism, and one thread per solve is what keeps
-per-process CPU time an interpretable metric — raising it inside a timing run breaks
-comparability against every recorded number. Operational rules for any batch / A-B / sweep:
+per-process CPU time an interpretable metric. Operational rules for a spot check:
 
 - **One spot check at a time, on the E-cores.** `corun.sh` runs as many solvers as there are
   E-cores (`hw.perflevel1.logicalcpu`, 4), whole co-run groups at a time. Never overlap two
@@ -200,8 +205,9 @@ comparability against every recorded number. Operational rules for any batch / A
 - **SIGKILL ⇒ blacklist, never restart.** The machine runs an `oom_killer` daemon (C,
   `/usr/local/src/oom_killer/`; replaced the old oom_killer.sh/swap_killer.sh pair) that
   SIGKILLs any process over **10 GB** phys_footprint — or the largest process when total
-  user footprint crosses 87.5% of RAM. A solver exit *by signal* (exit code **137** =
-  128+SIGKILL, or "Killed") is a memory event, not a result: never retry it. `aggregate.py`
+  user footprint crosses 87.5% of RAM. A solver killed by SIGKILL (exit code **137** =
+  128+SIGKILL, or "Killed") is a memory event, not a result: never retry it (152, SIGXCPU, is the
+  CPU cap: TIM). `aggregate.py`
   reports it excluded (never TIM/ERR) and appends it to `benchmark/optsearch/blacklist.txt`,
   which `select_jobs.py` skips — the dynamic complement to its static `_is_oom_risk`. To filter
   a hand-made jobs file, use
@@ -248,7 +254,7 @@ bash benchmark/stash.sh                                   # → benchmark/bin/dr
 bash benchmark/do_benchmark.sh benchmark/bin/dreal4-<sha> # /benchmark without the subagent
 python3 benchmark/select_jobs.py --family s2d --n 6 > /tmp/jobs.tsv
 bash benchmark/corun.sh /tmp/ab /tmp/jobs.tsv control=benchmark/bin/dreal4-<sha> \
-    test=gcc_build/dreal4 o12="gcc_build/dreal4 --ode-taylor-order 12"
+    test=gcc_build/dreal4 o20="gcc_build/dreal4 --ode-taylor-order 20"
 ```
 
 ---
@@ -265,6 +271,8 @@ was retired 2026-10-07 with the stored baselines; it is in git history.
 
 ## Experimental design for sweeps
 
-Sweeps run on Sherlock. For meta-parameter tuning: OFAT probe → interaction check → full
-confirm. Sweep metric and soundness-flip rules: `OPTIMIZATION_LOG.md` "2026-06 re-tuning
-campaign".
+Sweeps run on Sherlock (`../dreal-stanford-benchmarking`, one `Solver` per config in an
+`experiments/<id>.py`). For meta-parameter tuning: OFAT probe → interaction check → full
+confirm, each config read as a ratio against a `base` solver of the same run, and every verdict
+judged against ground truth as in §Thresholds, not only against `base`. `OPTIMIZATION_LOG.md`
+"2026-06 re-tuning campaign" records the campaign that used this design; its harnesses are retired.

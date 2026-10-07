@@ -29,7 +29,7 @@ cmake -S . -B "$BUILD" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
 
 echo "=== building dreal4 (TSan) — rebuilds IBEX/CAPD from source, slow ==="
 # -j6 (not -j8): TSan instrumentation inflates per-compile memory; stay clear of
-# the 8GB watchdog.
+# the oom_killer daemon (10 GB per process, or the largest past 87.5% of RAM).
 cmake --build "$BUILD" --target dreal4 -j"${BUILD_JOBS:-6}" || { echo "build failed"; exit 1; }
 
 BIN="$BUILD/dreal4"
