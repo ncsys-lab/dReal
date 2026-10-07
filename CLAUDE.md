@@ -63,7 +63,7 @@ git-version target, IBEX/CAPD source-build): `docs/build.md`.
 `./FULL_BUILD.sh` (first build — creates `gcc_build/`) and `./BUILD.sh` (incremental) build
 target `dreal4` with `-j8`; binary at `gcc_build/dreal4`. Override IBEX source via
 `-DIBEX_GIT_REPOSITORY=file:///path/to/ibex-fork` for local-dev against an unpushed checkout
-(`CMakeLists.txt` pins the fork sha `6b1b2c10`).
+(`CMakeLists.txt` pins the fork sha `33b883f2`).
 
 **Docker** (Linux hermetic verification): after `docker build -f Dockerfile.dreal_ubuntu -t
 dreal-linux-verify .`, run `cat query.smt2 | docker run --rm -i dreal-linux-verify ./dreal4 --in
@@ -207,7 +207,7 @@ See `docs/architecture.md` (full pipeline, ICP loop, Box, explanations), `docs/c
 **Vendored third-party** (`src/third_party/`): Drake symbolic, libcds, threadpool,
 dynamic_bitset, PicoSAT (legacy, unused). Do not modify without cause.
 
-**Auto-downloaded:** IBEX (`ncsys-lab/ibex-lib@dreal-perf-patches`, sha `6b1b2c10`), CAPD
+**Auto-downloaded:** IBEX (`ncsys-lab/ibex-lib@dreal-perf-patches`, sha `33b883f2`), CAPD
 (`03dc5628`, `CAPD_INTERVAL_TYPE=NATIVE`), fmt, spdlog, nlopt, GTest. See `DEPENDENCIES.md` for
 build wiring; `../ibex-fork/MIGRATION.md` for the ibex-fork patch catalog.
 

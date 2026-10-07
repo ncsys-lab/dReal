@@ -169,7 +169,7 @@ set(IBEX_GIT_REPOSITORY  "https://github.com/ncsys-lab/ibex-lib.git"
 # Pinned to a fork sha (reproducible) rather than the moving branch ref.
 # Bump when new fork patches land. (Local-dev iteration still works via
 # -DIBEX_GIT_TAG=<branch-or-sha> and -DIBEX_GIT_REPOSITORY=file:///path/to/ibex-fork.)
-set(IBEX_GIT_TAG         "6b1b2c10b810f5025af3438aa8086eb7c2fa7df1"
+set(IBEX_GIT_TAG         "33b883f2320c537596dad9ffa35447c24589a5ab"
     CACHE STRING "Git ref for the ibex fork (branch, tag, or sha)")
 
 set(EP_ARCH_ARGS "")
