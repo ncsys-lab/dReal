@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
-"""Cross-solver comparison over a benchmark set (e.g. the odeexpr_v1 family).
+"""Compare the arms of one corun.sh run (corun.sh writes OUT/compare.txt with this).
 
-Joins per-solver summary CSVs (benchmark_name, solver_result, cpu_time_s, ...)
+Joins per-arm summary CSVs (benchmark_name, solver_result, cpu_time_s, ...)
 by benchmark and reports: solve counts, per-benchmark verdict/timing, SAT↔UNSAT
-disagreements, and CPU-time speedups on commonly-solved benchmarks.
+disagreements, and CPU-time speedups on commonly-solved benchmarks. The inputs must be arms
+of ONE co-run: times from different runs are not comparable (docs/benchmarking.md), so the
+stored baseline_odeexpr_*.csv files are records, not inputs.
 
 Usage:
-  compare_solvers.py HEAD=baseline_odeexpr_v1.csv cav26=baseline_odeexpr_cav26.csv [dreal3=baseline_odeexpr_dreal3.csv]
+  compare_solvers.py --cap CPU_S control=OUT/control/summary.csv test=OUT/test/summary.csv
+A benchmark any arm lost to a memory kill (OOM) is excluded, not scored.
 """
 import csv
 import statistics
 import sys
 
-PAR2_PENALTY = 1200.0  # 2 * 600 s timeout
+PAR2_PENALTY = None  # 2 x the run's CPU cap, set from --cap in main()
 SOLVED = ("SAT", "UNSAT")
 
 
@@ -35,18 +38,25 @@ def par2(entry: dict) -> float:
 
 
 def main():
+    global PAR2_PENALTY
+    if sys.argv[1] != "--cap":
+        raise SystemExit("usage: compare_solvers.py --cap CPU_S LABEL=summary.csv ...")
+    cap = int(sys.argv[2])
+    PAR2_PENALTY = 2.0 * cap
     solvers: dict[str, dict] = {}
     order: list[str] = []
-    for arg in sys.argv[1:]:
+    for arg in sys.argv[3:]:
         label, path = arg.split("=", 1)
         solvers[label] = load(path)
         order.append(label)
 
     names = sorted(set().union(*[set(s) for s in solvers.values()]))
-    ref = order[0]  # first solver is the reference (HEAD)
+    killed = [n for n in names if any(solvers[lab].get(n, {}).get("result") == "OOM" for lab in order)]
+    names = [n for n in names if n not in killed]
+    ref = order[0]  # first arm is the reference (the control)
 
     # PAR2 is scored ONLY over benchmarks solved by at least one solver. A
-    # benchmark no solver cracks contributes the same 1200 s penalty to every
+    # benchmark no solver cracks contributes the same 2 x cap penalty to every
     # solver — pure constant offset that dilutes real differences and carries no
     # comparative information.
     def solved_by_any(n):
@@ -55,9 +65,11 @@ def main():
     never = [n for n in names if not solved_by_any(n)]
 
     print(f"{'='*78}\nCROSS-SOLVER COMPARISON — {len(names)} benchmarks, reference = {ref}\n{'='*78}\n")
+    if killed:
+        print(f"excluded (memory kill): {', '.join(killed)}\n")
 
     # Solve counts (over the full set)
-    print("Solve counts (within 600 s wall, full set):")
+    print(f"Solve counts (within the {cap} CPU-s cap, full set):")
     for lab in order:
         s = solvers[lab]
         sat = sum(1 for n in names if s.get(n, {}).get("result") == "SAT")

@@ -120,7 +120,7 @@ def read_log(path: str) -> list[DrpmRecord]:
 def scan_sweep(sweep_dir: str) -> dict[str, dict[str, list[DrpmRecord]]]:
     """sweep_dir/<config>/<benchmark>.solver_log -> {config: {benchmark: [records]}}.
 
-    A do_sweep.sh output dir. Benchmark names are normalized (no .smt2)."""
+    A corun.sh output dir (one subdir per arm). Benchmark names are normalized (no .smt2)."""
     out: dict[str, dict[str, list[DrpmRecord]]] = {}
     for config in sorted(os.listdir(sweep_dir)):
         cdir = os.path.join(sweep_dir, config)
@@ -272,7 +272,7 @@ def _write_csv(sweep: dict[str, dict[str, list[DrpmRecord]]], field: str, path: 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("path", help="a do_sweep.sh output dir, or a single .solver_log")
+    ap.add_argument("path", help="a corun.sh output dir, or a single .solver_log")
     ap.add_argument("--field", default="lemma_size", choices=NUMERIC_FIELDS)
     ap.add_argument("--group-by", default="config", choices=("config", "benchmark", "none"))
     ap.add_argument("--bins", type=int, default=20)

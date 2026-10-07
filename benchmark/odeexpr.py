@@ -4,7 +4,7 @@ resolution for every benchmark family.
 
 Two kinds of family:
   * Flat-directory families (saradc/github/tacas) — the directory is encoded in
-    the name; paths are resolved by select.py's resolve_path against fixed dirs.
+    the name; paths are resolved by select_jobs.py's resolve_path against fixed dirs.
   * Manifest content-addressed families (odeexpr_v1, odeexpr_v2, s2d) — each logical
     benchmark (bench_id = the manifest key) has hashed revision files and a
     manifest.json naming the *current* revision. We key on the stable bench_id

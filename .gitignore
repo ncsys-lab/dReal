@@ -474,5 +474,6 @@ gcc_build
 gcc_build_debug
 past_compilations
 benchmark/results/
+benchmark/bin/
 dreal_popl27
 dreal_partial_models

@@ -18,7 +18,7 @@
 # Prints a per-config flip summary; full per-run verdicts go to $OUT. Exits
 # non-zero if any flip (or a baseline that could not be established) is found.
 # Respects the SMT-solver resource discipline: one solve at a time, each under an
-# explicit timeout (start oom_killer.sh separately for hard instances).
+# explicit timeout (start oom_killer separately for hard instances).
 set -u
 
 BIN="${DREAL:-./gcc_build/dreal4}"

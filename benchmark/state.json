@@ -1,14 +1,4 @@
 {
-  "anomalies": [],
-  "exceptional": [
-    "odeexpr_box_sweep.tanh_decrease__J0.6",
-    "tacas_c2e2_0hz_k23_50000.0clkhz_uniform_NOR__sigmoid.hyxml_SAT.drh.o"
-  ],
-  "baseline_source": "benchmark/baseline_local.csv",
-  "baseline_column": "wall_time_s",
-  "baseline_sha": "831548e2c",
-  "last_run": "2026-07-22T19:45:28.444828+00:00",
-  "last_run_dir": "/Users/kunalsheth/Documents/new_dreal/dreal4-cmake/benchmark/results/baseline_831548e2c_20260722_120305",
   "runs": [
     {
       "timestamp": "2026-06-23T14:27:58.136995+00:00",
@@ -129,6 +119,45 @@
       "n_resolved": 0,
       "n_correctness_improvements": 0,
       "n_undetermined_flips": 0,
+      "correctness_flips": []
+    },
+    {
+      "timestamp": "2026-10-05T08:49:03.629491+00:00",
+      "results_dir": "/Users/kunalsheth/Documents/new_dreal/dreal4-cmake/benchmark/results/run_90eaf1419_20261005_014034",
+      "n_ran": 8,
+      "n_regressions": 0,
+      "n_exceptional": 0,
+      "n_resolved": 0,
+      "n_correctness_improvements": 0,
+      "n_undetermined_flips": 0,
+      "correctness_flips": []
+    },
+    {
+      "timestamp": "2026-10-07T21:25:24.324620+00:00",
+      "results_dir": "/Users/kunalsheth/Documents/new_dreal/dreal4-cmake/benchmark/results/run_f7333b0dc_20261007_141936",
+      "control": "control",
+      "test": "test",
+      "n_ran": 8,
+      "n_regressions": 0,
+      "n_exceptional": 0,
+      "n_resolved": 0,
+      "n_correctness_improvements": 0,
+      "n_undetermined_flips": 0,
+      "correctness_flips": []
+    },
+    {
+      "timestamp": "2026-10-07T21:51:52.729944+00:00",
+      "results_dir": "/Users/kunalsheth/Documents/new_dreal/dreal4-cmake/benchmark/results/run_f7333b0dc_20261007_144237",
+      "arms": {
+        "control": "/Users/kunalsheth/Documents/new_dreal/dreal4-cmake/benchmark/bin/dreal4-f7333b0dc",
+        "test": "/Users/kunalsheth/Documents/new_dreal/dreal4-cmake/gcc_build/dreal4"
+      },
+      "n_ran": 8,
+      "n_regressions": 0,
+      "n_exceptional": 0,
+      "n_correctness_improvements": 0,
+      "n_undetermined_flips": 0,
+      "n_excluded_oom": 0,
       "correctness_flips": []
     }
   ]

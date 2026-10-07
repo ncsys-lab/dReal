@@ -229,23 +229,33 @@ build wiring; `../ibex-fork/MIGRATION.md` for the ibex-fork patch catalog.
 
 Run `/benchmark` after every meaningful code change. Run proactively at natural breakpoints.
 
-- `/benchmark` — ~8-12 benchmarks, Haiku subagent interprets, 2-4 sentence summary
-- `/benchmark-baseline` — full baseline (all odeexpr_v1 + odeexpr_v2 + ~10 each flat family)
+- `/benchmark` — a co-run spot check: a stashed control build (`benchmark/stash.sh` →
+  `benchmark/bin/dreal4-<sha>`) against `gcc_build/dreal4` on ≤12 benchmarks; Haiku summary
+- **Anything bigger than 12 benchmarks runs on Sherlock** (`../dreal-stanford-benchmarking`,
+  an `experiments/<id>.py` spec). `benchmark/corun.sh` refuses it locally.
 
-**Thresholds:** PAR2 >1.5× baseline = regression; <0.6× = exceptional; SAT↔UNSAT flip = immediate
-escalation. CPU time (user+sys), not wall clock.
+**Comparison rule** (Sherlock's, plus core type): runs compare only if they co-ran — same time,
+same hardware, same core type — and only as a ratio, never an absolute time. Locally
+`corun.sh` launches each benchmark's arms together on the E-cores (macOS can't pin to
+P-cores), with a CPU-seconds cap, so compiling during a spot check is fine.
+`docs/benchmarking.md` §"Comparison rule".
 
-**Benchmark sources** (two content-addressed `odeexpr_v*` manifest families + three flat dirs):
+**Thresholds:** test/control PAR2 ratio > 1.5 = regression; < 0.6 = exceptional; SAT↔UNSAT
+flip = immediate escalation. CPU time (user+sys), not wall clock.
+
+**Benchmark sources** (three content-addressed manifest families + three flat dirs):
 - `~/Documents/expressivity/v1/benchmarks/` — `odeexpr_v1` family (NRA-only,
   manifest `revisions[].file`)
 - `~/Documents/expressivity/v2/benchmarks/` — `odeexpr_v2` family
   (**newest high-priority target**; ∀/∃∀ MLP-expressivity queries in `forall/` + `exists_forall/`,
   manifest `revisions[].smt2`)
+- `~/Documents/MATLAB/final_presentation_casestudies/benchmarks/s2d/` — `s2d` family (s2d-translated
+  Simulink queries, QF_NRA_ODE)
 - `~/Documents/new_dreal/nraode_to_nra/drealgithub_sunoct5/rolled/` — github_oct5_
 - `~/Documents/new_dreal/nraode_to_nra/VNAMSCwI_satoct11/rolled/` — tacas_c2e2_
 - `~/Documents/new_dreal/AMS-verification-bundle-of-sticks/saradc/rolled/` — 1mhz_
 
-Full infrastructure (run_batch.sh, select.py, do_ab.sh, do_sweep.sh, families/weighting,
+Full infrastructure (corun.sh, measure.py, select_jobs.py, aggregate.py, families/weighting,
 cross-solver comparison): `docs/benchmarking.md`.
 
 ---

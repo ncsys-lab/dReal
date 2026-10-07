@@ -3,26 +3,75 @@
 Run `/benchmark` after every meaningful code change — the primary regression-detection mechanism.
 Run proactively at natural breakpoints even if the user doesn't ask.
 
+**Where a run happens.** A spot check — at most 12 benchmarks, about 15 minutes — runs on this
+Mac (`/benchmark`, or `benchmark/corun.sh` by hand). Anything larger (a family-wide A/B, a flag
+sweep, a pre-merge gate) runs on Sherlock through `../dreal-stanford-benchmarking`: write an
+`experiments/<id>.py` spec and follow that repo's CLAUDE.md workflow. `corun.sh` refuses a job set
+over 12.
+
+**Overlap the two.** When a change will also need a Sherlock run, commit and push it, and start
+the Sherlock builds (`bench build`, ~30–40 min per commit, one at a time under the dev QOS)
+before the local spot check, which finishes first (~5 min at the 120 s cap). If the spot check
+shows a correctness problem or a regression you won't ship, stop the build — `scancel` its dev
+job (`squeue --me`) — and nothing was submitted. If it passes, run the pre-submit gate and submit
+as soon as the builds land. A submitted run that turns out unwanted is cancelled with
+`scancel --name=<run>` (a cancelled job still counts against the hourly submission cap).
+
+---
+
+## Comparison rule
+
+Sherlock's rule (`../dreal-stanford-benchmarking/docs/environment.md` §"Comparison-validity
+invariant") holds here too: **two runs compare only if they ran at the same time, on the same
+hardware, and only as a ratio.** An absolute time is never compared with one from another run.
+This Mac adds a fourth condition, the core type: on Apple Silicon a run's speed depends on
+whether it got P-cores or E-cores, and macOS gives no way to pin a process to P-cores
+(`taskpolicy` only clamps down; `THREAD_AFFINITY_POLICY` is an L2-sharing hint).
+
+`corun.sh` enforces all four. Every arm of one benchmark launches together and the group
+finishes before its slot frees. Every run goes through `measure.py`, which puts it in the
+background band (`PRIO_DARWIN_BG`, what `taskpolicy -b` sets): E-cores only, below every `nice`
+level. The time limit is CPU seconds (`RLIMIT_CPU`), not wall clock, and `parse_results.py`
+refuses an arm directory in which any run spent more than 10% of its CPU time on P-cores.
+
+Measured 2026-10-07 (M4 Max, 4 short loops per setting):
+
+| run | P-core share, quiet → under 12 competing processes | CPU time, same |
+|---|---|---|
+| default priority | 1.00 → 0.77–0.80 | +22% |
+| background band (`taskpolicy -b`) | 0.00 → 0.00 | +3% |
+
+So machine load — a compile, a CLion build — slows a spot check but can't skew it, and the Mac
+stays usable while one runs. The cost: an E-core takes 2.2–5.5× the CPU time of a P-core for
+the same dReal run (median 3.3×, measured 2026-10-07 by co-running 7 benchmarks pinned each way —
+it depends on the benchmark, which is also why a mixed-core A/B is invalid), and there are 4 of
+them, so a two-arm spot check runs 2 benchmarks at a time.
+
 ---
 
 ## Skills
 
-- `/benchmark` — runs ~8-12 family-weighted benchmarks in parallel, spawns a Haiku subagent to
-  interpret results, reports back a 2-4 sentence summary with regression/exceptional counts
-- `/benchmark-baseline` — runs all odeexpr_v1 + all odeexpr_v2 + ~10 each of the three flat
-  families to establish a fresh local baseline (use before branch merges or when the exceptional
-  list grows stale)
+- `/benchmark` — co-runs a stashed control build (`benchmark/bin/dreal4-<sha>`, made by
+  `stash.sh`) against `gcc_build/dreal4` on ≤12 family-weighted benchmarks; a Haiku subagent
+  reports flips, regressions and exceptional cases as test/control ratios
 
 ---
 
 ## Thresholds
 
-- **Regression:** PAR2 time >1.5× baseline (PAR2 = actual CPU time if solved, 2× timeout = 1200 s
-  if TIM/OOM/ERR)
-- **Exceptional:** PAR2 time <0.6× baseline
-- **Correctness flip** (SAT↔UNSAT): immediate escalation regardless of timing (a "zero flips"
-  result does **not** clear a correctness-class change — curated unit tests catch sharp cases a
-  corpus can't)
+All ratios are test/control within one co-run. PAR2 = CPU seconds if solved, 2× the CPU cap
+(240 s at the default 120) if TIM/ERR; a memory kill (OOM) is excluded, not scored.
+
+- **Regression:** PAR2 ratio > 1.5
+- **Exceptional:** PAR2 ratio < 0.6
+- **Wrong verdict:** `aggregate.py` checks the test arm's every verdict against `baseline.csv`'s
+  ground truth, not only verdicts that differ from the control's. `unsat` on a ground-truth-SAT
+  benchmark is SOUNDNESS (asserts φ T-unsatisfiable on a T-satisfiable φ — false unsat), and
+  `delta-sat` on a ground-truth-UNSAT one is COMPLETENESS (asserts φ^δ T-satisfiable on a
+  T-unsatisfiable φ — missed refutation). A SAT↔UNSAT flip with no ground truth is undetermined.
+  Any of these is immediate escalation regardless of timing, and is left out of the PAR2 ratios
+  (a "zero flips" result does **not** clear a correctness-class change — curated unit tests
+  catch sharp cases a corpus can't)
 - **Reporting a speedup — exclude both-TIM benchmarks.** Benchmarks that time out on *both* the
   control and the variant add an equal penalty to each side and can dominate the raw PAR2 sum
   (e.g. 12/50 odeexpr TIM for every config ≈ 92% of the sum), diluting a real win to near-zero.
@@ -62,47 +111,50 @@ families (`MANIFEST_FAMILIES`, `FAMILY_WEIGHTS`, `family_of`, `load_manifest_nam
 
 ## Infrastructure (`benchmark/` directory)
 
-- `baseline.csv` — frozen DRPM_0L reference times for 102 benchmarks (good_benchmarks.csv subset)
-- `baseline_<family>.csv` (e.g. `baseline_odeexpr_v1.csv`, `baseline_odeexpr_v2.csv`) —
-  manifest-family reference times (`cpu_time_s` column); produced by
-  `do_baseline_odeexpr.sh <family>`; authoritative for `aggregate.py` on that family's rows
+- `corun.sh OUT JOBS ARM…` — the local A/B harness (see §Comparison rule). `ARM` is
+  `label=<binary> [flags…]`; one arm or many (a flag sweep is arms of one binary). Output: one
+  subdir per arm with `<bench>.{stdout,solver_log,rusage,exit}` and `summary.csv`, plus
+  `OUT/compare.txt`. Env: `TIMEOUT` (CPU-seconds cap, 120), `MAXJOBS` (the E-core count)
+- `measure.py CAP PREFIX CMD…` — runs one solve in the background band under `RLIMIT_CPU`, and
+  writes `PREFIX.rusage` (CPU and wall seconds, P-core share, instructions, cycles, peak
+  footprint, from `proc_pid_rusage`) and `PREFIX.exit` (128+N for signal N: 152 at the CPU cap,
+  137 for the oom_killer)
+- `do_benchmark.sh CONTROL` — the `/benchmark` driver: `select_jobs.py` → `corun.sh` (control vs
+  `gcc_build/dreal4`) → `aggregate.py`
+- `stash.sh` — builds HEAD (`BUILD.sh`) and keeps the binary as `bin/dreal4-<sha>`, a control for
+  later spot checks; refuses when `src/`, `cmake/` or `CMakeLists.txt` differ from HEAD.
+  `bin/` is gitignored
+- `baseline.csv` — the flat families' corpus index (`select_jobs.py` reads its names) and their
+  `ground_truth` annotations (`aggregate.py` classifies flips with them). Its DRPM_0L times are
+  a record from another machine, not a reference
 - `odeexpr.py` — registry for all families: `MANIFEST_FAMILIES` (the `odeexpr_v*` content-addressed
   families, each `(name, root, rev_file_key)`), `FAMILY_WEIGHTS`, `family_of`, `weight_of`,
   manifest-based `load_manifest_names`/`resolve_manifest`, `--all [FAMILY]` TSV dump
-- `state.json` — persistent anomaly/exceptional tracker; updated automatically each run
-- `run_batch.sh` — parallel runner: reads TSV from stdin, runs each with `gtime -v -o`,
-  `nice -n 1`, `timeout 600`. Env hooks: `DREAL_ARGS` injects per-invocation solver flags;
-  `TIMEOUT` overrides the 600 s cap; `DREAL_BINARY` overrides the solver binary. Throttle caps
-  at 12 concurrent — count actual solvers with `pgrep -x dreal4`, NOT `pgrep -f gcc_build/dreal4`
-  (the latter also matches `gtime`/`nice`/`timeout` wrappers, ~3 per solve)
-- `select.py` — picks 8 **family-weighted** random benchmarks + all current anomalies; outputs
+- `state.json` — a log of past spot checks (arms, counts); `aggregate.py` appends to it. Nothing
+  carries between runs: a regression is a regression against that run's control
+- `select_jobs.py` — picks 8 **family-weighted** random benchmarks, never a blacklisted one; outputs
   TSV (csv_name TAB filepath). `--family a,b,c` restricts corpus to those families
-  (`odeexpr_v1,odeexpr_v2,saradc,github,tacas`); `--all` emits every benchmark of the filtered corpus
-  deterministically (no random, no anomalies) — for an A/B over a fixed set.
+  (`odeexpr_v1,odeexpr_v2,s2d,saradc,github,tacas`); `--all` emits every benchmark of the filtered
+  corpus deterministically (no random) — for a Sherlock set, or cut to ≤12 for
+  `corun.sh`.
   **OOM exclusion** (`_is_oom_risk`): github/tacas `_k<N>_` with N ≥ 1024, saradc `_<N>b_` with
-  N ≥ 9 — these crash the OS; the filter applies inside `load_benchmarks` so it covers both
-  `select.py` and `select_baseline.py`
-- `do_ab.sh BIN_A BIN_B [jobs_file]` — A/B two solver builds over the **same** jobs (default =
-  full ODE family). Runs **sequentially** (never concurrently — overlapping batches starve jobs
-  and turn real solves into false wall-clock TIMs) via `run_batch.sh` (`DREAL_BINARY`), parses
-  each, and emits a `compare_solvers.py` table. The sanctioned way to compare e.g. committed-HEAD
-  vs a working-tree build
-- `do_sweep.sh NAME1="flags1" NAME2="flags2" …` — sweeps **one** binary over many flag configs
-  on the same jobs, for meta-parameter tuning. Runs **all (config × benchmark) pairs in ONE
-  shuffled 12-way pool** so a slow config's long-pole overlaps other configs' fast jobs — full CPU
-  use, no idle tail, while still ≤`MAXJOBS` concurrent (per-process CPU-time stays accurate).
-  Env: `JOBS` (default `probe_odes.tsv`), `DREAL_BINARY`, `MAXJOBS` (12), `TIMEOUT` (600).
-  Emits per-config `summary.csv` + a `compare_solvers.py` table
-- `parse_results.py` — parses gtime output + solver stdout into `summary.csv` (primary timing
-  column `cpu_time_s` = user+sys; `wall_time_s` kept as reference/TIM backup)
+  N ≥ 9 — these crash the OS; the filter applies inside `load_benchmarks`
+- `parse_results.py` — parses one arm dir (`.rusage` + solver stdout) into `summary.csv`;
+  `cpu_time_s` = user+sys is the timing column, `p_share` the P-core share it checks
 - `drpm_log.py` — post-hoc extractor for `drpm_benchmark_log` stderr lines (one per learned theory
   lemma: `L <size> <mode>`, `T.ms`, `PM.ms`, optional CAV26 `C26.*`). Library
   (`parse_line`/`scan_sweep`/`summarize`/`ascii_histogram`) + a generic CLI over any numeric field:
   `python3 drpm_log.py <sweep_dir> --field lemma_size|theory_ms|… [--compare-to <ref> --same-verdict]
   [--csv out.csv]` → per-config histograms and verdict-gated paired per-benchmark median-Δ. Fail-loud
   on format drift (a signature line that won't parse raises). Tests: `test_drpm_log.py` (stdlib-only)
-- `aggregate.py` — compares vs baseline on CPU time, flags regressions/exceptional, updates
-  `state.json`
+- `aggregate.py RUN_DIR` — compares the `test` arm with the `control` arm of one co-run as
+  ratios: wrong verdicts and flips (by ground truth), regressions, exceptional cases, per-family
+  PAR2 ratios; excludes and blacklists a memory-killed benchmark; logs the run in `state.json`
+- `compare_solvers.py --cap N` — the same comparison for any number of arms of one co-run
+  (`corun.sh` writes it to `compare.txt`); excludes a memory-killed benchmark
+- `baseline_odeexpr_cav26.csv`, `baseline_odeexpr_dreal3.csv`, `baseline_quant.csv`,
+  `odeexpr_solver_comparison.txt`, `optsearch/` — records of past runs; not comparable with a
+  new run
 - `results/` — per-run output directories (gitignored)
 
 ---
@@ -124,7 +176,7 @@ Six families, classified by name prefix (`odeexpr.family_of`):
 
 `FAMILY_WEIGHTS = {odeexpr_v2:8, s2d:8, odeexpr_v1:6, saradc:3, github:2, tacas:2}` encodes relative
 importance. The weight drives weighted-without-replacement selection (the `odeexpr_v*` families
-appear proportionally more often per item) and a `weighted_overall` PAR2 in the family comparison;
+appear proportionally more often per item) and a `weighted_overall` PAR2 ratio in `aggregate.py`;
 regressions in any manifest family are tagged `ODEEXPR`/`ODEEXPR-HIGH` so reports lead with them.
 
 **Note:** `OPTIMIZATION_LOG.md` (§Adopted/§Rejected) is all CAPD/ODE-path tuning and is
@@ -133,81 +185,83 @@ has ODEs.
 
 ---
 
-## Timing & running batches safely
+## Running a spot check safely
 
-The metric is **CPU time (user+sys)**, not wall clock — the machine is multi-tenant, so wall
-clock is noisy. Solver runs under `nice -n 1`. `timeout` stays wall-clock at **600 s** (TIM
-detection keys on exit code 124). Operational rules for any batch / A-B / sweep:
+The metric is **CPU time (user+sys)** on the E-cores, as a ratio within one co-run. The limit is
+**120 CPU seconds** (`RLIMIT_CPU`; a capped run exits 152 and parses as TIM), so machine load
+lengthens a spot check without turning solves into timeouts. Batches leave dReal's own `-j`/`--jobs` at its default
+**1** on purpose: pool width is the parallelism, and one thread per solve is what keeps
+per-process CPU time an interpretable metric — raising it inside a timing run breaks
+comparability against every recorded number. Operational rules for any batch / A-B / sweep:
 
-- **≤12 concurrent solvers, one pool at a time.** The `run_batch.sh` throttle (its own shell
-  jobs via `jobs -r`, so it works for any `DREAL_BINARY` name) and `do_sweep`'s shuffled 12-way
-  pool already enforce this and keep the cores saturated — see those bullets above. Never
-  overlap two pools, and start no ad-hoc `dreal4` while a pool is live. (When *checking* on a
-  live pool, count executables — `ps -axo comm | grep -c 'dreal4[^ ]*$'` — not `ps aux | grep`,
-  whose gtime/timeout wrapper lines triple the apparent count.)
-- **SIGKILL ⇒ blacklist, never restart.** The machine runs `oom_killer`/`swap_killer` daemons
-  that SIGKILL any process over **8 GB RAM**. A solver exit *by signal* (exit code **137** =
-  128+SIGKILL, or "Killed") is a memory event, not a result: do not retry it; append it to
-  `benchmark/optsearch/blacklist.txt` and exclude it from future rounds (report it excluded,
-  never as TIM/ERR). This is the dynamic complement to `select.py`'s static `_is_oom_risk`.
-  Filter a jobs file with
-  `awk -F'\t' 'FILENAME==ARGV[1]{bl[$0]=1;next} !($1 in bl)' blacklist jobs.tsv` — use the
-  `FILENAME==ARGV[1]` form, **not** `NR==FNR`, which mis-handles an empty blacklist and silently
-  drops every row (→ a 0-job no-op sweep).
-- **A timing run needs a quiet machine — don't compile during one.** A background build (`-j`,
-  or a CLion auto-build that recompiles on save) contends for cores and inflates wall time /
-  risks false 600 s TIMs. Correctness work (ctest) may overlap; baselines / A-Bs / sweeps may not.
-- **Compare ratios *within* a round, not absolute CPU across rounds.** Absolute CPU drifts
-  ~10–17% between runs (memory-bandwidth contention), so always pool a `base`/control config with
-  the variants and report ratio-vs-base; confirm a winner in a final pooled round, never by
-  diffing two separately-run batches.
+- **One spot check at a time, on the E-cores.** `corun.sh` runs as many solvers as there are
+  E-cores (`hw.perflevel1.logicalcpu`, 4), whole co-run groups at a time. Never overlap two
+  spot checks: they would share the four E-cores unevenly.
+- **SIGKILL ⇒ blacklist, never restart.** The machine runs an `oom_killer` daemon (C,
+  `/usr/local/src/oom_killer/`; replaced the old oom_killer.sh/swap_killer.sh pair) that
+  SIGKILLs any process over **10 GB** phys_footprint — or the largest process when total
+  user footprint crosses 87.5% of RAM. A solver exit *by signal* (exit code **137** =
+  128+SIGKILL, or "Killed") is a memory event, not a result: never retry it. `aggregate.py`
+  reports it excluded (never TIM/ERR) and appends it to `benchmark/optsearch/blacklist.txt`,
+  which `select_jobs.py` skips — the dynamic complement to its static `_is_oom_risk`. To filter
+  a hand-made jobs file, use
+  `awk -F'\t' 'FILENAME==ARGV[1]{bl[$0]=1;next} {n=$1; sub(/\.smt2$/,"",n)} !(n in bl)' blacklist jobs.tsv`
+  (the `FILENAME==ARGV[1]` form, **not** `NR==FNR`, which mis-handles an empty blacklist and
+  silently drops every row). Blacklist names carry no `.smt2`.
+- **Compiling during a spot check is fine.** The solvers sit below everything else on the
+  E-cores and are capped in CPU seconds, so a build slows the check without changing its
+  ratios (§Comparison rule, measured).
+- **Compare ratios *within* a run, never absolute CPU across runs.** Absolute CPU drifts
+  ~10–17% between runs (memory-bandwidth contention) even on one core type; put the control in
+  the same `corun.sh` call as the variants.
+
+---
+
+## Choosing the cap
+
+A benchmark that times out in both arms says nothing, so the cap trades informative picks for
+wall time. Modeled 2026-10-07 from P-core solve times (odeexpr: the 2026-07-24 default-flag sweep;
+ODE families: the 2026-10-05 PERF-001 A/B; s2d: its manifest's recorded runs), converted at the
+measured median E/P factor 3.3, and weighted by `select_jobs.py`'s family mix (odeexpr_v2 42%,
+s2d 31%, odeexpr_v1 16%, github 6%, tacas 4%, saradc 1%) — an estimate, not a measurement:
+
+| E-core cap | informative picks of 8 | spot-check wall time |
+|---|---|---|
+| 60 s | 4.6 | ~3 min |
+| **120 s (default)** | **5.4** | **~5 min** |
+| 300 s | 5.8 | ~9 min |
+| 600 s | 6.0 | ~16 min |
+
+120 s keeps ~90% of the informative picks of 600 s in ~30% of the time (83–93% across the
+measured E/P range). s2d loses the most (0.63 of its picks solve at 120 s against 0.70 at 600 s);
+a change aimed at s2d's slow tail belongs on Sherlock, or set `TIMEOUT` higher by hand.
 
 ---
 
 ## Manual invocation
 
 ```bash
-python3 benchmark/select.py | bash benchmark/run_batch.sh benchmark/results/run_$(git rev-parse --short HEAD)_$(date +%s)
-python3 benchmark/parse_results.py <results_dir>
-python3 benchmark/aggregate.py <results_dir>
-```
-
-Re-baseline a manifest family (after the set is regenerated, or to refresh reference times):
-
-```bash
-bash benchmark/do_baseline_odeexpr.sh odeexpr_v1   # all v1 at 600 s → benchmark/baseline_odeexpr_v1.csv
-bash benchmark/do_baseline_odeexpr.sh odeexpr_v2   # all v2 at 600 s → benchmark/baseline_odeexpr_v2.csv
+bash benchmark/stash.sh                                   # → benchmark/bin/dreal4-<sha>
+bash benchmark/do_benchmark.sh benchmark/bin/dreal4-<sha> # /benchmark without the subagent
+python3 benchmark/select_jobs.py --family s2d --n 6 > /tmp/jobs.tsv
+bash benchmark/corun.sh /tmp/ab /tmp/jobs.tsv control=benchmark/bin/dreal4-<sha> \
+    test=gcc_build/dreal4 o12="gcc_build/dreal4 --ode-taylor-order 12"
 ```
 
 ---
 
 ## Cross-solver comparison
 
-`run_batch.sh` honors `DREAL_BINARY`, so any alternate native build can be run over the same jobs:
-
-```bash
-DREAL_BINARY=/usr/local/bin/dreal4_cav26 bash benchmark/run_batch.sh <out_dir> /tmp/jobs.tsv
-```
-
-`run_dreal3.sh` runs the set through dReal v3.16.12 in Docker (`dreal3:1.1`). **macOS gotcha:**
-enforce the timeout *inside* the container (`timeout -s KILL 600 ./dReal`) — a host-side
-`timeout` around `docker run` only kills the docker client, leaving the container running in the
-VM as a zombie. Timing is the in-container CPU time (bash `time`); SIGKILL exit (137) normalized
-to TIM.
-
-`compare_solvers.py LABEL=summary.csv …` joins per-solver summaries by benchmark and reports
-solve counts, SAT/UNSAT disagreements, solve-set deltas, and CPU-time speedups on
-commonly-solved benchmarks. Frozen reference results (odeexpr_v1 set):
-`baseline_odeexpr_cav26.csv`, `baseline_odeexpr_dreal3.csv`; rendered table:
-`odeexpr_solver_comparison.txt`.
-
-As of HEAD (arm64, upgraded IBEX/CAPD): identical solve-set + verdicts vs cav26 but ~2–3×
-faster; ~6–20× faster than dReal3, which also solves 2 fewer. No SAT/UNSAT disagreements among
-the three.
+Another native binary is just another `corun.sh` arm. The stored `baseline_odeexpr_cav26.csv` /
+`baseline_odeexpr_dreal3.csv` and `odeexpr_solver_comparison.txt` were measured in separate runs
+and stay as records only. A cross-solver comparison at scale (z3, cvc5, another dReal) is a
+Sherlock experiment with `Solver.binary_path` arms. The Docker dReal3 runner (`run_dreal3.sh`)
+was retired 2026-10-07 with the stored baselines; it is in git history.
 
 ---
 
 ## Experimental design for sweeps
 
-For meta-parameter tuning: OFAT probe → interaction check → 123-job confirm. Sweep metric and
-soundness-flip rules: `OPTIMIZATION_LOG.md` "2026-06 re-tuning campaign".
+Sweeps run on Sherlock. For meta-parameter tuning: OFAT probe → interaction check → full
+confirm. Sweep metric and soundness-flip rules: `OPTIMIZATION_LOG.md` "2026-06 re-tuning
+campaign".

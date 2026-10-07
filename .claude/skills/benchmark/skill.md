@@ -1,42 +1,58 @@
 ---
 name: benchmark
-description: Run a quick regression benchmark batch (~8-12 benchmarks) for the dReal4 solver and report timing regressions or exceptional speedups. Use after any meaningful code change for regression detection.
+description: Run a quick co-run spot check (≤12 benchmarks) of the dReal4 working build against a stashed control build, and report verdict flips, regressions and exceptional speedups as ratios. Use after any meaningful code change for regression detection.
 ---
 
 # /benchmark skill
 
-1. Tell the user: "Benchmarks are running — I'll report back when done."
+A spot check co-runs two builds on the same benchmarks at the same moment, on the E-cores, and
+compares them only as ratios (`docs/benchmarking.md` §"Comparison rule"). Anything bigger than
+12 benchmarks runs on Sherlock, not here.
 
-2. Spawn a Haiku subagent with this exact prompt:
+1. Pick the control: the stash of the commit the change is measured against, normally HEAD
+   for uncommitted work (`benchmark/bin/dreal4-<sha>`). If it doesn't exist and the build
+   inputs are committed, make it with `bash benchmark/stash.sh` (it builds HEAD and prints the
+   path). If neither works, stop and tell the user which stash is missing. The test arm is
+   `gcc_build/dreal4` — rebuild it first (`./BUILD.sh`) if the working tree changed.
+
+2. Start the spot check as a background command (`run_in_background: true`; it can outlast the
+   Bash tool's foreground limit), and tell the user: "Spot check running on the E-cores — I'll
+   report back when done."
+   ```bash
+   bash /Users/kunalsheth/Documents/new_dreal/dreal4-cmake/benchmark/do_benchmark.sh <CONTROL>
+   ```
+   It prints OUT_DIR on stdout when done; a nonzero exit is a harness failure — report it, don't
+   summarize.
+
+3. When it completes, spawn a Haiku subagent (pass `model: "haiku"`) with this prompt,
+   `<OUT_DIR>` filled in:
 
 ---
-Run the dReal4 benchmark script (foreground, 1500000ms timeout):
-```bash
-bash /Users/kunalsheth/Documents/new_dreal/dreal4-cmake/benchmark/do_benchmark.sh
-```
-The script prints OUT_DIR to stdout when done. Use the Read tool to read `<OUT_DIR>/aggregate.json`.
+Use the Read tool to read `<OUT_DIR>/aggregate.json`. Do not run any commands.
 
 Return a formatted summary as your only output:
-- If `correctness_flips` is non-empty, lead with: **CORRECTNESS REGRESSION**: [names] changed SAT/UNSAT result.
-- Then, if any regression has priority `ODEEXPR-HIGH`/`ODEEXPR` (the high-priority odeexpr_v1 / odeexpr_v2 manifest families — names start `odeexpr_v1_` / `odeexpr_v2_`), lead with those next: **ODEEXPR REGRESSION**: [names]. These families are weighted well above the others (odeexpr_v2=8, odeexpr_v1=6), so treat their regressions as more serious and their speedups as more meaningful.
+- If `correctness_flips` is non-empty, lead with: **CORRECTNESS REGRESSION**: [names] — the test build gave `unsat` where ground truth is SAT: SOUNDNESS (asserts φ T-unsatisfiable on a T-satisfiable φ — false unsat).
+- If any regression has priority `COMPLETENESS`, say so next: [names] gave `delta-sat` where ground truth is UNSAT: COMPLETENESS (asserts φ^δ T-satisfiable on a T-unsatisfiable φ — missed refutation).
+- If `undetermined_flips` is non-empty: [names] flipped with no ground truth (soundness or completeness — needs adjudication).
+- If `excluded_oom` is non-empty: [names] were killed for memory, excluded and blacklisted.
+- Then, if any regression has priority `ODEEXPR-HIGH`/`ODEEXPR` (names start `odeexpr_v1_` / `odeexpr_v2_` / `s2d_`), lead with those: **ODEEXPR REGRESSION**: [names].
 - First line: `N ran, M regressions, K exceptional`
-- 2–4 sentences: (1) overall health, (2) notable timing changes using PAR2 scores — PAR2 is now CPU time (user+sys), 600 s timeout / 1200 s penalty (e.g. "PAR2: 50 s vs 1200 s (0.04×, formerly TIM)"), (3) whether exceptional speedups look real or noise
-- One sentence: what needs investigation before continuing, if anything
+- 2–3 sentences on overall health using the per-benchmark ratios (e.g. "test/control PAR2 0.04×, control solved, test timed out"). Report ratios only — never absolute seconds.
 - Last line: `anomaly_report: <OUT_DIR>/anomaly_report.txt`
 
-Then, as the FINAL part of your output, ALWAYS render the per-family PAR2 table from `family_comparison` in `aggregate.json` (the run vs the frozen baseline, `baseline_sha` in the same file). One markdown table, one row per family plus `weighted_overall`, columns: Family | Weight | n | Baseline PAR2 (s) | This run PAR2 (s) | Ratio. Sort families by descending weight (odeexpr_v2, odeexpr_v1, saradc, tacas, github) with `weighted_overall` last. Flag ratio >1.5 as a regression and <0.6 as exceptional. If `family_comparison` is absent (older run), say so in one line instead of inventing numbers.
+Then ALWAYS render `family_ratios` as one markdown table: Family | Weight | n | test/control PAR2 ratio. Sort by descending weight, `weighted_overall` last. Flag ratio > 1.5 as a regression and < 0.6 as exceptional.
 
-Be terse. Only return the final summary + the PAR2 table — no narration.
+Be terse. Only return the summary and the table — no narration.
 
 ---
 
-3. Relay the subagent's summary verbatim to the user.
+4. Relay the subagent's summary verbatim to the user.
 
 ## Notes
-- Binary at `gcc_build/dreal4` — if missing, ask user to run `./BUILD.sh` first.
-- If exceptional list grows large across rounds, suggest `/benchmark-baseline`.
-- **Running batches by hand** (`do_sweep.sh`/`do_ab.sh`/`run_batch.sh`, ad-hoc A/Bs): follow the
-  operational rules in `docs/benchmarking.md` — ≤12 `dreal4` procs / one pool at a time, pool to
-  keep cores saturated, SIGKILL⇒blacklist (never restart), no compiling during a timing run,
-  compare ratios within a round, and report PAR2 excluding both-TIM benchmarks. `docs/benchmarking.md`
-  is the canonical home for all benchmarking methodology.
+- A spot check runs on the 4 E-cores (macOS can't pin to P-cores), where a dReal run takes
+  2–5× the CPU time it would on a P-core, under a CPU-seconds cap (`TIMEOUT`, default 120;
+  ~5 min). It is load-proof: the user may compile or work while it runs.
+- If the change also needs a Sherlock run, push it and start the Sherlock builds before the spot
+  check, and stop them if it fails (`docs/benchmarking.md` §"Where a run happens").
+- Ad hoc A/Bs and flag sweeps use `benchmark/corun.sh` directly (same 12-benchmark limit);
+  anything larger is a Sherlock experiment (`../dreal-stanford-benchmarking`).

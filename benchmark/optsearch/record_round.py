@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Record one optsearch sweep round into the cross-round leaderboard.
 
-The autonomous odeexpr config search reuses benchmark/do_sweep.sh for the
-mechanical work (one pooled 12-way sweep of {config x benchmark}); this script
-ingests that sweep's per-config summary.csv files and:
+The autonomous odeexpr config search ran its rounds through benchmark/do_sweep.sh
+(retired 2026-10-07: rounds that size now run on Sherlock, and a local corun.sh run
+has the same per-arm summary.csv layout); this script ingests a round's per-config
+summary.csv files and:
 
   1. Computes per-config solved-count and PAR2 (CPU time if solved, else
      2*timeout) and the PAR2 ratio vs the `base` (current-default) config.
