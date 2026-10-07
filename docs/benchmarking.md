@@ -233,8 +233,11 @@ s2d 31%, odeexpr_v1 16%, github 6%, tacas 4%, saradc 1%) — an estimate, not a 
 | 600 s | 6.0 | ~16 min |
 
 120 s keeps ~90% of the informative picks of 600 s in ~30% of the time (83–93% across the
-measured E/P range). s2d loses the most (0.63 of its picks solve at 120 s against 0.70 at 600 s);
-a change aimed at s2d's slow tail belongs on Sherlock, or set `TIMEOUT` higher by hand.
+measured E/P range). The picks lost are the slow tail (s2d most: 0.63 of its picks solve at 120 s
+against 0.70 at 600 s), and that is the useful side of the trade. A spot check is for the big
+changes: an optimization worth having moves a benchmark from a timeout (PAR2 penalty 2× the cap)
+to a solve under the cap, a clean signal, while a longer cap mostly adds small ratio shifts on
+slow solves.
 
 ---
 
