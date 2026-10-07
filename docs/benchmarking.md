@@ -33,7 +33,7 @@ Run proactively at natural breakpoints even if the user doesn't ask.
 
 ## Benchmark sources
 
-Two **content-addressed manifest families** (`odeexpr_v*`) plus three flat-directory families.
+Three **content-addressed manifest families** (`odeexpr_v*`, `s2d`) plus three flat-directory families.
 A manifest family keys each logical benchmark on a stable `bench_id` (the manifest key) and
 resolves through `manifest.json` to the *current* revision, so regeneration (new hashed files,
 never overwritten) never silently repoints a name. `benchmark/odeexpr.py` is the registry for all
@@ -47,6 +47,13 @@ families (`MANIFEST_FAMILIES`, `FAMILY_WEIGHTS`, `family_of`, `load_manifest_nam
   high-priority target**; ∀/∃∀ MLP-expressivity queries in `forall/` + `exists_forall/`,
   content-addressed via `manifest.json` with `revisions[].smt2` — a *different* manifest schema
   from v1, handled by the same loader parameterized over the revision-file key)
+- `~/Documents/MATLAB/final_presentation_casestudies/benchmarks/s2d/` — `s2d` family (Simulink
+  models translated by s2d, `QF_NRA_ODE` hybrid unrollings with Stateflow charts; picked for
+  being hard: about a third timed out where they were recorded; v2's manifest schema).  Written by `python -m
+  pipeline.benchmarks` in that repo, whose docstring says how a query is picked.  The queries
+  were asked there with other options, but the family runs at dReal's defaults.  The longest
+  queries run to 82 steps, and a 71-step one peaked near 5.7 GB there, so `--family s2d --all`
+  at 12 jobs can cross the OOM daemon's total watermark.
 - `~/Documents/new_dreal/nraode_to_nra/drealgithub_sunoct5/rolled/` — `github_oct5_` family
 - `~/Documents/new_dreal/nraode_to_nra/VNAMSCwI_satoct11/rolled/` — `tacas_c2e2_` family
 - `~/Documents/new_dreal/AMS-verification-bundle-of-sticks/saradc/rolled/` — `1mhz_` family
@@ -102,7 +109,7 @@ families (`MANIFEST_FAMILIES`, `FAMILY_WEIGHTS`, `family_of`, `load_manifest_nam
 
 ## Families and weighting
 
-Five families, classified by name prefix (`odeexpr.family_of`):
+Six families, classified by name prefix (`odeexpr.family_of`):
 
 - `saradc` — prefix `1mhz_`
 - `github` — prefix `github_oct5_`
@@ -112,11 +119,13 @@ Five families, classified by name prefix (`odeexpr.family_of`):
 - `odeexpr_v2` — prefix `odeexpr_v2_<bench_id>` (**newest, highest-priority**; ∀/∃∀
   MLP-expressivity queries — exercises the `ContractorForall` CE-guided path, coverage no other
   family provides)
+- `s2d` — prefix `s2d_<bench_id>` (**high-priority**; ODE hybrid unrollings from Simulink, the
+  CAPD/ODE path at tens of steps with Stateflow mode logic)
 
-`FAMILY_WEIGHTS = {odeexpr_v2:8, odeexpr_v1:6, saradc:3, github:2, tacas:2}` encodes relative
+`FAMILY_WEIGHTS = {odeexpr_v2:8, s2d:8, odeexpr_v1:6, saradc:3, github:2, tacas:2}` encodes relative
 importance. The weight drives weighted-without-replacement selection (the `odeexpr_v*` families
 appear proportionally more often per item) and a `weighted_overall` PAR2 in the family comparison;
-regressions in either manifest family are tagged `ODEEXPR`/`ODEEXPR-HIGH` so reports lead with them.
+regressions in any manifest family are tagged `ODEEXPR`/`ODEEXPR-HIGH` so reports lead with them.
 
 **Note:** `OPTIMIZATION_LOG.md` (§Adopted/§Rejected) is all CAPD/ODE-path tuning and is
 **orthogonal to the `odeexpr_v*` families** — odeexpr_v1 is NRA-only and odeexpr_v2 is ∀/∃∀, neither

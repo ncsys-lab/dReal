@@ -111,7 +111,7 @@ def main():
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--family", default=None,
                         help="comma-separated family filter "
-                             "(odeexpr_v1,odeexpr_v2,saradc,github,tacas); "
+                             "(odeexpr_v1,odeexpr_v2,s2d,saradc,github,tacas); "
                              "restricts the corpus to those families before selection")
     parser.add_argument("--all", action="store_true",
                         help="emit EVERY benchmark of the (filtered) corpus, deterministically "

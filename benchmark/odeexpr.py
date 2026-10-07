@@ -5,7 +5,7 @@ resolution for every benchmark family.
 Two kinds of family:
   * Flat-directory families (saradc/github/tacas) — the directory is encoded in
     the name; paths are resolved by select.py's resolve_path against fixed dirs.
-  * Manifest content-addressed families (odeexpr_v1, odeexpr_v2) — each logical
+  * Manifest content-addressed families (odeexpr_v1, odeexpr_v2, s2d) — each logical
     benchmark (bench_id = the manifest key) has hashed revision files and a
     manifest.json naming the *current* revision. We key on the stable bench_id
     and resolve through the manifest so regeneration (which mints new hashed
@@ -53,16 +53,21 @@ MANIFEST_FAMILIES = [
     ManifestFamily("odeexpr_v2",
                    "/Users/kunalsheth/Documents/expressivity/v2/benchmarks",
                    "smt2"),
+    # s2d-translated Simulink queries, picked for being hard: written by
+    # final_presentation_casestudies `python -m pipeline.benchmarks`, in v2's schema.
+    ManifestFamily("s2d",
+                   "/Users/kunalsheth/Documents/MATLAB/final_presentation_casestudies/benchmarks/s2d",
+                   "smt2"),
 ]
 MANIFEST_FAMILY_NAMES = {f.name for f in MANIFEST_FAMILIES}
 
 # Flat-directory families, classified by name prefix.
 _FLAT_PREFIXES = {"1mhz_": "saradc", "github_oct5_": "github", "tacas_c2e2_": "tacas"}
 
-# Per-family selection/severity weights. odeexpr_v2 is the newest high-priority
-# target (8), above odeexpr_v1 (6); the flat ODE families keep the user's
+# Per-family selection/severity weights. odeexpr_v2 and s2d are the newest high-priority
+# targets (8), above odeexpr_v1 (6); the flat ODE families keep the user's
 # equivalence "1 odeexpr = 3 github = 2 saradc = 3 tacas" (saradc=3, github/tacas=2).
-FAMILY_WEIGHTS = {"odeexpr_v2": 8, "odeexpr_v1": 6, "saradc": 3, "github": 2, "tacas": 2}
+FAMILY_WEIGHTS = {"odeexpr_v2": 8, "s2d": 8, "odeexpr_v1": 6, "saradc": 3, "github": 2, "tacas": 2}
 
 
 def family_of(name: str) -> str | None:
