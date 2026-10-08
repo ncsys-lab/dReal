@@ -24,7 +24,12 @@ as soon as the builds land. A submitted run that turns out unwanted is cancelled
 Sherlock's rule (`../dreal-stanford-benchmarking/docs/environment.md` §"Comparison-validity
 invariant") holds here too: **two runs compare only if they ran at the same time, on the same
 hardware, and only as a ratio.** An absolute time is never compared with one from another run.
-This Mac adds a fourth condition, the core type: on Apple Silicon a run's speed depends on
+Arms that never co-ran relate through an arm they share: from a base→head run and a head→fix
+run, base→fix ≈ (base→head) × (head→fix). That is an estimate, not a measurement. It assumes the
+shared arm kept the same relative speed in both runs, a timeout's 2×-cap PAR2 penalty does not
+scale with the machine, and a verdict flip is only read off a pair that co-ran. So Sherlock
+co-runs two arms per job and chains changes this way (`../dreal-stanford-benchmarking`
+`config.MAX_JOB_CPUS`). This Mac adds a fourth condition, the core type: on Apple Silicon a run's speed depends on
 whether it got P-cores or E-cores, and macOS gives no way to pin a process to P-cores
 (`taskpolicy` only clamps down; `THREAD_AFFINITY_POLICY` is an L2-sharing hint).
 
