@@ -182,14 +182,6 @@ double Config::nlopt_maxtime() const { return nlopt_maxtime_.get(); }
 
 OptionValue<double>& Config::mutable_nlopt_maxtime() { return nlopt_maxtime_; }
 
-Config::SatDefaultPhase Config::sat_default_phase() const {
-  return sat_default_phase_.get();
-}
-
-OptionValue<Config::SatDefaultPhase>& Config::mutable_sat_default_phase() {
-  return sat_default_phase_;
-}
-
 uint32_t Config::random_seed() const { return random_seed_.get(); }
 
 OptionValue<uint32_t>& Config::mutable_random_seed() { return random_seed_; }
@@ -231,21 +223,6 @@ OptionValue<double>& Config::mutable_ode_max_step() { return ode_max_step_; }
 bool Config::refine_witness() const { return refine_witness_.get(); }
 OptionValue<bool>& Config::mutable_refine_witness() { return refine_witness_; }
 
-std::ostream& operator<<(std::ostream& os,
-                         const Config::SatDefaultPhase& sat_default_phase) {
-  switch (sat_default_phase) {
-    case Config::SatDefaultPhase::False:
-      return os << "False";
-    case Config::SatDefaultPhase::True:
-      return os << "True";
-    case Config::SatDefaultPhase::JeroslowWang:
-      return os << "Jeroslow-Wang";
-    case Config::SatDefaultPhase::RandomInitialPhase:
-      return os << "Random Initial Phase";
-  }
-  DREAL_UNREACHABLE();
-}
-
 ostream& operator<<(ostream& os, const Config& config) {
   return os << fmt::format(
              "Config("
@@ -262,7 +239,6 @@ ostream& operator<<(ostream& os, const Config& config) {
              "nlopt_ftol_abs = {}, "
              "nlopt_maxeval = {}, "
              "nlopt_maxtime = {}, "
-             "sat_default_phase = {}, "
              "random_seed = {}"
              ")",
              config.precision(), config.produce_models(), config.visualize(), config.use_polytope(),
@@ -270,8 +246,7 @@ ostream& operator<<(ostream& os, const Config& config) {
              config.use_local_optimization(), config.dump_theory_literals(),
              config.number_of_jobs(), config.nlopt_ftol_rel(),
              config.nlopt_ftol_abs(), config.nlopt_maxeval(),
-             config.nlopt_maxtime(), config.sat_default_phase(),
-             config.random_seed());
+             config.nlopt_maxtime(), config.random_seed());
 }
 
 }  // namespace dreal

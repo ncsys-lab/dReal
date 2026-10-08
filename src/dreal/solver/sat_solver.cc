@@ -42,8 +42,6 @@ SatSolver::SatSolver(const Config& config) : cadical(new CaDiCaL::Solver) {
     DREAL_LOG_DEBUG("SatSolver::Set Random Seed {}", config.random_seed());
   }
 
-  // todo: remove dReal phase flag...
-
   success = cadical->set("vivify", 1); DREAL_ASSERT(success);
   success = cadical->set("vivifyonce", 2); DREAL_ASSERT(success);
   success = cadical->set("eagersubsume", 1); DREAL_ASSERT(success);

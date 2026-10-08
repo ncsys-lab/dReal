@@ -282,19 +282,6 @@ class Config {
   /// Returns a mutable OptionValue for `nlopt_maxtime`.
   OptionValue<double>& mutable_nlopt_maxtime();
 
-  enum class SatDefaultPhase {
-    False = 0,
-    True = 1,
-    JeroslowWang = 2,  // Default option
-    RandomInitialPhase = 3
-  };
-
-  /// Returns the default phase for SAT solver.
-  SatDefaultPhase sat_default_phase() const;
-
-  /// Returns a mutable OptionValue for `sat_default_phase`.
-  OptionValue<SatDefaultPhase>& mutable_sat_default_phase();
-
   /// Returns the random seed.
   uint32_t random_seed() const;
 
@@ -462,14 +449,6 @@ class Config {
   // non-positive.
   OptionValue<double> nlopt_maxtime_{kDefaultNloptMaxTime};
 
-  // Default initial phase (for PICOSAT):
-  //   0 = false
-  //   1 = true
-  //   2 = Jeroslow-Wang (default)
-  //   3 = random initial phase
-  OptionValue<SatDefaultPhase> sat_default_phase_{
-      SatDefaultPhase::JeroslowWang};
-
   // Seed for Random Number Generator.
   OptionValue<uint32_t> random_seed_{0};
 
@@ -539,12 +518,8 @@ class Config {
   // Brancher to use. By default it uses `BranchLargestFirst`.
   OptionValue<Brancher> brancher_{BranchLargestFirst};
 };
-std::ostream& operator<<(std::ostream& os,
-                         const Config::SatDefaultPhase& sat_default_phase);
-
 std::ostream& operator<<(std::ostream& os, const Config& config);
 
 }  // namespace dreal
 
 template <> struct fmt::formatter<dreal::Config> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<dreal::Config::SatDefaultPhase> : fmt::ostream_formatter {};

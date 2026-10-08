@@ -23,17 +23,10 @@
 #include "dreal/util/box.h"
 #include "dreal/util/optional.h"
 
-// Determinism/parity pins for the two SAT-layer knobs. These tests pin
-// EXISTING behavior; a failure is a finding, not a test to loosen.
-//
-// --sat-default-phase (Config::SatDefaultPhase, default JeroslowWang): parsed
-// in dreal_main.cc but — as of this writing — consumed NOWHERE: SatSolver's
-// CaDiCaL ctor never reads config.sat_default_phase() (sat_solver.cc: "todo:
-// remove dReal phase flag..."; the enum comments still describe the retired
-// PICOSAT backend). The knob is dead, so all four values are behaviorally
-// identical today. The test asserts the knob's CONTRACT — a phase choice is a
-// search-order lever and may never move a verdict — which holds trivially now
-// and must keep holding if the knob is ever rewired into CaDiCaL.
+// Determinism/parity pins for the SAT layer's seed. These tests pin EXISTING
+// behavior; a failure is a finding, not a test to loosen. (The file also
+// covered --sat-default-phase, which no code read since the PICOSAT backend
+// was retired; the flag was removed 2026-10-08.)
 //
 // --random-seed (default 0) reaches exactly two RNGs (grep random_seed):
 //   * sat_solver.cc — CaDiCaL option "seed", set only when != 0;
@@ -53,7 +46,7 @@
 namespace dreal {
 namespace {
 
-class SatPhaseSeedDeterminismTest : public ::testing::Test {
+class SatSeedDeterminismTest : public ::testing::Test {
  protected:
   const Variable x_{"x", Variable::Type::CONTINUOUS};
   const Variable y_{"y", Variable::Type::CONTINUOUS};
@@ -81,40 +74,20 @@ class SatPhaseSeedDeterminismTest : public ::testing::Test {
            ((x_ >= 0.0) || (y_ >= 0.0));
   }
 
-  static Config Cfg(const Config::SatDefaultPhase phase, const uint32_t seed) {
+  static Config Cfg(const uint32_t seed) {
     Config config;
     config.mutable_precision() = 0.001;
-    config.mutable_sat_default_phase() = phase;
     config.mutable_random_seed() = seed;
     return config;
   }
-
-  // Asserts @p f solves to @p expect_sat under every phase value 0-3.
-  void ExpectVerdictAcrossPhases(const Formula& f, const bool expect_sat) {
-    for (const Config::SatDefaultPhase phase :
-         {Config::SatDefaultPhase::False, Config::SatDefaultPhase::True,
-          Config::SatDefaultPhase::JeroslowWang,
-          Config::SatDefaultPhase::RandomInitialPhase}) {
-      EXPECT_EQ(static_cast<bool>(CheckSatisfiability(f, Cfg(phase, 0))),
-                expect_sat)
-          << "verdict moved at sat_default_phase=" << static_cast<int>(phase);
-    }
-  }
 };
 
-// (a) Phases 0-3 verdict agreement on a SAT/UNSAT mix.
-TEST_F(SatPhaseSeedDeterminismTest, PhaseNeverMovesVerdict) {
-  ExpectVerdictAcrossPhases(SatCircle(), /*expect_sat=*/true);
-  ExpectVerdictAcrossPhases(SatHyperbola(), /*expect_sat=*/true);
-  ExpectVerdictAcrossPhases(UnsatDisk(), /*expect_sat=*/false);
-}
-
-// (b) Fixed seed: two in-process runs give identical verdicts AND identical
+// (a) Fixed seed: two in-process runs give identical verdicts AND identical
 // model boxes. Covers seed 0 (default: CaDiCaL "seed" unset, LHS mt19937{0})
 // and a nonzero seed (both RNG paths seeded).
-TEST_F(SatPhaseSeedDeterminismTest, FixedSeedIsDeterministicInProcess) {
+TEST_F(SatSeedDeterminismTest, FixedSeedIsDeterministicInProcess) {
   for (const uint32_t seed : {0u, 7u}) {
-    const Config config{Cfg(Config::SatDefaultPhase::JeroslowWang, seed)};
+    const Config config{Cfg(seed)};
     for (const Formula& f : {SatCircle(), SatHyperbola()}) {
       const optional<Box> first{CheckSatisfiability(f, config)};
       const optional<Box> second{CheckSatisfiability(f, config)};
@@ -132,13 +105,13 @@ TEST_F(SatPhaseSeedDeterminismTest, FixedSeedIsDeterministicInProcess) {
   }
 }
 
-// (c) Differing seeds: only verdict agreement is well-defined (the seed is a
+// (b) Differing seeds: only verdict agreement is well-defined (the seed is a
 // search-order lever; on these δ-robust instances every order is forced to
 // the same verdict). Models are NOT compared across seeds, and no assertion
 // demands that differing seeds differ.
-TEST_F(SatPhaseSeedDeterminismTest, SeedNeverMovesVerdict) {
+TEST_F(SatSeedDeterminismTest, SeedNeverMovesVerdict) {
   for (const uint32_t seed : {0u, 1u, 4242u}) {
-    const Config config{Cfg(Config::SatDefaultPhase::JeroslowWang, seed)};
+    const Config config{Cfg(seed)};
     EXPECT_TRUE(CheckSatisfiability(SatCircle(), config))
         << "seed=" << seed;
     EXPECT_TRUE(CheckSatisfiability(SatHyperbola(), config))

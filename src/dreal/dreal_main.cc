@@ -282,16 +282,6 @@ void MainProgram::AddOptions() {
       "--verbose",                                          // Flag token.
       verbose_option_validator);
 
-  opt_.add("2" /* Default */, false /* Required? */,
-           1 /* Number of args expected. */,
-           0 /* Delimiter if expecting multiple args. */,
-           "Set default initial phase for SAT solver.\n"
-           "  0 = false\n"
-           "  1 = true\n"
-           "  2 = Jeroslow-Wang (default)\n"
-           "  3 = random initial phase\n",
-           "--sat-default-phase");
-
   opt_.add("0" /* Default */, false /* Required? */,
            1 /* Number of args expected. */,
            0 /* Delimiter if expecting multiple args. */,
@@ -636,16 +626,6 @@ void MainProgram::ExtractOptions() {
     config_.mutable_nlopt_maxtime().set_from_command_line(nlopt_maxtime);
     DREAL_LOG_DEBUG("MainProgram::ExtractOptions() --nlopt-maxtime = {}",
                     config_.nlopt_maxtime());
-  }
-
-  // --sat-default-phase
-  if (opt_.isSet("--sat-default-phase")) {
-    int sat_default_phase{2};
-    opt_.get("--sat-default-phase")->getInt(sat_default_phase);
-    config_.mutable_sat_default_phase().set_from_command_line(
-        static_cast<Config::SatDefaultPhase>(sat_default_phase));
-    DREAL_LOG_DEBUG("MainProgram::ExtractOptions() --sat-default-phase = {}",
-                    config_.sat_default_phase());
   }
 
   // --random-seed
