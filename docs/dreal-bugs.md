@@ -733,7 +733,9 @@ f7333b0dc solves 17 vs 14 s2d and 1255 vs 1237 github_dreach queries and the sam
 elsewhere, per-set PAR2 fix/head 0.974–1.000. One verdict differs, a `delta-sat` that is a
 missed refutation through BUG-022, not a wrong `unsat`. Against base 6f02d4010 (the branch
 gate): 1876 vs 1865 solved, per-set PAR2 0.965–1.010. tacas_c2e2 is the one set behind, 332
-vs 339: 21 solved only by base and 14 only by the fix (head: 18 and 11). Cause not isolated.
+vs 339: 21 solved only by base and 14 only by the fix (head: 18 and 11). Cause not isolated;
+these are the C2E2 AMS circuit queries (inverter, OR and NOR gates), and the owner accepts the
+difference (2026-10-08).
 
 **Workaround**
 
