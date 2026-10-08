@@ -11,6 +11,8 @@ BUG-001 … BUG-012 and BUG-016 live there, the rest here. A new entry takes the
 highest in either log and lands here; the `docs/dreal-bugs/bug*.smt2` reproducer convention is
 shared.
 
+Each entry ends with a **dReal3.** paragraph: the entry's reproducers run on dReal v3.16.12 beside dReal4+ODE with DRPM, commit `6965888cd`, by s2d's `docs/dreal-bugs/dreal3.py`. The setup, its caveats and the three attribution phrases are in s2d's log, under its status table.
+
 ## BUG-013 — `--ode-taylor-order` 16/20 and `--ode-abs-tol`/`--ode-rel-tol` ≥ 1e-6 miss a refutation on an interval-IC instance: one long CAPD step leaves a wide last sub-slice whose mean-value tube is too loose (COMPLETENESS; LIVE — fixed 2026-10-05, fix dropped 2026-10-08; re-diagnosed — CAPD does not diverge)
 
 **Symptom / Description**
@@ -105,6 +107,8 @@ earn the extra code. In the two Sherlock gate runs the branch with the hull sat 
 (`Bug013_LongStepTube_RefutesDisjointGate`: the default knobs refute, the six trigger knobs
 do not; the order and tolerance sweeps pin `X_t.lb == 0.3` at the trigger knobs), so a
 change that closes it fails loudly.
+
+**dReal3.** `unsat`, correct (x_t = x_0·e^(−t) ≥ e^(−1) ≈ 0.368 > 0.35 on every trajectory). Flags `--in --precision 0.001 --ode-forward-only --ode-order 16`, dReal3's names for `--ode-backward false --ode-taylor-order 16` (its `--help` calls `--ode-order` the maximum Taylor order); its other ODE settings stay at its defaults (`--ode-grid` 16, tolerances 1e-20), and the tolerance triggers were not run on it. Prep `strip-get-model`, a no-op on this file; 0.07 s of emulated container CPU, not comparable with any dReal4 time. dReal4+ODE with DRPM, commit `6965888cd`: `delta-sat`, the gap above. Attribution: dReal4 only. Rows `bug = BUG-013` of s2d's `docs/dreal-bugs/dreal3_crosscheck.csv`; raw output in s2d's `runs/dreal3/dreal3/bug013_ode_order16_inert.stdout`.
 
 ---
 
@@ -268,6 +272,8 @@ Sweep binary copy `dreal4_60fca6f69` (= `gcc_build/dreal4`, stamp `f51f78b8e <di
 matrix, isolation battery, lldb logs): `/private/tmp/claude-501/…/tmp/{repro1,isolate,lldb_*.txt}`
 (ephemeral). Fixed on `gcc_build/dreal4` with IBEX `6b1b2c10`.
 
+**dReal3.** Not run; the reason in s2d's `docs/dreal-bugs/catalogue.csv` is "SoPlex presolve on the LP arms". No attribution.
+
 ---
 
 ## BUG-015 — SIGSEGV: an `integral` whose start variable has no box and whose flow has `sin`/`cos` sends CAPD's interval `sin` a [NaN, NaN] argument, on which `scaledSin1` recurses until the stack is exhausted (fixed 2026-10-05)
@@ -408,6 +414,8 @@ Give every `integral` start variable whose flow uses `sin`/`cos` a finite box.
 `dreal_popl27` (Commit `c294eb435`, built 2026-07-13) and `dreal_partial_models` (Commit
 `ce5c8971c`, built 2026-09-18). Recorded 2026-10-04.
 
+**dReal3.** `bug015_unbounded_sin_baseline` is `delta-sat` (0.35 s of emulated container CPU, not comparable with any dReal4 time). `bug015_unbounded_sin_trigger` dies by SIGSEGV (exit 139) with no output after 0.05 s of emulated container CPU, in the parse probe and in the full run alike: the symptom this entry records for the dReal4 builds before the fix. Flags `--in --precision 0.001 --model`; prep `strip-get-model`, a no-op on both files. dReal4+ODE with DRPM, commit `6965888cd`: `delta-sat` on both, the trigger with the warning that one ODE constraint was not integrated. Attribution: ODE-SMT line. What matches is the crash, not a verdict, and dReal3 left no stack trace, so that it dies in CAPD's `sin` as dReal4 did is a hypothesis. Rows `bug = BUG-015` of s2d's `docs/dreal-bugs/dreal3_crosscheck.csv`; raw output in s2d's `runs/dreal3/dreal3/bug015_unbounded_sin_{baseline,trigger}.stdout`.
+
 ---
 
 ## BUG-017 — Documentation: `docs/pattern-matching.md` misdescribes `--drpm-max-size` and `--drpm-max-time` (fixed 2026-10-05)
@@ -452,6 +460,8 @@ Read the flags as in the table; `dreal --help` prints the correct text.
 `docs/pattern-matching.md` §"CLI Configuration" now states both flags as in the table, and
 `exists_forall_perf.md` proposes an A/B with and without the flag instead of
 `--drpm-max-size 0`.
+
+**dReal3.** Not run; the reason in s2d's `docs/dreal-bugs/catalogue.csv` is "documentation". No attribution.
 
 ---
 
@@ -548,6 +558,8 @@ Reproduced on `gcc_build/dreal4` (Commit `6f02d4010`, CAPD `b353e170`, built 202
 the MacOSX 26.5 SDK) and `dreal_popl27` (Commit `c294eb435`, built 2026-07-13). Fixed on
 `gcc_build/dreal4` with CAPD `03dc5628`.
 
+**dReal3.** `delta-sat` on all four files, each correct, since all four are satisfiable, and each model box holds a real solution (on the growth trigger, x_0 = 2 and time = 0.9766 give x_t ≈ 2.2052, inside the reported `x_t : [2.205, 2.205252863260473]`). Flags `--in --precision 0.001 --model`; prep `strip-get-model`, a no-op on all four files; 0.07 s each of emulated container CPU, not comparable with any dReal4 time. dReal4+ODE with DRPM, commit `6965888cd`: `delta-sat` on all four. Attribution: dReal4 only. Rows `bug = BUG-018` of s2d's `docs/dreal-bugs/dreal3_crosscheck.csv`; raw output in s2d's `runs/dreal3/dreal3/bug018_meanvalue_*.stdout`.
+
 ---
 
 ## BUG-019 — The LP certificates read non-finite data as a proof: an empty or NaN interval passed the Neumaier–Shcherbina infeasibility test, and Aᵀy was a plain floating-point product (latent SOUNDNESS, `--polytope`/`--obbt` only; fixed 2026-10-05)
@@ -599,6 +611,8 @@ flips, PAR2 1.000–1.006).
 **Binary**
 
 `gcc_build/dreal4` with IBEX `b5e7a212` (before) and `6b1b2c10` (after), 2026-10-05.
+
+**dReal3.** Not run; the reason in s2d's `docs/dreal-bugs/catalogue.csv` is "LP certificates on the LP arms". No attribution.
 
 ---
 
@@ -665,6 +679,8 @@ An upstream report is drafted, not filed: `docs/dreal-bugs/capd-upstream/issue_s
 
 `gcc_build/dreal4` (Commit `57953403b` + the BUG-015/016 working tree, CAPD `03dc5628`, built
 2026-10-05) and the same source with CAPD `b353e170`.
+
+**dReal3.** `bug020_sin_huge_negative_baseline` is `delta-sat` (0.08 s of emulated container CPU, not comparable with any dReal4 time; stderr warns that `xt`'s interval near 1e20 can no longer be bisected), and `bug020_sin_huge_negative_trigger` times out at 300 s (300.0 s of emulated container CPU). Flags `--in --precision 0.001`; prep `strip-get-model`, a no-op on both files: dReal3 accepted `-1e20` as written, so `expand-sci-literals` was not applied. dReal4+ODE with DRPM, commit `6965888cd`: the same, baseline `delta-sat` and trigger timeout at 300 s. Attribution: undetermined. dReal3 shows the same asymmetry between the two signs. Rows `bug = BUG-020` of s2d's `docs/dreal-bugs/dreal3_crosscheck.csv`; raw output in s2d's `runs/dreal3/dreal3/bug020_sin_huge_negative_{baseline,trigger}.{stdout,stderr}`.
 
 ---
 
@@ -748,6 +764,8 @@ None needed.
 Bisect arms built clean from each commit (`6f02d4010` and `90eaf1419` against the
 CommandLineTools 26.5 SDK, which predates libc++ 22); head is `benchmark/bin/dreal4-f7333b0dc`.
 
+**dReal3.** Not run; the reason in s2d's `docs/dreal-bugs/catalogue.csv` is "explanation linking (dReal4 only)". No attribution.
+
 ---
 
 ## BUG-022 — A CAPD step a few denormals long makes the adapter's hull-grid sub-slices overrun the step, CAPD throws, and the skipped integral lets a `delta-sat` witness break its ODE (COMPLETENESS; LIVE, 2026-10-08)
@@ -799,6 +817,8 @@ under a `NearestRoundingScope`, with a throw if a point still exceeds d_hi).
 `/scratch/users/ks1/exec/dreal4-0e88879317b8` (sha256 f4dbe5f1d7e2), built by `bench build`
 on Sherlock, 2026-10-07.
 
+**dReal3.** Not run; the reason in s2d's `docs/dreal-bugs/catalogue.csv` is "adapter hull-grid (dReal4 only)". No attribution.
+
 ---
 
 ## BUG-023 — A decimal literal that underflows to a denormal crashes the SMT-LIB2 parser: `std::stod` throws `out_of_range` (LIVE, 2026-10-08)
@@ -836,6 +856,8 @@ Scale the term instead of writing the denormal: `(<= (* 1e300 x) 1e-20)` parses 
 **Binary**
 
 `benchmark/bin/dreal4-{6f02d4010-sdk265,f7333b0dc,bug021-fix}`, 2026-10-08.
+
+**dReal3.** Not run; the reason in s2d's `docs/dreal-bugs/catalogue.csv` is "dReal4 parser". No attribution.
 
 ---
 
