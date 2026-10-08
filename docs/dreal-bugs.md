@@ -241,6 +241,16 @@ The verdicts agree with the July sweep's.
 The corpus paths above moved: F1–F3 are in `~/Documents/expressivity/v1/benchmarks/tanh_coupling/`
 and F4–F6 in `~/Documents/expressivity/v2/benchmarks/forall/` (same file names).
 
+**Corpus check (2026-10-08)**
+
+The `tech_debt_fixes_gate` Sherlock run (600 s) co-ran `--polytope --polytope-linearizer affine`
+on two dReal commits with identical sources: 30926ebc3 with IBEX 6637e6e7 (`b5e7a212` plus the
+SoPlex GCC 14 hunk) and c9bd88f06 with IBEX 33b883f2 (`6b1b2c10` plus that hunk). Over 7336
+benchmarks: no verdict flips, 1351 vs 1349 solved (4 and 2 one-sided), per-set PAR2 new/old
+1.000–1.006, memouts equal to within one per set. The affine linearizer never reached the
+crash, so this shows that presolve off and the BUG-019 changes cost nothing on the LP path; it
+does not test the crash fix itself.
+
 **Binary**
 
 Sweep binary copy `dreal4_60fca6f69` (= `gcc_build/dreal4`, stamp `f51f78b8e <dirty>`, built
@@ -516,6 +526,13 @@ verdict, about 6.5× slower on that instance, not a lost refutation.
 Any `unsat` obtained before the bump on a query with an interval start variable should be
 re-checked on a binary built after it.
 
+**Corpus check (2026-10-08)**
+
+Base 6f02d4010 (old CAPD) against head f7333b0dc (new CAPD) on Sherlock: no verdict flips over
+7336 benchmarks at 600 s (`tech_debt_fixes_gate`) or 7338 at 120 s (`bug021_fix_gate`). No
+base `unsat` became a head `delta-sat`, so the false `unsat` does not show in this corpus; the
+reproducers above remain its only witnesses.
+
 **Binary**
 
 Reproduced on `gcc_build/dreal4` (Commit `6f02d4010`, CAPD `b353e170`, built 2026-10-05 against
@@ -566,6 +583,9 @@ certificate and `minimize()` reports `OptimalProved` only when post-processing s
 and the bound and skips the row (`BadConstraint`, sound in RELAX mode). The empty-`d` and
 rigorous-product changes have no red test: no deterministic input makes SoPlex hand back a
 non-finite Farkas ray, so they are guarded by review only.
+
+**Corpus check (2026-10-08)**: the affine A/B under BUG-014 covers these changes too (no
+flips, PAR2 1.000–1.006).
 
 **Binary**
 
@@ -697,6 +717,15 @@ records the integral in full. Co-run after the fix, the same three queries: fix 
 `ParameterNarrowing_LinksOnlyThroughParameters`, `ContractorJoinTest.JoinUnionsTheReachOfAUsedConstraint`,
 `ContractorJoinTest.ReachOutsideTheFormulaThrows` (each red before its change).
 
+**Corpus check (2026-10-08)**
+
+`bug021_fix_gate` on Sherlock (120 s, 7338 benchmarks, co-run): fix 0e8887931 against head
+f7333b0dc solves 17 vs 14 s2d and 1255 vs 1237 github_dreach queries and the same number
+elsewhere, per-set PAR2 fix/head 0.974–1.000. One verdict differs, a `delta-sat` that is a
+missed refutation through BUG-022, not a wrong `unsat`. Against base 6f02d4010 (the branch
+gate): 1876 vs 1865 solved, per-set PAR2 0.965–1.010. tacas_c2e2 is the one set behind, 332
+vs 339: 21 solved only by base and 14 only by the fix (head: 18 and 11). Cause not isolated.
+
 **Workaround**
 
 None needed.
@@ -705,6 +734,94 @@ None needed.
 
 Bisect arms built clean from each commit (`6f02d4010` and `90eaf1419` against the
 CommandLineTools 26.5 SDK, which predates libc++ 22); head is `benchmark/bin/dreal4-f7333b0dc`.
+
+---
+
+## BUG-022 — A CAPD step a few denormals long makes the adapter's hull-grid sub-slices overrun the step, CAPD throws, and the skipped integral lets a `delta-sat` witness break its ODE (COMPLETENESS; LIVE, 2026-10-08)
+
+**Symptom / Description**
+
+In the 2026-10-07 `bug021_fix_gate` Sherlock run (120 s), `github_dreach/0hz_k4_airplane_airplane-single.drh.o.smt2`
+was `unsat` on 6f02d4010 and f7333b0dc and `delta-sat` on 0e8887931. The witness has
+`time_4 ∈ [0, 9.88e-324]` while `beta` goes from `beta_4_0 ≈ 0.1445` to `beta_4_t ∈ [-1.95, -1.35]`,
+so it violates the step-4 flow by far more than δ = 0.001. COMPLETENESS (asserts φ^δ
+T-satisfiable on a T-unsatisfiable φ — missed refutation). The run warns, as the approved
+inconclusive-ODE skip should:
+
+```
+WARNING: delta-sat while 2 ODE constraint(s) were not integrated on some box of this search
+(e.g. capd::diffAlgebra::Curve::operator(h) error: argument [1.4822e-323,1.4822e-323] is out
+of domain=[0,9.88131e-324], in (= [beta_4_t, …] (integral flow_1, from t=0 to time_4, …))).
+```
+
+**Reproducer(s)**
+
+`timeout 60 dreal4-0e88879317b8 --random-seed 777 --verbose warning --model <that file>` on
+Sherlock (Linux, GCC 14), in a dev allocation. The same binary and file give `unsat` on macOS.
+Base and head give `unsat` on both. Minimal attempts (`d/dt[x] = -x`, `t` narrowed to a
+denormal through `(<= (* 1e300 t) 1e-23)`) give `unsat` on macOS; a denormal literal for the
+bound crashes the parser instead (BUG-023).
+
+**Root cause / Design notes**
+
+- ESTABLISHED (CAPD's message): the curve was evaluated at 1.4822e-323 = 3 ulp of the
+  smallest denormal, past its domain [0, 2 ulp].
+- ESTABLISHED (source, `contractor_odes_capd.cc`, `integrate_tube_slices_impl`): the sub-slice
+  grid is `grid[k] = d_lo + k·dd` with `dd = (d_hi − d_lo)/kHullGrid` for k < kHullGrid, and
+  nothing keeps it ≤ d_hi. For d_hi = 2 ulp, dd = 0.5 ulp: rounded up it is 1 ulp and
+  grid[3] = 3 ulp; rounded to nearest (ties to even) it is 0.
+- HYPOTHESIS (not isolated): the grid is computed under upward rounding left behind by CAPD,
+  which would also explain why only the Linux build shows it. The fix arm reached the box
+  through a different search path, not through a change to this code.
+
+**Workaround**
+
+None. The stderr warning flags every affected `delta-sat`. Candidate fix, untested: build
+the grid so that it cannot leave [d_lo, d_hi] (a monotone grid ending at d_hi, computed
+under a `NearestRoundingScope`, with a throw if a point still exceeds d_hi).
+
+**Binary**
+
+`/scratch/users/ks1/exec/dreal4-0e88879317b8` (sha256 f4dbe5f1d7e2), built by `bench build`
+on Sherlock, 2026-10-07.
+
+---
+
+## BUG-023 — A decimal literal that underflows to a denormal crashes the SMT-LIB2 parser: `std::stod` throws `out_of_range` (LIVE, 2026-10-08)
+
+**Symptom / Description**
+
+`1e-320` anywhere in an `.smt2` file aborts dReal (exit 134, no verdict). The scanner turns
+every decimal literal into a double with `std::stod` (`src/dreal/smt2/scanner.ll:213`, also
+`parser.yy` lines 248, 268 and 415), and `stod` throws `std::out_of_range` when `strtod` sets
+`ERANGE`, which includes underflow to a denormal. Loud, so no wrong verdict;
+COMPLETENESS-shaped (the run is lost).
+
+**Reproducer(s)**
+
+`docs/dreal-bugs/bug023_denormal_literal.smt2`:
+```smt2
+(set-logic QF_NRA)
+(declare-fun x () Real [0, 1])
+(assert (<= x 1e-320))
+(check-sat)
+```
+Output on 6f02d4010, f7333b0dc and 0e8887931 (macOS): `libc++abi: terminating due to
+uncaught exception of type std::out_of_range: stod: out of range`, exit 134 ✗.
+
+**Root cause / Design notes**
+
+ESTABLISHED (above). Not checked: whether a literal that does parse but is inexact enters
+the box soundly, i.e. as an interval that contains it.
+
+**Workaround**
+
+Scale the term instead of writing the denormal: `(<= (* 1e300 x) 1e-20)` parses and solves
+(tested with `t` in place of `x` on the three binaries above).
+
+**Binary**
+
+`benchmark/bin/dreal4-{6f02d4010-sdk265,f7333b0dc,bug021-fix}`, 2026-10-08.
 
 ---
 
