@@ -9,6 +9,16 @@ sweep, a pre-merge gate) runs on Sherlock through `../dreal-stanford-benchmarkin
 `experiments/<id>.py` spec and follow that repo's CLAUDE.md workflow. `corun.sh` refuses a job set
 over 12.
 
+**Two arms per Sherlock experiment during development.** Give each change its own experiment with
+two solvers, control and test, so a job asks for 4 cores (2 per arm). Sherlock's scheduler places
+4-core jobs far sooner than 6- or 8-core ones (user, 2026-10-08). The 2026-10-07 gate runs fit
+that, though they were not a controlled comparison: the 8-core run spent 12 h finishing its last
+~60 jobs 2–7 at a time, and the 6-core run spent its first 6 h at 5–19 running jobs, far below
+the 512-CPU account cap. Relate a third arm by chaining: run base→head and head→fix, and estimate
+base→fix as the product of their ratios (§Comparison rule). A paper run that must compare every
+config directly may co-run them all in one job; nothing in `../dreal-stanford-benchmarking`
+enforces the two-arm limit.
+
 **Overlap the two.** When a change will also need a Sherlock run, commit and push it, and start
 the Sherlock builds (`bench build`, ~30–40 min per commit, one at a time under the dev QOS)
 before the local spot check, which finishes first (~5 min at the 120 s cap). If the spot check
@@ -27,9 +37,7 @@ hardware, and only as a ratio.** An absolute time is never compared with one fro
 Arms that never co-ran relate through an arm they share: from a base→head run and a head→fix
 run, base→fix ≈ (base→head) × (head→fix). That is an estimate, not a measurement. It assumes the
 shared arm kept the same relative speed in both runs, a timeout's 2×-cap PAR2 penalty does not
-scale with the machine, and a verdict flip is only read off a pair that co-ran. So Sherlock
-co-runs two arms per job and chains changes this way (`../dreal-stanford-benchmarking`
-`config.MAX_JOB_CPUS`). This Mac adds a fourth condition, the core type: on Apple Silicon a run's speed depends on
+scale with the machine, and a verdict flip is only read off a pair that co-ran. This Mac adds a fourth condition, the core type: on Apple Silicon a run's speed depends on
 whether it got P-cores or E-cores, and macOS gives no way to pin a process to P-cores
 (`taskpolicy` only clamps down; `THREAD_AFFINITY_POLICY` is an L2-sharing hint).
 

@@ -232,7 +232,9 @@ Run `/benchmark` after every meaningful code change. Run proactively at natural 
 - `/benchmark` — a co-run spot check: a stashed control build (`benchmark/stash.sh` →
   `benchmark/bin/dreal4-<sha>`) against `gcc_build/dreal4` on ≤12 benchmarks; Haiku summary
 - **Anything bigger than 12 benchmarks runs on Sherlock** (`../dreal-stanford-benchmarking`,
-  an `experiments/<id>.py` spec). `benchmark/corun.sh` refuses it locally.
+  an `experiments/<id>.py` spec). `benchmark/corun.sh` refuses it locally. During development,
+  two arms per experiment (4-core jobs schedule far sooner); chain a third through a shared arm
+  (`docs/benchmarking.md` §"Where a run happens").
 
 **Comparison rule** (Sherlock's, plus core type): runs compare only if they co-ran — same time,
 same hardware, same core type — and only as a ratio, never an absolute time. Locally

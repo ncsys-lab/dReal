@@ -55,4 +55,7 @@ Be terse. Only return the summary and the table — no narration.
 - If the change also needs a Sherlock run, push it and start the Sherlock builds before the spot
   check, and stop them if it fails (`docs/benchmarking.md` §"Where a run happens").
 - Ad hoc A/Bs and flag sweeps use `benchmark/corun.sh` directly (same 12-benchmark limit);
-  anything larger is a Sherlock experiment (`../dreal-stanford-benchmarking`).
+  anything larger is a Sherlock experiment (`../dreal-stanford-benchmarking`) with two arms,
+  control and test: 4-core jobs schedule far sooner than bigger ones. Chain a third arm through
+  a shared one (base→head, head→fix; multiply the ratios). `docs/benchmarking.md` §"Where a run
+  happens".
