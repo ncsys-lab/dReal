@@ -34,3 +34,13 @@ master `2f06098`):
 
 `gh issue create --web --repo CAPDGroup/CAPD --title "…" --body-file <draft>` opens the prefilled
 form in the browser; nothing is filed until it is submitted there.
+
+## Merge branch `partial-models-flag` after a spot check (paused 2026-10-08)
+
+Commit `ba5a4d635` on `partial-models-flag` (parent `1bc29bc41`) replaces the compile-time
+`DREAL_EXPERIMENTAL_SAT_MODEL_FULL_CONSTRAINTS` with a runtime `--partial-models` flag, default off
+(full models, as before). Its tests pass (ctest, 1004) and `lint.py` is clean.
+
+1. Run the co-run spot check (`/benchmark`) with that commit's build as the test arm and a stash
+   of its parent as the control, default flags on both. Expected: zero flips, PAR2 ratio ≈ 1.
+2. If it holds, merge `partial-models-flag`.
