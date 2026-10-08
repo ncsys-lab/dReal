@@ -11,7 +11,7 @@ BUG-001 … BUG-012 and BUG-016 live there, the rest here. A new entry takes the
 highest in either log and lands here; the `docs/dreal-bugs/bug*.smt2` reproducer convention is
 shared.
 
-## BUG-013 — `--ode-taylor-order` 16/20 and `--ode-abs-tol`/`--ode-rel-tol` ≥ 1e-6 miss a refutation on an interval-IC instance: one long CAPD step leaves a wide last sub-slice whose mean-value tube is too loose (COMPLETENESS; fixed 2026-10-05; re-diagnosed — CAPD does not diverge)
+## BUG-013 — `--ode-taylor-order` 16/20 and `--ode-abs-tol`/`--ode-rel-tol` ≥ 1e-6 miss a refutation on an interval-IC instance: one long CAPD step leaves a wide last sub-slice whose mean-value tube is too loose (COMPLETENESS; LIVE — fixed 2026-10-05, fix dropped 2026-10-08; re-diagnosed — CAPD does not diverge)
 
 **Symptom / Description**
 
@@ -96,6 +96,15 @@ both solved (median 1.00×; github 1.25×, tacas 1.00×, saradc 0.98×); PAR2 1.
 (adjacent sub-slices share an end) moved the aggregate only from 1.19× to 1.16×, so the extra
 curve evaluations are not most of the cost; where it goes (a different search on the SAT-heavy
 github instances is the leading guess) was not measured.
+
+**Fix dropped (owner, 2026-10-08)**
+
+The hull is reverted: the gap is COMPLETENESS only, on a few instances, so it does not
+earn the extra code. In the two Sherlock gate runs the branch with the hull sat at PAR2
+0.991–1.018 per set against base, apart from s2d's BUG-021 loss (no arm isolated the hull). The knob tests now pin the gap
+(`Bug013_LongStepTube_RefutesDisjointGate`: the default knobs refute, the six trigger knobs
+do not; the order and tolerance sweeps pin `X_t.lb == 0.3` at the trigger knobs), so a
+change that closes it fails loudly.
 
 ---
 
@@ -766,10 +775,11 @@ bound crashes the parser instead (BUG-023).
 
 - ESTABLISHED (CAPD's message): the curve was evaluated at 1.4822e-323 = 3 ulp of the
   smallest denormal, past its domain [0, 2 ulp].
-- ESTABLISHED (source, `contractor_odes_capd.cc`, `integrate_tube_slices_impl`): the sub-slice
-  grid is `grid[k] = d_lo + k·dd` with `dd = (d_hi − d_lo)/kHullGrid` for k < kHullGrid, and
-  nothing keeps it ≤ d_hi. For d_hi = 2 ulp, dd = 0.5 ulp: rounded up it is 1 ulp and
-  grid[3] = 3 ulp; rounded to nearest (ties to even) it is 0.
+- ESTABLISHED (source, `contractor_odes_capd.cc`, `integrate_tube_slices_impl`): sub-slice k
+  spans [d_lo + k·dd, d_lo + (k+1)·dd] with `dd = (d_hi − d_lo)/kHullGrid` (the last ends at
+  d_hi), and nothing keeps those points ≤ d_hi. For d_hi = 2 ulp, dd = 0.5 ulp: rounded up it
+  is 1 ulp and the third sub-slice reaches 3 ulp; rounded to nearest (ties to even) it is 0.
+  (In 0e8887931, which had the BUG-013 hull, the same points came from a `grid` vector.)
 - HYPOTHESIS (not isolated): the grid is computed under upward rounding left behind by CAPD,
   which would also explain why only the Linux build shows it. The fix arm reached the box
   through a different search path, not through a change to this code.

@@ -179,9 +179,9 @@ main-thread-only, deterministic; R3 gate: zero verdict flips, PAR2 1.001×;
 **CAPD ODE tuning:** `--ode-taylor-order` (default 12), `--ode-hull-grid` (4 — per-step sub-slice
 count; lower widens enclosures (never a false-`unsat`). Since the 2026-06 centered-in-time tube
 fix (`HULL_COMPLETENESS.md`) the per-slice range is mean-value-in-time, so for a thin initial
-set the default tube sits near CAPD precision; on an interval initial set a monotone-in-time hull
-keeps monotone components tight (BUG-013), and a finer hull-grid can still refute more on the
-rest. The mean-value half is sound only with CAPD ≥ `2a2263c7` — the older pin
+set the default tube sits near CAPD precision; on an interval initial set one long step can
+leave it too loose to refute (BUG-013, left open), and a finer hull-grid still refutes more.
+The mean-value half is sound only with CAPD ≥ `2a2263c7` — the older pin
 gave false `unsat` on interval initial conditions (BUG-018)),
 `--ode-backward` (true), `--ode-abs-tol`/`--ode-rel-tol` (1e-10), `--ode-max-step` (0=adaptive).
 `--refine-witness` (default off): δ-**tight** `--model` witnesses. By default `--model` reports

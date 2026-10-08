@@ -416,17 +416,11 @@ namespace dreal
         // (BUG-018, docs/dreal-bugs.md; CMakeLists.txt pins a fixed CAPD).
         // For a thin initial set the slop is O(r²) in the sub radius r. For an
         // interval initial set the derivative carries the set's spread, so the
-        // correction is O(r · spread); the monotone hull below removes that
-        // slack for a component that is monotone on sub (BUG-013), and for the
-        // others a finer hull-grid can still refute more. The terminal-window
-        // clip below uses the same range.
+        // correction is O(r · spread) and a finer hull-grid can still refute
+        // more (BUG-013). The terminal-window clip below uses the same range.
         template <typename CurveT>
-        // x_lo and x_hi are curve() at the two ends of sub; the caller passes
-        // them because adjacent sub-slices share an end.
         capd::IVector centered_curve_range(const CurveT& curve,
-                                           const capd::interval& sub,
-                                           const capd::IVector& x_lo,
-                                           const capd::IVector& x_hi) {
+                                           const capd::interval& sub) {
             const capd::IVector naive = curve(sub);
             const double mid = (sub.leftBound() + sub.rightBound()) / 2.0;
             const capd::IVector x_mid = curve(capd::interval(mid));
@@ -439,20 +433,9 @@ namespace dreal
                 // Both mv and naive enclose x_i(sub), so the true range lies in
                 // their intersection. Bound comparisons only (no arithmetic) —
                 // exact and sound regardless of the ambient FPU rounding mode.
-                double lo = std::max(mv.leftBound(), naive[i].leftBound());
-                double hi = std::min(mv.rightBound(), naive[i].rightBound());
-                // If x_i' keeps one sign over sub for every trajectory of the set
-                // (deriv[i] excludes 0), each trajectory's x_i is monotone on sub,
-                // so it lies between its values at the two ends: x_i(sub) is
-                // inside hull(x_lo[i], x_hi[i]). The mean-value form loses the
-                // initial-condition correlation over a wide sub on an interval
-                // start set (it pairs the mid value of one trajectory with the
-                // derivative of another — BUG-013); the end values keep it.
-                if (!deriv[i].contains(0.0)) {
-                    lo = std::max(lo, std::min(x_lo[i].leftBound(), x_hi[i].leftBound()));
-                    hi = std::min(hi, std::max(x_lo[i].rightBound(), x_hi[i].rightBound()));
-                }
-                out[i] = capd::interval(lo, hi);
+                out[i] = capd::interval(
+                    std::max(mv.leftBound(), naive[i].leftBound()),
+                    std::min(mv.rightBound(), naive[i].rightBound()));
             }
             return out;
         }
@@ -526,20 +509,12 @@ namespace dreal
                     // [lb, ub] of the result yields a sound (over-wide) clip.
                     const capd::interval win_dom =
                         capd::interval(win_lb, t_ub) - prev_time;
-                    // The set at each sub-slice boundary, evaluated once.
-                    std::vector<double> grid(static_cast<size_t>(kHullGrid) + 1);
-                    std::vector<capd::IVector> at_grid;
-                    at_grid.reserve(grid.size());
-                    for (int k = 0; k <= kHullGrid; ++k) {
-                        grid[static_cast<size_t>(k)] = (k == kHullGrid) ? d_hi : d_lo + k * dd;
-                        at_grid.push_back(curve(capd::interval(grid[static_cast<size_t>(k)])));
-                    }
                     for (int k = 0; k < kHullGrid; ++k) {
-                        const auto uk = static_cast<size_t>(k);
-                        const capd::interval sub(grid[uk], grid[uk + 1]);
+                        const capd::interval sub(
+                            d_lo + k * dd,
+                            (k == kHullGrid - 1) ? d_hi : d_lo + (k + 1) * dd);
                         const capd::interval slice_time = prev_time + sub;
-                        const capd::IVector v =
-                            centered_curve_range(curve, sub, at_grid[uk], at_grid[uk + 1]);
+                        const capd::IVector v = centered_curve_range(curve, sub);
                         require_capd_representable(v, "a CAPD tube enclosure");
                         CapdTubeSlice s;
                         s.t_lb = slice_time.leftBound();
@@ -558,9 +533,8 @@ namespace dreal
                         const double gd_hi =
                             std::min(sub.rightBound(), win_dom.rightBound());
                         if (gd_lo <= gd_hi) {
-                            const capd::IVector gv = centered_curve_range(
-                                curve, capd::interval(gd_lo, gd_hi),
-                                curve(capd::interval(gd_lo)), curve(capd::interval(gd_hi)));
+                            const capd::IVector gv =
+                                centered_curve_range(curve, capd::interval(gd_lo, gd_hi));
                             require_capd_representable(gv, "a CAPD tube enclosure");
                             s.gate_state.reserve(static_cast<size_t>(n));
                             for (int i = 0; i < n; ++i)
