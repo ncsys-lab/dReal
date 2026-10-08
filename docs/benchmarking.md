@@ -245,6 +245,12 @@ changes: an optimization worth having moves a benchmark from a timeout (PAR2 pen
 to a solve under the cap, a clean signal, while a longer cap mostly adds small ratio shifts on
 slow solves.
 
+Sherlock runs use 120 s too (`Experiment.timeout_min` defaults to 2). The 2026-10-07
+`tech_debt_fixes_gate` run, which used 600 s, shows why: 67% of its benchmarks had an arm that
+reached the cap, so its 459 jobs took ~2 h each and ~15 h overall at 64 concurrent jobs. Recomputed
+from that run's trial times, a 120 s cap cuts the summed benchmark time from 746 h to 165 h and
+loses the 14.7% of solves that needed more than 120 s of CPU.
+
 ---
 
 ## Manual invocation
