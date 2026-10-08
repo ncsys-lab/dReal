@@ -19,3 +19,18 @@ only `operator=` at line 347, the line GCC 14 rejected. A build dir still on IBE
 Fix: extend the fork hunk to the copy constructor (copy `primes` in the body, as `operator=`
 now does) and bump the IBEX pin. Until then the clang-tidy gate cannot run; `lint.py` and
 `./rounding_debug_gate.sh` still do.
+
+## File the two CAPD upstream reports (drafted 2026-10-08, not filed)
+
+Drafts for `CAPDGroup/CAPD`, each with a standalone reproducer beside it in
+`docs/dreal-bugs/capd-upstream/`, checked against CAPD `03dc5628` (the files involved are the same on
+master `2f06098`):
+
+- `issue_sin_negative.md` (`sin_negative_hang.cpp`): interval `sin` never returns below about
+  −5.8e19 (BUG-020) and overflows the stack on NaN (BUG-015's cause).
+- `issue_rest_fixed_point.md` (`rest_fixed_point_throw.cpp`): `IOdeSolver` throws "minimal time
+  step reached" from a thin initial set at a nonzero equilibrium (BUG-016's cause; dReal widens
+  start sets by one ulp).
+
+`gh issue create --web --repo CAPDGroup/CAPD --title "…" --body-file <draft>` opens the prefilled
+form in the browser; nothing is filed until it is submitted there.

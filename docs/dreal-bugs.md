@@ -658,6 +658,8 @@ Bound every state that feeds `sin`/`cos` to a moderate magnitude. Candidate fixe
 patch the one guard in CAPD (dReal pins CAPD with no `PATCH_COMMAND` today) and report it
 upstream, or bound the magnitude of values handed to CAPD below about 5e19 in
 `require_capd_representable` (a magic constant).
+An upstream report is drafted, not filed: `docs/dreal-bugs/capd-upstream/issue_sin_negative.md`
+(`docs/todo.md`).
 
 **Binary**
 
