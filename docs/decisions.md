@@ -212,7 +212,8 @@ bound or one beyond DBL_MAX/2, or such an enclosure coming back —
 site carries `// FALLBACK(approved): … — see docs/decisions.md "ODE inconclusive skip"`.
 
 **Substituted behavior:** that Prune narrows nothing but the flow parameters' start/end
-intersection (step 1, which is recorded as a used constraint like any contraction);
+intersection (step 1, recorded as a used constraint that explanations reach through the
+parameters only, BUG-021);
 `ContractorStatus::AddInconclusiveOde(f, reason)` records the formula and the reason, the
 formula is spliced into unsat explanations (`docs/constraint-order-explanation-soundness.md`),
 and a delta-sat theory check that recorded any prints one stderr line naming the count and one

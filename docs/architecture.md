@@ -172,9 +172,11 @@ Box copies are the main per-node allocation in ICP. The lambda-callback optimiza
 
 ## Explanation / UNSAT Witnesses
 
-When the ICP loop returns UNSAT, the `explanation_` set in `TheorySolver` contains the minimal subset of asserted formulas that jointly imply infeasibility. This explanation is returned to the SAT layer as a learned clause, causing CaDiCaL to backtrack and try other assignments.
+When the ICP loop returns UNSAT, the `explanation_` set in `TheorySolver` holds asserted formulas that jointly imply infeasibility. This explanation is returned to the SAT layer as a learned clause, causing CaDiCaL to backtrack and try other assignments.
 
-The quality of explanations (their minimality) directly impacts solver performance because it determines how many future SAT assignments are pruned.
+`GenerateExplanation` (`contractor_status.cc`) builds it as a closure. It starts from the variables of the constraints that emptied the box and adds every used constraint that shares a variable with those already in, until none joins. A contraction that read only some of a formula's variables records it with just those (`AddUsedConstraint(f, reach)`, BUG-021 in `docs/dreal-bugs.md`). An ODE that could not be integrated joins as a leaf (`docs/constraint-order-explanation-soundness.md`). The result over-approximates a minimal explanation.
+
+The size of explanations directly impacts solver performance because it determines how many future SAT assignments are pruned. Omitting a formula that took part in the conflict is unsound: the learned clause can cut a satisfiable branch.
 
 ---
 
