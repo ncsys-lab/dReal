@@ -91,5 +91,28 @@ TEST_F(ContractorJoinTest, AllBranchesEmpty) {
          "empty branches must be empty.";
 }
 
+// A join keeps every variable either side reaches a used constraint through.
+// Keeping one side's set would drop constraints from the explanation, and the
+// learned clause could cut a satisfiable branch — SOUNDNESS (asserts φ
+// T-unsatisfiable on a T-satisfiable φ — false unsat).
+TEST_F(ContractorJoinTest, JoinUnionsTheReachOfAUsedConstraint) {
+  const Formula f{x_ + y_ <= 1.0};
+  const Formula on_y{y_ >= 0.5};
+  ContractorStatus cs1{box_};
+  cs1.AddUsedConstraint(f, Variables{x_});
+  ContractorStatus cs2{box_};
+  cs2.AddUsedConstraint(f);
+  cs2.AddUsedConstraint(on_y);
+  cs1.InplaceJoin(cs2);
+  cs1.AddUnsatWitness(x_);
+  EXPECT_EQ(cs1.Explanation().count(on_y), 1u)
+      << "the join reaches f through x alone";
+}
+
+TEST_F(ContractorJoinTest, ReachOutsideTheFormulaThrows) {
+  ContractorStatus cs{box_};
+  EXPECT_THROW(cs.AddUsedConstraint(x_ <= 1.0, Variables{z_}), std::runtime_error);
+}
+
 }  // namespace
 }  // namespace dreal

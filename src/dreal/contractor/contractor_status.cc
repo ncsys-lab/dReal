@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "dreal/util/assert.h"
+#include "dreal/util/exception.h"
 #include "dreal/util/logging.h"
 #include "dreal/util/stat.h"
 #include "dreal/util/timer.h"
@@ -87,14 +88,24 @@ const DynamicBitset& ContractorStatus::output() const { return output_; }
 DynamicBitset& ContractorStatus::mutable_output() { return output_; }
 
 void ContractorStatus::AddUsedConstraint(const Formula& f) {
-  DREAL_LOG_DEBUG("ContractorStatus::AddUsedConstraint({}) box is empty? {}", f,
-                  box_.empty());
+  AddUsedConstraint(f, f.GetFreeVariables());
+}
+
+void ContractorStatus::AddUsedConstraint(const Formula& f,
+                                         const Variables& reach) {
+  DREAL_LOG_DEBUG("ContractorStatus::AddUsedConstraint({}, {}) box is empty? {}",
+                  f, fmt::streamed(reach), box_.empty());
+  if (!reach.IsSubsetOf(f.GetFreeVariables())) {
+    throw DREAL_RUNTIME_ERROR(
+        "ContractorStatus::AddUsedConstraint: {} is not a subset of the "
+        "variables of {}", fmt::streamed(reach), f);
+  }
   if (box_.empty()) {
-    for (const Variable& v : f.GetFreeVariables()) {
+    for (const Variable& v : reach) {
       AddUnsatWitness(v);
     }
   }
-  used_constraints_.insert(f);
+  used_constraints_[f].insert(reach);
 }
 
 void ContractorStatus::AddUsedConstraint(const vector<Formula>& formulas) {
@@ -115,23 +126,24 @@ void ContractorStatus::AddUnsatWitness(const Variable& var) {
 }
 
 FormulaSet GenerateExplanation(const Variables& unsat_witness,
-                                 const FormulaSet& used_constraints,
+                                 const FormulaMap<Variables>& used_constraints,
                                  const FormulaMap<std::string>& inconclusive_odes) {
   static ContractorStatusStat stat(DREAL_LOG_INFO_ENABLED);
   stat.increase_num_explanation_generation();
   TimerGuard timer_guard(&stat.timer_explanation_generation_, stat.enabled());
 
-  // Explanation:
-  // = lfp. λE. E ∪ {fᵢ | fᵢ ∈ Used Constraints ∧ vars(fᵢ) ∩ unsat_witness ≠ ∅}
+  // Explanation, where reach(f) is the variables a used constraint f is
+  // reached through (all of vars(f) unless recorded otherwise):
+  // = lfp. λE. E ∪ {fᵢ | fᵢ ∈ Used Constraints ∧ reach(fᵢ) ∩ unsat_witness ≠ ∅}
   //              ∪ {fᵢ | fᵢ ∈ E ∧
   //                      fⱼ ∈ Used Constraints ∧
-  //                      fᵢ and fⱼ share a common variable}.
+  //                      reach(fᵢ) and reach(fⱼ) share a common variable}.
 
   // Set up the initial explanation based on variables.
   Variables seen;
   FormulaSet explanation;
-  for (const Formula& f_i : used_constraints) {
-    if (f_i.GetFreeVariables().empty()) {
+  for (const auto& [f_i, reach] : used_constraints) {
+    if (reach.empty()) {
       // It is possible that the constraint has no free variable but
       // we can't decide its truth value. For example, in SMT2, (0.01
       // < 1.0) will be translated into a formula with intervals and
@@ -140,9 +152,9 @@ FormulaSet GenerateExplanation(const Variables& unsat_witness,
       explanation.insert(f_i);
       continue;
     }
-    if (HaveIntersection(unsat_witness, f_i.GetFreeVariables())) {
+    if (HaveIntersection(unsat_witness, reach)) {
       explanation.insert(f_i);
-      seen.insert(f_i.GetFreeVariables());
+      seen.insert(reach);
     }
   }
 
@@ -153,10 +165,10 @@ FormulaSet GenerateExplanation(const Variables& unsat_witness,
   bool keep_going = true;
   while (keep_going) {
     keep_going = false;
-    for (const Formula& f_j : used_constraints) {
+    for (const auto& [f_j, reach] : used_constraints) {
       if (explanation.count(f_j) > 0) continue;
-      if (HaveIntersection(seen, f_j.GetFreeVariables())) {
-        seen.insert(f_j.GetFreeVariables());
+      if (HaveIntersection(seen, reach)) {
+        seen.insert(reach);
         explanation.insert(f_j);
         keep_going = true;
       }
@@ -194,8 +206,9 @@ ContractorStatus& ContractorStatus::InplaceJoin(
   output_ |= contractor_status.output();
   unsat_witness_.insert(contractor_status.unsat_witness_.begin(),
                         contractor_status.unsat_witness_.end());
-  used_constraints_.insert(contractor_status.used_constraints_.begin(),
-                           contractor_status.used_constraints_.end());
+  for (const auto& [f, reach] : contractor_status.used_constraints_) {
+    used_constraints_[f].insert(reach);
+  }
   inconclusive_odes_.insert(contractor_status.inconclusive_odes_.begin(),
                             contractor_status.inconclusive_odes_.end());
   return *this;

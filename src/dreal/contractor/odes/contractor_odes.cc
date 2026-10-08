@@ -74,6 +74,14 @@ namespace dreal
         return {f};
     }
 
+    // The flow parameters of an integral, at its start and its end.
+    static Variables parameter_vars(const FormulaIntegral* icc) {
+        Variables vars;
+        for (const auto& v : icc->get_pars_0()) vars.insert(v);
+        for (const auto& v : icc->get_pars_t()) vars.insert(v);
+        return vars;
+    }
+
     // Intersect pars_0 and pars_t in place (a flow parameter is constant along
     // the trajectory). Returns false if a pair is disjoint (box emptied). Sets the
     // output bit of every parameter it narrows and reports in *narrowed whether it
@@ -226,18 +234,21 @@ namespace dreal
         // A parameter narrowing is a contraction like any other, so it is
         // recorded here whatever the rest of the Prune does: otherwise a conflict
         // that rests on it gets an explanation without this ODE (the class of
-        // docs/constraint-order-explanation-soundness.md — a false unsat).
+        // docs/constraint-order-explanation-soundness.md — a false unsat). The
+        // step reads only the parameters' bounds and the p0 = pt the integral
+        // implies, so an explanation reaches the ODE through its parameters
+        // alone; through its states too, it pulled a BMC unrolling's state
+        // constraints into every lemma (BUG-021). The linked forall_t
+        // invariants take no part in it.
         bool params_narrowed = false;
         if (!intersect_params(cs, icc, &params_narrowed)) {
             for (const auto& v : icc->get_pars_0()) cs->mutable_output().set(cs->box().index(v));
             for (const auto& v : icc->get_pars_t()) cs->mutable_output().set(cs->box().index(v));
-            cs->AddUsedConstraint(ic);
-            cs->AddUsedConstraint(m_ctr.second);
+            cs->AddUsedConstraint(ic, parameter_vars(icc));
             return;
         }
         if (params_narrowed) {
-            cs->AddUsedConstraint(ic);
-            cs->AddUsedConstraint(m_ctr.second);
+            cs->AddUsedConstraint(ic, parameter_vars(icc));
         }
 
         // --- Step 2: T=0 special case ---

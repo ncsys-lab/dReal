@@ -107,7 +107,7 @@ class SystemCellsOdeSkipTest : public ::testing::Test {
     EXPECT_GE(cs.box()[x_].ub(), 0.75 - 1e-12);
     EXPECT_LE(cs.box()[y_].lb(), 1.0 + 1e-12);
     EXPECT_GE(cs.box()[y_].ub(), 1.0 - 1e-12);
-    for (const Formula& f : cs.UsedConstraints()) {
+    for (const auto& [f, reach] : cs.UsedConstraints()) {
       EXPECT_FALSE(f.include_ode()) << f;
     }
   }

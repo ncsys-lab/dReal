@@ -54,10 +54,21 @@ class ContractorStatus {
   /// Returns explanation, a list of formula responsible for the unsat.
   FormulaSet Explanation() const;
 
-  const FormulaSet& UsedConstraints() const { return used_constraints_; }
+  /// The used constraints, each with the variables through which an
+  /// explanation reaches it (see AddUsedConstraint).
+  const FormulaMap<Variables>& UsedConstraints() const {
+    return used_constraints_;
+  }
 
-  /// Add a formula @p f into the used constraints.
+  /// Add a formula @p f into the used constraints. An explanation reaches it
+  /// through any of its variables.
   void AddUsedConstraint(const Formula& f);
+
+  /// Add a formula @p f into the used constraints for a contraction that read
+  /// and wrote only @p reach, a subset of its variables: an explanation reaches
+  /// @p f through @p reach alone. Recording @p f again unions the two sets.
+  /// Throws if @p reach is not a subset of f's variables.
+  void AddUsedConstraint(const Formula& f, const Variables& reach);
 
   /// Add a formula @p formulas into the used constraints.
   void AddUsedConstraint(const std::vector<Formula>& formulas);
@@ -103,9 +114,10 @@ class ContractorStatus {
   // changed after running the contractor.
   DynamicBitset output_;
 
-  // A set of constraints used during pruning processes. This is an
-  // over-approximation of an explanation.
-  FormulaSet used_constraints_;
+  // The constraints used during pruning processes, each with the variables
+  // through which an explanation reaches it. This is an over-approximation of
+  // an explanation.
+  FormulaMap<Variables> used_constraints_;
 
   // ODE constraints that an inconclusive Lohner pass (CAPD divergence etc.)
   // could not record in used_constraints_. Spliced into the explanation as

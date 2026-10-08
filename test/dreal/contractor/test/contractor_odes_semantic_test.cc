@@ -1137,6 +1137,40 @@ TEST_F(NonFiniteCapdInputTest, ParameterNarrowing_IsRecorded) {
       << "the ODE narrowed p0 but is not a used constraint";
 }
 
+// p0 ∩ pt rests only on the parameters' bounds and the equality p0 = pt that
+// the integral implies, so an explanation reaches the ODE through its
+// parameters alone. Linked through every variable of the integral, it pulled
+// the end-state constraints of a whole BMC unrolling into each lemma, and three
+// s2d pause__ queries that 6f02d4010 refutes in 10–30 s ran past 600 s —
+// COMPLETENESS (asserts φ^δ T-satisfiable on a T-unsatisfiable φ — missed
+// refutation), BUG-021.
+TEST_F(NonFiniteCapdInputTest, ParameterNarrowing_LinksOnlyThroughParameters) {
+  Box box{vector<Variable>{x_, p_, x0_, p0_, xt_, pt_, t0_}};
+  box[x_] = Box::Interval(-kInf, kInf);
+  box[p_] = Box::Interval(-kInf, kInf);
+  box[x0_] = Box::Interval(-kInf, kInf);
+  box[p0_] = Box::Interval(-100.0, 100.0);
+  box[xt_] = Box::Interval(-kInf, kInf);
+  box[pt_] = Box::Interval(-1.0, 1.0);
+  box[t0_] = Box::Interval(0.0, 1.0);
+  const Formula ic = integral(0.0, t0_, {x0_, p0_}, {xt_, pt_}, scaled_);
+  ContractorStatus cs{box};
+  const auto ctc =
+      mk_contractor_ode_lohner(box, {ic, {}}, ode_direction::FWD, Config{}, 0.0);
+  { const UpwardRoundingScope rms_; ctc.Prune(&cs, rms_.token()); }
+  ASSERT_EQ(cs.box()[p0_], Box::Interval(-1.0, 1.0)) << "p0 ∩ pt";
+  const Formula on_p0 = p0_ <= 50.0;
+  const Formula on_xt = xt_ >= 5.0;
+  cs.AddUsedConstraint(on_p0);
+  cs.AddUsedConstraint(on_xt);
+  cs.AddUnsatWitness(pt_);
+  const FormulaSet explanation = cs.Explanation();
+  EXPECT_EQ(explanation.count(ic), 1u) << "the ODE that narrowed p0 is missing";
+  EXPECT_EQ(explanation.count(on_p0), 1u) << "the bound on p0 is missing";
+  EXPECT_EQ(explanation.count(on_xt), 0u)
+      << "the explanation reached the ODE through its end state xt";
+}
+
 // =============================================================================
 // BUG-016: a thin start exactly on a nonzero fixed point of its flow,
 // x' = k(c - x) with x0 = [c, c]. CAPD's predictNextEnclosure seeds the

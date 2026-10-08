@@ -637,4 +637,75 @@ upstream, or bound the magnitude of values handed to CAPD below about 5e19 in
 
 ---
 
+## BUG-021 — Since `a6eea0bfa`, a flow-parameter narrowing linked its integral into explanations through every state variable, and three s2d `pause__` queries that base refutes in 10–30 s ran past 600 s (COMPLETENESS; fixed 2026-10-07)
+
+**Symptom / Description**
+
+The 2026-10-07 `tech_debt_fixes_gate` Sherlock run (600 s cap, `--random-seed 777`) found
+three s2d queries that base `6f02d4010` proves `unsat` in 16–27 s of CPU and head `f7333b0dc`
+times out on. On Sherlock, head learned 14,190–23,141 lemmas per query where base needed 28–29.
+COMPLETENESS (asserts φ^δ T-satisfiable on a T-unsatisfiable φ — missed refutation): head gave
+no wrong verdict; it stopped refuting.
+
+**Reproducer(s)**
+
+The three queries, s2d's current revisions in
+`~/Documents/MATLAB/final_presentation_casestudies/benchmarks/s2d/manifest.json` (226 KB each,
+so not copied here): `pause/pause__margin_shared_dU0.05_L59.0_u20__7183bca4.smt2`,
+`pause/pause__margin_siloed_dU0.05_L59.4_u20__3b13ac08.smt2`,
+`pause/pause__probe_iH0.001_L59.4_u20__d8bcd846.smt2`. Each asserts its 19 integrals as
+top-level units. The mechanism alone:
+`NonFiniteCapdInputTest.ParameterNarrowing_LinksOnlyThroughParameters`
+(`test/dreal/contractor/test/contractor_odes_semantic_test.cc`).
+
+Bisect, co-run with `benchmark/corun.sh` (E-cores, 120 CPU-s cap), CPU seconds for the three
+queries in the order above:
+
+| arm | result |
+|---|---|
+| `6f02d4010` (base), `90eaf1419` (CAPD bump), `57953403b` (Xcode 26.5 and 27 SDKs) | `unsat`, 10–31 s |
+| `a6eea0bfa`, `30926ebc3`, `f7333b0dc` (head) | timeout |
+| `a6eea0bfa`, its input check off, without the step-1 used-constraint record | `unsat`, 11–27 s |
+| the same, without the step-1 output bit, the one-ulp start widening, or the input check | timeout |
+
+**Root cause / Design notes**
+
+- ESTABLISHED (the bisect above): `a6eea0bfa` made `contractor_ode_lohner::Prune` record the
+  integral and its linked `forall_t` invariants as used constraints whenever step 1
+  (pars_0 ∩ pars_t) narrows a parameter, to close the explanation gap of
+  `docs/constraint-order-explanation-soundness.md`. That record alone loses the refutations.
+- HYPOTHESIS (not isolated): an ordinary used constraint joins the explanation closure through
+  all of its variables, so the integral pulled in every constraint on its start and end states
+  and, through them, much of the BMC unrolling. The Sherlock median lemma lengths do not show it
+  plainly (head 444–535, base 595–720 literals).
+- Base's `unsat` on these queries is sound: each integral is a unit assertion, so a lemma that
+  omits it is still implied by φ. This is an argument; no checker has confirmed it. The CAPD
+  bump (BUG-018) also refutes them, so BUG-018 is not behind base's verdicts.
+- Not this bug: the same run's tacas_c2e2 inverter `_UNS` queries that base refuted in about
+  1 s on Sherlock time out at 120 s on the Mac for base too. Whether those refute depends on
+  the platform.
+
+**Fix**
+
+Each used constraint now carries the variables through which an explanation reaches it
+(`ContractorStatus::AddUsedConstraint(f, reach)`): all of its variables by default, and a join
+takes the union. Step 1 records the integral reachable through its flow parameters alone and
+no longer records the invariants. That is sound because the step reads only the parameters'
+bounds and the p0 = pt the integral implies, and a later narrowing in the same Prune still
+records the integral in full. Co-run after the fix, the same three queries: fix 4.2, 21.8,
+5.4 s; base 9.8, 25.3, 11.0 s; head timeout (fix/base 0.43, 0.86, 0.49). Tests:
+`ParameterNarrowing_LinksOnlyThroughParameters`, `ContractorJoinTest.JoinUnionsTheReachOfAUsedConstraint`,
+`ContractorJoinTest.ReachOutsideTheFormulaThrows` (each red before its change).
+
+**Workaround**
+
+None needed.
+
+**Binary**
+
+Bisect arms built clean from each commit (`6f02d4010` and `90eaf1419` against the
+CommandLineTools 26.5 SDK, which predates libc++ 22); head is `benchmark/bin/dreal4-f7333b0dc`.
+
+---
+
 *Add new entries above this line.*
