@@ -973,7 +973,7 @@ interpreter did) catches it.
 
 `/Users/kunalsheth/Documents/MATLAB/dreal4_tacas27`, dReal4+ODE with DRPM, commit `6965888cd`.
 
-**dReal3.** Not run; s2d's `docs/dreal-bugs/catalogue.csv` has no BUG-024 row. No attribution.
+**dReal3.** Not run; the reason in s2d's `docs/dreal-bugs/catalogue.csv` is "filed after the dReal3 cross-check". No attribution.
 
 ---
 
