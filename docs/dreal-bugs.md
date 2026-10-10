@@ -861,4 +861,120 @@ Scale the term instead of writing the denormal: `(<= (* 1e300 x) 1e-20)` parses 
 
 ---
 
+## BUG-024 — False `delta-sat` at default flags when a flow parameter is a wide interval: the tube on the unsplit box misses the refutation and the fast accept takes it with no branching (COMPLETENESS; LIVE, 2026-10-09)
+
+**Symptom / Description**
+
+`d/dt[v] = −b·v`, `v(0) = 1`, `b ∈ [0, 1]` (a flow parameter: `d/dt[b] = 0`), `time = 5`,
+`v_t ≤ −1`. Every trajectory has v(5) = e^(−5b) ∈ [e^(−5), 1], so the formula is
+T-unsatisfiable by a margin of about 1 ≫ δ. dReal answers `delta-sat` with zero branchings, the box
+`v_t ∈ [−5.055, −1]`, `b_0 ∈ [0, 1]`, and nothing on stderr. COMPLETENESS (asserts φ^δ
+T-satisfiable on a T-unsatisfiable φ — missed refutation); every enclosure measured below
+still contains the true range, so no box was narrowed past a model.
+
+Found by s2d on the ARCH-COMP chasing-cars query at unroll 2 (`v1' = −In1 − In2·v1`,
+`y1' = v1`, from rest, `In1, In2 ∈ [0, 1]`, step 5). Every trajectory has y1(5) ≤ 0, and the
+property needs y1(5) ≥ 2.5. The witness has `y1 ∈ [3.3331, 3.3334]` and `v1 ∈ [−14.07, 12.35]`;
+the true range of v1(5) is [−5, 0]. Default flags, `--ode-hull-grid 1` and `--ode-hull-grid 4` give
+the same box. The same query with `--refine-witness` added is `unsat` (14.75 s, against 0.6 s
+for the `delta-sat`). s2d reports that at unrolls 3–6 its interpreter, run at the witness inputs, lies
+outside the boxes by 4.8 to 74.8; that was not re-run here.
+
+**Reproducer(s)**
+
+`docs/dreal-bugs/bug024_param_decay_trigger.smt2`:
+
+```smt2
+(set-logic QF_NRA_ODE)
+(declare-fun v () Real [-1000000, 1000000])
+(declare-fun b () Real [-1000000, 1000000])
+(declare-fun v_0 () Real [1, 1])
+(declare-fun b_0 () Real [0, 1])
+(declare-fun v_t () Real [-1000000, 1000000])
+(declare-fun b_t () Real [-1000000, 1000000])
+(declare-fun time () Real [5, 5])
+(define-ode flow_1 ((= d/dt[v] (- (* b v))) (= d/dt[b] 0.0)))
+(assert (= [v_t b_t] (integral 0. time [v_0 b_0] flow_1)))
+(assert (<= v_t -1))
+(check-sat)
+```
+
+`docs/dreal-bugs/bug024_param_decay_baseline.smt2` is the same file with `b_0 ∈ [0, 0.25]`.
+
+`docs/dreal-bugs/bug024_cars_car1.smt2` is the chasing-cars lead car alone: states `v`, `y`, flow
+parameters `a`, `b`; `d/dt[v] = (- (- a) (* b v))`, `d/dt[y] = v`; `v_0 = y_0 = 0`,
+`a_0, b_0 ∈ [0, 1]`, `time = 5`, `(assert (>= y_t 2.5))`. True range: y(5) ∈ [−12.5, 0].
+
+`timeout 60 dreal4_tacas27 --model <flags> <file>`:
+
+| file | flags | output |
+|---|---|---|
+| trigger | (defaults); `--ode-backward false --ode-hull-grid 1` | `delta-sat`, `v_t : [-5.05488973035043, -1]`, 0 branchings ✗ |
+| trigger | `--refine-witness` | `unsat` (19 branchings) ✓ |
+| baseline | each of the three above | `unsat` ✓ |
+| cars_car1 | (defaults); `--ode-backward false --ode-hull-grid 1` | `delta-sat`, `y_t : [2.5, 16.68600883447873]`, `v_t : [-12.25688719241999, 10.51314108677409]`, 0 branchings ✗ |
+| cars_car1 | `--refine-witness` | `unsat` (1641 branchings) ✓ |
+
+**Root cause / Design notes**
+
+- ESTABLISHED: the ODE evaluator's fast accept (`docs/decisions.md`, "ODE formula evaluator")
+  takes the root box with no branching, so the verdict rests on the tube over the unsplit
+  parameter box. `--refine-witness`, which branches the atom's variables down to δ, refutes
+  all three files and the original query.
+- ESTABLISHED: that tube is far wider than the reachable set. Endpoint enclosure of the trigger
+  ODE with the `v_t` assertion removed:
+
+  | `b_0` | `time` | enclosure of `v_t` | true range |
+  |---|---|---|---|
+  | [0, 0.125] | 5 | [0.396, 1.105] | [0.535, 1] |
+  | [0, 0.25] | 5 | [−0.277, 1.460] | [0.287, 1] |
+  | [0, 0.5] | 5 | [−1.529, 2.238] | [0.082, 1] |
+  | [0, 1] | 5 | [−5.055, 5.311] | [0.0067, 1] |
+  | [0, 1] | 1 | [−0.026, 1.335] | [0.368, 1] |
+  | [0, 1] | 3 | [−2.222, 2.810] | [0.050, 1] |
+  | [0.5, 1] | 5 | [−0.447, 0.500] | [0.0067, 0.082] |
+
+  The excess grows with the width of `b_0` and with the horizon; a point `b_0 = 1` refutes.
+- Single-factor runs on the trigger. No effect: `--ode-hull-grid` 1, 4 and 64 (the time is a
+  point, so the endpoint is the curve at one instant), `--ode-c0-set tripleton`. Still
+  `delta-sat`: `--ode-max-step` 0.1, 0.01 and 0.001 (lower bound −4.64, −4.44, −4.18),
+  `--ode-c0-set horect2` (−1.90), `--ode-abs-tol 1e-14 --ode-rel-tol 1e-14` (−2.19),
+  `--ode-taylor-order 8` (−1.49) and 20 (−25.4). `unsat`: `--ode-taylor-order 6`, also with
+  `--ode-max-step 0.5`. So the Taylor order moves the enclosure and the step length barely does.
+- A flow variable whose `d/dt` is the literal 0 reaches CAPD as an interval parameter of the
+  map (`build_imap_strings`, `contractor_odes_capd.cc`), not as a state. Making it a state
+  (`d/dt[b] = (* 1e-300 b)`) does not fix the trigger (`v_t` down to −36.8, still `delta-sat`).
+  On the additive form `d/dt[v] = −a − v`, `d/dt[y] = v`, `a ∈ [0, 1]`, it does: as a parameter
+  y(5) encloses to [−5.92, 1.91] (true [−4.007, 0]) and `y_t ≥ 1` is `delta-sat`; as a state the
+  enclosure is tight and the same query is `unsat`. In the chasing-cars query, making `In1` and
+  `In2` states leaves it `delta-sat`, with `v1` at [−82.1, 80.3].
+- HYPOTHESIS (not isolated): the excess is the interval parameter's spread carried through the
+  Taylor coefficients, which would fit the order dependence. dReal reads a pinned endpoint as
+  the last step's `curve(h)` (`centered_curve_range`), not as the Lohner set at the end time,
+  and CAPD's `Curve::operator()` intersects the interval Taylor sum with a centred form whose
+  offset from the centre is a box. Whether that read or CAPD's set loses the width was not
+  measured.
+- Not BUG-013: there the time is free and the loose part is the mean-value range over a long
+  sub-slice at non-default knobs; here the time is a point, the hull grid has no effect, and the
+  defaults miss. Not BUG-016 or BUG-022: `v_t` gets a computed enclosure rather than its declared
+  box, and no inconclusive-ODE warning is printed.
+- The `--model` box of a fast-accepted ODE atom need not contain a trajectory: the trigger's box
+  holds none. s2d's BUG-011 row says the raw box always contains a real answer, and s2d stamped
+  the chasing-cars witness as real up to δ.
+
+**Workaround**
+
+None in dReal at default flags. `--refine-witness` refutes the three files, the additive form
+and the original query, at the corpus cost recorded in that decision. Narrowing the parameter helps only once the pieces are narrow: `[0, 0.25]`
+refutes, `[0, 0.5]` does not. A consumer that replays a witness numerically (as s2d's
+interpreter did) catches it.
+
+**Binary**
+
+`/Users/kunalsheth/Documents/MATLAB/dreal4_tacas27`, dReal4+ODE with DRPM, commit `6965888cd`.
+
+**dReal3.** Not run; s2d's `docs/dreal-bugs/catalogue.csv` has no BUG-024 row. No attribution.
+
+---
+
 *Add new entries above this line.*
