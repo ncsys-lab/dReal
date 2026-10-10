@@ -7,9 +7,9 @@ committed under `docs/dreal-bugs/`. List entries with:
 
 Numbering is one project-wide sequence shared with s2d's log
 (`~/Documents/MATLAB/simulink-to-dreal/docs/dreal-bugs.md`, once `simulink-to-dreal_bug_reports.md`):
-BUG-001 … BUG-012 and BUG-016 live there, the rest here. A new entry takes the number after the
-highest in either log and lands here; the `docs/dreal-bugs/bug*.smt2` reproducer convention is
-shared.
+BUG-001 … BUG-012, BUG-016, PERF-001 and PERF-002 live there, the rest here. A new entry takes
+the number after the highest in either log and lands here; the `docs/dreal-bugs/bug*.smt2`
+reproducer convention is shared.
 
 Each entry ends with a **dReal3.** paragraph: the entry's reproducers run on dReal v3.16.12 beside dReal4+ODE with DRPM, commit `6965888cd`, by s2d's `docs/dreal-bugs/dreal3.py`. The setup, its caveats and the three attribution phrases are in s2d's log, under its status table.
 
@@ -974,6 +974,22 @@ interpreter did) catches it.
 `/Users/kunalsheth/Documents/MATLAB/dreal4_tacas27`, dReal4+ODE with DRPM, commit `6965888cd`.
 
 **dReal3.** Not run; the reason in s2d's `docs/dreal-bugs/catalogue.csv` is "filed after the dReal3 cross-check". No attribution.
+
+---
+
+## PERF-002 on Linux builds (the entry is in s2d's log)
+
+On Linux builds of `6965888cd` (Ubuntu 24.04, clang 18, libstdc++, glibc, CaDiCaL 3.0.0; in
+Docker on an M4 Max Mac, arm64 natively and amd64 under emulation), s2d's guarded PERF-002
+reproducer `perf002_implied_guarded.smt2` times out: at 600 s on both, and at one hour on arm64
+(3512 s CPU).  The macOS build of the same commit (Apple clang 21, libc++, CaDiCaL 3.0.1) returns
+`delta-sat` in 211 s elapsed, and in 224.9 s CPU while the one-hour run ran.  Every other file
+the 600 s replay runs (the dReal4 rows of s2d's bug-catalogue cross-check) gets its recorded
+status on both platforms, and s2d's PERF-001 files take about the same time.  A Linux build
+with CaDiCaL 3.0.1 also times out at one hour, so the CaDiCaL version is ruled out.  Not
+isolated: what in the Linux builds makes the difference; the toolchain is a hypothesis.  The
+runs, both build recipes and the raw output are in s2d's `docs/dreal-bugs.md` (PERF-002,
+"Linux builds") and `docs/dreal-bugs/perf002_linux/`.
 
 ---
 
