@@ -973,7 +973,7 @@ interpreter did) catches it.
 
 `/Users/kunalsheth/Documents/MATLAB/dreal4_tacas27`, dReal4+ODE with DRPM, commit `6965888cd`.
 
-**dReal3.** Not run; the reason in s2d's `docs/dreal-bugs/catalogue.csv` is "filed after the dReal3 cross-check". No attribution.
+**dReal3.** `unsat` on all three files, each correct: on `bug024_param_decay_baseline` and `bug024_param_decay_trigger` v(5) = e^(−5b) > 0 on every trajectory, so `v_t ≤ −1` has no solution, and on `bug024_cars_car1` y(5) ≤ 0, so `y_t ≥ 2.5` has none. Flags `--in --precision 0.001 --model`; prep `strip-get-model`, a no-op on all three files; 0.01 s of CPU on Sherlock on each decay file and 0.59 s on `bug024_cars_car1`, not comparable with any dReal4 time. dReal3 reads `--precision` as ε where dReal4 reads it as δ; an `unsat` claims the formula itself has no solution, so the reading does not bear on these answers, and whether dReal3 still refutes at a coarser precision was not run. dReal4+ODE with DRPM, commit `6965888cd`, on the same prepared files: `unsat` on the baseline, and `delta-sat` on the trigger (`v_t : [-5.05488973035043, -1]`) and on `bug024_cars_car1` (`v_t : [-12.25688719241999, 10.51314108677409]`, `y_t : [2.5, 16.68600883447873]`), the boxes of the table above. Attribution: dReal4 only. Why dReal3 refutes the trigger, by branching on `b_0` or by a tighter tube on the unsplit box, was not examined. Rows `bug = BUG-024` of s2d's `docs/dreal-bugs/dreal3_crosscheck.csv`; raw output in s2d's `runs/dreal3/dreal3/bug024_*.stdout`.
 
 ---
 
